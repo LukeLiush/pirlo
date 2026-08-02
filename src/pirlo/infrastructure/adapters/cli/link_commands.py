@@ -3,7 +3,7 @@ import getpass
 import sys
 from pathlib import Path
 
-from pirlo.core.models.link import ApiKeyLink
+from pirlo.core.models.link import LlmLink
 from pirlo.core.services.link_tester import LinkTester
 from pirlo.infrastructure.adapters.storage.json_link_repository import (
     JsonLinkRepository,
@@ -76,11 +76,9 @@ def run_list(repo: JsonLinkRepository):
     print(f"{'Name':<20} {'Provider':<12} {'Model':<20} {'Base URL'}")
     print("─" * 90)
     for link in links:
-        base_url_str = ""
-        if isinstance(link, ApiKeyLink):
-            base_url_str = link.base_url or "N/A"
-            if len(base_url_str) > 34:
-                base_url_str = base_url_str[:31] + "..."
+        base_url_str = link.base_url or "N/A"
+        if len(base_url_str) > 34:
+            base_url_str = base_url_str[:31] + "..."
         print(f"{link.name:<20} {link.provider:<12} {link.model:<20} {base_url_str}")
 
 
@@ -150,7 +148,7 @@ def run_create(repo: JsonLinkRepository, args, supported_providers: dict):
             print("Error: Model Name is required via --model flag.")
             sys.exit(1)
 
-    link = ApiKeyLink(
+    link = LlmLink(
         name=name, provider=provider, model=model, api_key=api_key, base_url=base_url
     )
 
@@ -184,14 +182,13 @@ def run_show(repo: JsonLinkRepository, name: str):
     print(f"  Provider:    {link.provider}")
     print(f"  Model:       {link.model}")
 
-    if isinstance(link, ApiKeyLink):
-        masked_key = link.api_key
-        if len(masked_key) > 8:
-            masked_key = masked_key[:4] + "*" * (len(masked_key) - 8) + masked_key[-4:]
-        else:
-            masked_key = "****"
-        print(f"  Base URL:    {link.base_url or 'N/A'}")
-        print(f"  API Key:     {masked_key}")
+    masked_key = link.api_key
+    if len(masked_key) > 8:
+        masked_key = masked_key[:4] + "*" * (len(masked_key) - 8) + masked_key[-4:]
+    else:
+        masked_key = "****"
+    print(f"  Base URL:    {link.base_url or 'N/A'}")
+    print(f"  API Key:     {masked_key}")
 
 
 def run_test(repo: JsonLinkRepository, name: str):
@@ -200,9 +197,7 @@ def run_test(repo: JsonLinkRepository, name: str):
         print(f"Error: Link '{name}' not found.")
         sys.exit(1)
 
-    target_endpoint = link.provider
-    if isinstance(link, ApiKeyLink):
-        target_endpoint = link.base_url or link.provider
+    target_endpoint = link.base_url or link.provider
 
     print(f"Testing link '{name}' to {target_endpoint} using model '{link.model}'...")
     result = LinkTester.test_link(link)

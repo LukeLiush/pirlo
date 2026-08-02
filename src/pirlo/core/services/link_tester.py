@@ -1,4 +1,4 @@
-from pirlo.core.models.link import ApiKeyLink, LinkTestResult, LlmLink
+from pirlo.core.models.link import LinkTestResult, LlmLink
 from pirlo.playbooks.autopass.adapters.llm_factory import LlmFactory
 
 
@@ -6,12 +6,6 @@ class LinkTester:
     @staticmethod
     def test_link(link: LlmLink) -> LinkTestResult:
         """Tests the connectivity of a link by sending a minimal token call."""
-        if not isinstance(link, ApiKeyLink):
-            return LinkTestResult(
-                success=False,
-                message=f"Test connect not implemented for provider '{link.provider}'.",
-            )
-
         try:
             llm = LlmFactory.create_langchain_llm(
                 link=link,

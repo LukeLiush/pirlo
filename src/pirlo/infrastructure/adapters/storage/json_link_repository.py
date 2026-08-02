@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from pirlo.core.models.link import LlmLink, deserialize_link
+from pirlo.core.models.link import LlmLink
 from pirlo.core.ports.link_repository import LinkRepository
 
 
@@ -32,7 +32,7 @@ class JsonLinkRepository(LinkRepository):
     def get_by_name(self, name: str) -> LlmLink | None:
         data = self._load_data()
         if name in data:
-            return deserialize_link(name, data[name])
+            return LlmLink.from_dict(name, data[name])
         return None
 
     def delete(self, name: str) -> bool:
@@ -46,7 +46,7 @@ class JsonLinkRepository(LinkRepository):
     def list_all(self) -> list[LlmLink]:
         data = self._load_data()
         return [
-            deserialize_link(name, details)
+            LlmLink.from_dict(name, details)
             for name, details in data.items()
             if isinstance(details, dict)
         ]

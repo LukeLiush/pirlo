@@ -3,7 +3,6 @@ from pathlib import Path
 from typing import Any
 
 from pirlo.core.instructions import AutopassInstructions, Instruction
-from pirlo.core.models.link import ApiKeyLink
 from pirlo.core.ports.pitch import LinkParameter, Parameter
 from pirlo.infrastructure.adapters.cli.terminal_pitch import TerminalPitch
 from pirlo.playbooks.autopass.adapters.browser_manager import CloakBrowserManager
@@ -99,12 +98,8 @@ class AutopassSession(TerminalPitch, ProgressListener):
             return
 
         # self.playmaker and self.analyst are resolved LlmLink domain objects
-        pm_base_url = (
-            self.playmaker.base_url if isinstance(self.playmaker, ApiKeyLink) else "N/A"
-        )
-        an_base_url = (
-            self.analyst.base_url if isinstance(self.analyst, ApiKeyLink) else "N/A"
-        )
+        pm_base_url = self.playmaker.base_url or "N/A"
+        an_base_url = self.analyst.base_url or "N/A"
 
         self.lineup(
             "Active Run Configuration",
