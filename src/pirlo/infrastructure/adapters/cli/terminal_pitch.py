@@ -161,8 +161,6 @@ class TerminalPitch(Pitch, ABC):
 
         config_data = {}
         config_path_str = getattr(parsed_args, "config", None)
-        if not config_path_str and hasattr(cls, "default_config_path"):
-            config_path_str = cls.default_config_path
 
         if config_path_str:
             config_path = Path(config_path_str).expanduser()
@@ -256,19 +254,6 @@ class TerminalPitch(Pitch, ABC):
                 param_dict[k] = v
         instance.task_id = generate_task_id(playbook_name, param_dict)
 
-        # Auto-persist last used parameters to default_config_path (last_params.json)
-        if hasattr(cls, "default_config_path") and cls.default_config_path:
-            try:
-                save_config_path = Path(cls.default_config_path).expanduser()
-                save_config_path.parent.mkdir(parents=True, exist_ok=True)
-                with open(save_config_path, "w", encoding="utf-8") as f:
-                    json.dump(param_dict, f, indent=4)
-            except Exception as e:  # noqa: BLE001
-                print(
-                    f"Warning: Failed to save last parameters to {save_config_path}: {e}",
-                    file=sys.stderr,
-                )
-
         # Auto-persist per-run parameter snapshot under runs/<run_id>/params.json
         from pirlo.core.services.run_id_generator import generate_run_id
 
@@ -349,19 +334,19 @@ class TerminalPitch(Pitch, ABC):
         await loop.run_in_executor(None, input, f"🔍 [VAR CHECK] {message}: ")
 
     def goal(self, message: str, detail: str | None = None):
-        text = f"⚽ [bold green]GOAL! {message}[/bold green]"
+        text = f"⚽[bold green]GOAL! {message}[/bold green] "
         if detail:
             text += f"\n[cyan]{detail}[/cyan]"
         self.console.print(Panel(text, border_style="green", expand=False))
 
     def red_card(self, message: str, detail: str | None = None):
-        text = f"🟥 [bold red]RED CARD! {message}[/bold red]"
+        text = f"🟥 [bold red]RED CARD! {message}[/bold red] "
         if detail:
             text += f"\n[dim]{detail}[/dim]"
         self.console.print(Panel(text, border_style="red", expand=False))
 
     def yellow_card(self, message: str, detail: str | None = None):
-        text = f"🟨 [bold yellow]YELLOW CARD: {message}[/bold yellow]"
+        text = f"🟨 [bold yellow]YELLOW CARD: {message}[/bold yellow] "
         if detail:
             text += f"\n[dim]{detail}[/dim]"
         self.console.print(Panel(text, border_style="yellow", expand=False))

@@ -26,8 +26,8 @@ class ResilientPageWaiter:
     async def wait_for_text_settled(
         self,
         max_wait_sec: float = 10.0,
-        check_interval_sec: float = 0.5,
-        required_stable_cycles: int = 2,
+        check_interval_sec: float = 1,
+        required_stable_cycles: int = 3,
     ) -> None:
         """Waits for page body text content to stabilize before reading text or extracting data."""
         try:
@@ -42,7 +42,7 @@ class ResilientPageWaiter:
                 if curr_len == prev_len and curr_len > 0:
                     stable_cycles += 1
                     if stable_cycles >= required_stable_cycles:
-                        logger.debug("Page text content settled successfully.")
+                        logger.info("Page text content settled successfully.")
                         return
                 else:
                     stable_cycles = 0
@@ -50,7 +50,7 @@ class ResilientPageWaiter:
 
                 await asyncio.sleep(check_interval_sec)
         except Exception as e:
-            logger.debug(
+            logger.info(
                 f"Text settling check completed or timed out: {e}",
                 exc_info=True,
             )

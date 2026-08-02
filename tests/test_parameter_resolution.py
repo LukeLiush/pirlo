@@ -12,8 +12,6 @@ from pirlo.infrastructure.adapters.cli.terminal_pitch import TerminalPitch
 class DummyResolutionSession(TerminalPitch):
     """Session subclass for testing parameter resolution."""
 
-    default_config_path = None  # Configured dynamically in tests
-
     task = Parameter(str, default="default-task", env_name="TEST_TASK")
     count = Parameter(int, default=5, env_name="TEST_COUNT")
     enabled = Parameter(bool, default=False, env_name="TEST_ENABLED")
@@ -37,9 +35,6 @@ class TestParameterResolution(unittest.TestCase):
         # Back up env and argv
         self.original_env = dict(os.environ)
         self.original_argv = list(sys.argv)
-
-        # Set dummy default config path to None initially
-        DummyResolutionSession.default_config_path = None
 
     def tearDown(self):
         # Restore env and argv
@@ -189,59 +184,6 @@ class TestParameterResolution(unittest.TestCase):
         self.assertEqual(inst.details, {"json_key": "val"})
         self.assertEqual(inst.path_val, Path("/tmp/test"))
         self.assertEqual(inst.multi_env, "json-multi")
-
-    def test_default_config_path_resolution(self):
-        """Verify default_config_path works when --config is omitted."""
-        # Write to default config file location
-        config_data = {"task": "default-json-task", "count": 777}
-        with open(self.config_file, "w") as f:
-            json.dump(config_data, f)
-
-        # Set class default_config_path
-        DummyResolutionSession.default_config_path = self.config_file
-
-        # Run without --config or other args
-        sys.argv = ["pirlo dummy_resolution"]
-
-        captured_instance = []
-
-        async def mock_play(self_instance):
-            captured_instance.append(self_instance)
-
-        DummyResolutionSession.play = mock_play
-        DummyResolutionSession.cli()
-
-        inst = captured_instance[0]
-        self.assertEqual(inst.task, "default-json-task")
-        self.assertEqual(inst.count, 777)
-
-    def test_autosave_default_config_path(self):
-        """Verify that resolved parameters are auto-saved to default_config_path."""
-        save_file = Path(self.temp_dir.name) / "autosave_test.json"
-        DummyResolutionSession.default_config_path = save_file
-
-        sys.argv = [
-            "pirlo dummy_resolution",
-            "--task",
-            "autosaved-task",
-            "--count",
-            "500",
-        ]
-
-        captured_instance = []
-
-        async def mock_play(self_instance):
-            captured_instance.append(self_instance)
-
-        DummyResolutionSession.play = mock_play
-        DummyResolutionSession.cli()
-
-        self.assertTrue(save_file.exists())
-        with open(save_file, "r") as f:
-            data = json.load(f)
-
-        self.assertEqual(data.get("task"), "autosaved-task")
-        self.assertEqual(data.get("count"), 500)
 
 
 if __name__ == "__main__":

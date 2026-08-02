@@ -24,8 +24,6 @@ CDP_URL = f"http://localhost:{CDP_PORT}"
 class AutopassSession(TerminalPitch, ProgressListener):
     """Run self-healing browser automation workflows."""
 
-    default_config_path = PIRLO_WORKSPACE / "autopass" / "last_params.json"
-
     profile = Parameter(
         str,
         default="default",
