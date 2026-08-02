@@ -79,9 +79,7 @@ def run_list(repo: JsonLinkRepository, supported_providers: dict):
         if link.base_url:
             base_url_str = link.base_url
         else:
-            def_url = supported_providers.get(link.provider, {}).get(
-                "default_base_url"
-            )
+            def_url = supported_providers.get(link.provider, {}).get("default_base_url")
             if def_url:
                 base_url_str = f"Default ({def_url})"
             else:
@@ -145,9 +143,7 @@ def run_create(repo: JsonLinkRepository, args, supported_providers: dict):
                 sys.exit(1)
 
         if not base_url:
-            default_url = supported_providers.get(provider, {}).get(
-                "default_base_url"
-            )
+            default_url = supported_providers.get(provider, {}).get("default_base_url")
             default_info = (
                 f"default: {default_url}"
                 if default_url
@@ -214,9 +210,7 @@ def run_show(repo: JsonLinkRepository, name: str, supported_providers: dict):
     if link.base_url:
         base_url_display = f"{link.base_url} (Custom)"
     else:
-        def_url = supported_providers.get(link.provider, {}).get(
-            "default_base_url"
-        )
+        def_url = supported_providers.get(link.provider, {}).get("default_base_url")
         if def_url:
             base_url_display = f"Default ({def_url})"
         else:

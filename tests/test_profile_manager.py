@@ -1,8 +1,7 @@
 import os
 import tempfile
 import unittest
-from datetime import datetime, timedelta, timezone
-from pathlib import Path
+from datetime import UTC, datetime, timedelta
 
 from pirlo.core.services.profile_manager import ProfileManager
 
@@ -40,10 +39,10 @@ class TestProfileManager(unittest.TestCase):
 
     def test_is_expired(self):
         # Create metadata and manually set expires_at in the past
-        meta = ProfileManager.save_profile_metadata("expired_prof", ttl_days=7)
+        ProfileManager.save_profile_metadata("expired_prof", ttl_days=7)
         meta_path = ProfileManager.get_metadata_path("expired_prof")
 
-        past_time = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+        past_time = (datetime.now(UTC) - timedelta(days=1)).isoformat()
         import json
 
         with open(meta_path, "r", encoding="utf-8") as f:

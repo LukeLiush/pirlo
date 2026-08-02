@@ -1,6 +1,6 @@
 import argparse
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from pirlo.core.services.profile_manager import ProfileManager
 
@@ -33,7 +33,7 @@ def format_expires_in(expires_at_str: str) -> str:
         return "N/A"
     try:
         expires_dt = datetime.fromisoformat(expires_at_str)
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         if now >= expires_dt:
             return "Expired"
         delta = expires_dt - now
@@ -57,9 +57,7 @@ def run_list():
         return
 
     print("Saved Browser Profiles:\n")
-    print(
-        f"{'Profile Name':<18} {'Expires In':<16} {'Authenticated Portals / URLs'}"
-    )
+    print(f"{'Profile Name':<18} {'Expires In':<16} {'Authenticated Portals / URLs'}")
     print("─" * 90)
 
     for meta in profiles:
@@ -73,9 +71,7 @@ def run_list():
 
         # Print first line with profile info
         first_url = url_display_lines[0]
-        print(
-            f"{meta.name:<18} {expires_in_str:<16} {first_url}"
-        )
+        print(f"{meta.name:<18} {expires_in_str:<16} {first_url}")
 
         # Print remaining URL lines wrapped under the same column
         for sub_url in url_display_lines[1:]:

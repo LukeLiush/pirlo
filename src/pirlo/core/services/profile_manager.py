@@ -2,7 +2,7 @@ import json
 import os
 import shutil
 from dataclasses import asdict, dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 
@@ -63,7 +63,7 @@ class ProfileManager:
         urls: list[str] | None = None,
         ttl_days: int = 7,
     ) -> ProfileMetadata:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         expires = now + timedelta(days=ttl_days)
 
         profile_path = cls.resolve_profile_path(profile_input)
@@ -99,7 +99,9 @@ class ProfileManager:
         return metadata
 
     @classmethod
-    def load_profile_metadata(cls, profile_input: str = "default") -> ProfileMetadata | None:
+    def load_profile_metadata(
+        cls, profile_input: str = "default"
+    ) -> ProfileMetadata | None:
         metadata_path = cls.get_metadata_path(profile_input)
         if not metadata_path.exists():
             return None
@@ -135,7 +137,7 @@ class ProfileManager:
 
         try:
             expires_dt = datetime.fromisoformat(metadata.expires_at)
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             return now >= expires_dt
         except Exception:  # noqa: BLE001
             return False
@@ -143,7 +145,7 @@ class ProfileManager:
     @classmethod
     def list_profiles(cls) -> list[ProfileMetadata]:
         profiles_dir = cls.get_profiles_dir()
-        result = []
+        result: list[ProfileMetadata] = []
         if not profiles_dir.exists():
             return result
 
