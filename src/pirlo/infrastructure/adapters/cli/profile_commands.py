@@ -58,13 +58,11 @@ def run_list():
 
     print("Saved Browser Profiles:\n")
     print(
-        f"{'Profile Name':<16} {'Status':<10} {'Expires In':<14} {'Authenticated Portals / URLs'}"
+        f"{'Profile Name':<18} {'Expires In':<16} {'Authenticated Portals / URLs'}"
     )
     print("─" * 90)
 
     for meta in profiles:
-        is_exp = ProfileManager.is_expired(meta.name)
-        status_str = "[EXPIRED]" if is_exp else "[ACTIVE]"
         expires_in_str = format_expires_in(meta.expires_at)
 
         urls = meta.authenticated_urls or []
@@ -76,12 +74,12 @@ def run_list():
         # Print first line with profile info
         first_url = url_display_lines[0]
         print(
-            f"{meta.name:<16} {status_str:<10} {expires_in_str:<14} {first_url}"
+            f"{meta.name:<18} {expires_in_str:<16} {first_url}"
         )
 
         # Print remaining URL lines wrapped under the same column
         for sub_url in url_display_lines[1:]:
-            print(f"{'':<16} {'':<10} {'':<14} {sub_url}")
+            print(f"{'':<18} {'':<16} {sub_url}")
     print()
 
 

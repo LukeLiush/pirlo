@@ -103,7 +103,7 @@ class AutopassSession(TerminalPitch, ProgressListener):
             all_profiles = ProfileManager.list_profiles()
             if all_profiles:
                 profiles_info = "Existing Saved Profiles:\n" + "\n".join(
-                    f"  • {p.name} {'[ACTIVE]' if not ProfileManager.is_expired(p.name) else '[EXPIRED]'} (URLs: {', '.join(p.authenticated_urls) or 'None'})"
+                    f"  • {p.name} (URLs: {', '.join(p.authenticated_urls) or 'None'})"
                     for p in all_profiles
                 )
             else:
