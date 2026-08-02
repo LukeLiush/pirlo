@@ -14,7 +14,8 @@ class ResilientLocatorResolver:
         self.page = page
         self.timeout_ms = timeout_ms
 
-    async def _resolve_editable_child(self, locator: Locator) -> Locator:
+    @staticmethod
+    async def _resolve_editable_child(locator: Locator) -> Locator:
         """If locator is a custom component wrapper (e.g. <rich-textarea>), drill down to inner editable node."""
         try:
             child = locator.locator(

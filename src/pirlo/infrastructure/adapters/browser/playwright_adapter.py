@@ -31,16 +31,18 @@ from pirlo.core.models.workflow import Workflow
 from pirlo.infrastructure.adapters.browser.locator_resolver import (
     ResilientLocatorResolver,
 )
+from pirlo.infrastructure.adapters.browser.page_waiter import ResilientPageWaiter
 
 logger = logging.getLogger("workflow_replay.playwright_adapter")
 
 
 class PlaywrightAdapter:
-    """Infrastructure adapter that translates domain Actions to Playwright execution steps."""
+    """Executes domain actions against a Playwright Page instance with resilience and safety checks."""
 
     page: Page
     llm: BaseChatModel | None
     locator_resolver: ResilientLocatorResolver
+    page_waiter: ResilientPageWaiter
     last_extraction_result: str | None
     live_results: list[str]
 
@@ -49,12 +51,14 @@ class PlaywrightAdapter:
         page: Page,
         llm: BaseChatModel | None = None,
         locator_resolver: ResilientLocatorResolver | None = None,
+        page_waiter: ResilientPageWaiter | None = None,
     ) -> None:
         self.page = page
         self.llm = llm
         self.locator_resolver = locator_resolver or ResilientLocatorResolver(
             page, timeout_ms=3000
         )
+        self.page_waiter = page_waiter or ResilientPageWaiter(page)
         self.last_extraction_result = None
         self.live_results = []
 
@@ -161,10 +165,7 @@ class PlaywrightAdapter:
 
     async def _wait_for_load(self) -> None:
         """Resiliently waits for the page DOM to be parsed with a short timeout."""
-        try:
-            await self.page.wait_for_load_state("domcontentloaded", timeout=5000)
-        except Exception as e:  # noqa: BLE001
-            logger.debug(f"Resilient wait_for_load_state timed out or failed: {e}")
+        await self.page_waiter.wait_for_load()
 
     async def execute_action(self, action: Action) -> None:
         """Translates a single domain action to a Playwright page interaction."""
@@ -235,7 +236,8 @@ class PlaywrightAdapter:
                     )
 
                 logger.info("Executing LLM Data Extraction on live page content...")
-                # 1. Fetch clean text of the page body
+                # 1. Wait for page text content to settle (e.g. streaming responses)
+                await self.page_waiter.wait_for_text_settled()
                 page_text = await self.page.locator("body").inner_text()
 
                 # 2. Instruct LLM to perform cognitive extraction from the live text
@@ -268,7 +270,8 @@ class PlaywrightAdapter:
             case DoneAction(text=text, goal=goal):
                 if self.llm and goal:
                     logger.info("Synthesizing final workflow result via LLM...")
-                    # Fetch clean text of the page body to ensure LLM has access to the final screen state
+                    # 1. Wait for page text content to settle (e.g. streaming responses)
+                    await self.page_waiter.wait_for_text_settled()
                     page_text = await self.page.locator("body").inner_text()
 
                     # Construct synthesis prompt
