@@ -3,7 +3,7 @@ from langchain_core.language_models.chat_models import (
     BaseChatModel as LangChainBaseChatModel,
 )
 
-from pirlo.core.models.link import LlmLink
+from pirlo.core.models.link import SUPPORTED_PROVIDERS, LlmLink
 
 
 class LlmFactory:
@@ -20,7 +20,6 @@ class LlmFactory:
         extra_headers: dict | None = None,
     ) -> LangChainBaseChatModel:
         provider = link.provider.lower()
-        from pirlo.playbooks.autopass.providers import SUPPORTED_PROVIDERS
 
         base_url = link.base_url
         if not base_url and provider in SUPPORTED_PROVIDERS:
@@ -88,13 +87,12 @@ class LlmFactory:
         timeout: float = 30.0,
     ) -> BrowserUseChatModel:
         provider = link.provider.lower()
-        from pirlo.playbooks.autopass.providers import SUPPORTED_PROVIDERS
 
         base_url = link.base_url
         if not base_url and provider in SUPPORTED_PROVIDERS:
             base_url = SUPPORTED_PROVIDERS[provider].get("default_base_url")
 
-        if provider == "google":
+        if provider in ("google", "gemini"):
             try:
                 from browser_use.llm.google.chat import ChatGoogle
             except ImportError as e:

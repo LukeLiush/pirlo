@@ -143,8 +143,8 @@ class TestParameterResolution(unittest.TestCase):
         self.assertEqual(inst.enabled, True)
         self.assertEqual(inst.items, ["x", "y"])
 
-    def test_config_json_overrides_all(self):
-        """Verify that JSON configuration via --config overrides CLI, env, and defaults."""
+    def test_cli_overrides_config_json(self):
+        """Verify that CLI flags override JSON config, while non-specified flags fall back to config JSON."""
         os.environ["TEST_TASK"] = "env-task"
         os.environ["TEST_COUNT"] = "42"
 
@@ -180,8 +180,10 @@ class TestParameterResolution(unittest.TestCase):
         DummyResolutionSession.cli()
 
         inst = captured_instance[0]
-        self.assertEqual(inst.task, "json-task")
-        self.assertEqual(inst.count, 999)
+        # CLI flags take top priority over JSON config
+        self.assertEqual(inst.task, "cli-task")
+        self.assertEqual(inst.count, 100)
+        # Non-overridden parameters fall back to JSON config
         self.assertEqual(inst.enabled, True)
         self.assertEqual(inst.items, ["json1", "json2"])
         self.assertEqual(inst.details, {"json_key": "val"})
@@ -212,6 +214,34 @@ class TestParameterResolution(unittest.TestCase):
         inst = captured_instance[0]
         self.assertEqual(inst.task, "default-json-task")
         self.assertEqual(inst.count, 777)
+
+    def test_autosave_default_config_path(self):
+        """Verify that resolved parameters are auto-saved to default_config_path."""
+        save_file = Path(self.temp_dir.name) / "autosave_test.json"
+        DummyResolutionSession.default_config_path = save_file
+
+        sys.argv = [
+            "pirlo dummy_resolution",
+            "--task",
+            "autosaved-task",
+            "--count",
+            "500",
+        ]
+
+        captured_instance = []
+
+        async def mock_play(self_instance):
+            captured_instance.append(self_instance)
+
+        DummyResolutionSession.play = mock_play
+        DummyResolutionSession.cli()
+
+        self.assertTrue(save_file.exists())
+        with open(save_file, "r") as f:
+            data = json.load(f)
+
+        self.assertEqual(data.get("task"), "autosaved-task")
+        self.assertEqual(data.get("count"), 500)
 
 
 if __name__ == "__main__":

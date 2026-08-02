@@ -3,7 +3,7 @@ import getpass
 import sys
 from pathlib import Path
 
-from pirlo.core.models.link import LlmLink
+from pirlo.core.models.link import SUPPORTED_PROVIDERS, LlmLink
 from pirlo.core.services.link_tester import LinkTester
 from pirlo.infrastructure.adapters.storage.json_link_repository import (
     JsonLinkRepository,
@@ -15,7 +15,10 @@ def get_repo() -> JsonLinkRepository:
     return JsonLinkRepository(filepath)
 
 
-def link_main(supported_providers: dict):
+def link_main(supported_providers: dict | None = None):
+    if supported_providers is None:
+        supported_providers = SUPPORTED_PROVIDERS
+
     parser = argparse.ArgumentParser(description="Manage LLM links.", prog="pirlo link")
     subparsers = parser.add_subparsers(dest="subcommand", required=True)
 

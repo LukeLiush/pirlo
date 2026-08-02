@@ -44,11 +44,13 @@ class SelfHealingRunner(WorkflowRunner):
                 )
                 logger.info("Deterministic replay completed successfully.")
                 return result
-            except Exception:
+            except Exception as e:
                 logger.warning(
-                    "Replay failed due to safety check violation or page layout mutation:",
+                    f"Replay failed due to safety check violation or page layout mutation ({e}). "
+                    "Resetting browser context for fresh fallback...",
                     exc_info=True,
                 )
+                await self._reset_browser_session()
                 logger.info(
                     "Triggering fallback browser-use agent to self-heal workflow cache..."
                 )
@@ -61,3 +63,15 @@ class SelfHealingRunner(WorkflowRunner):
         return await self.fallback_runner.run(
             task_prompt=task_prompt, workflow_id=workflow_id, run_id=run_id
         )
+
+    async def _reset_browser_session(self) -> None:
+        """Navigates active CDP browser session to about:blank to ensure fresh start."""
+        try:
+            import httpx
+
+            async with httpx.AsyncClient() as client:
+                await client.get(
+                    "http://localhost:9222/json/new?about:blank", timeout=2.0
+                )
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"Could not reset CDP browser tab: {e}")

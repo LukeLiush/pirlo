@@ -179,13 +179,13 @@ class TerminalPitch(Pitch, ABC):
         link_repo = None
 
         for param in parameters:
-            # 1. Config file (JSON)
-            if param.name in config_data:
-                val = config_data[param.name]
-                val = convert_value(val, param.type_func)
-            # 2. CLI argument
-            elif hasattr(parsed_args, param.name):
+            # 1. CLI argument (highest priority)
+            if hasattr(parsed_args, param.name):
                 val = getattr(parsed_args, param.name)
+                val = convert_value(val, param.type_func)
+            # 2. Config file (JSON preset)
+            elif param.name in config_data:
+                val = config_data[param.name]
                 val = convert_value(val, param.type_func)
             # 3. Environment Variable
             elif getattr(param, "env_name", None):
@@ -255,6 +255,38 @@ class TerminalPitch(Pitch, ABC):
             else:
                 param_dict[k] = v
         instance.task_id = generate_task_id(playbook_name, param_dict)
+
+        # Auto-persist last used parameters to default_config_path (last_params.json)
+        if hasattr(cls, "default_config_path") and cls.default_config_path:
+            try:
+                save_config_path = Path(cls.default_config_path).expanduser()
+                save_config_path.parent.mkdir(parents=True, exist_ok=True)
+                with open(save_config_path, "w", encoding="utf-8") as f:
+                    json.dump(param_dict, f, indent=4)
+            except Exception as e:  # noqa: BLE001
+                print(
+                    f"Warning: Failed to save last parameters to {save_config_path}: {e}",
+                    file=sys.stderr,
+                )
+
+        # Auto-persist per-run parameter snapshot under runs/<run_id>/params.json
+        from pirlo.core.services.run_id_generator import generate_run_id
+
+        effective_run_id = run_id or generate_run_id(instance.task_id)
+        pirlo_workspace = Path(
+            os.environ.get("PIRLO_WORKSPACE", "~/.pirlo-pitch")
+        ).expanduser()
+        run_dir = pirlo_workspace / playbook_name / "runs" / effective_run_id
+        run_params_path = run_dir / "params.json"
+        try:
+            run_dir.mkdir(parents=True, exist_ok=True)
+            with open(run_params_path, "w", encoding="utf-8") as f:
+                json.dump(param_dict, f, indent=4)
+        except Exception as e:  # noqa: BLE001
+            print(
+                f"Warning: Failed to save per-run parameter snapshot to {run_params_path}: {e}",
+                file=sys.stderr,
+            )
 
         try:
             if inspect.iscoroutinefunction(instance.play):

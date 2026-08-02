@@ -28,6 +28,9 @@ from pirlo.core.models.actions import (
 )
 from pirlo.core.models.specifications import SafetyCandidate
 from pirlo.core.models.workflow import Workflow
+from pirlo.infrastructure.adapters.browser.locator_resolver import (
+    ResilientLocatorResolver,
+)
 
 logger = logging.getLogger("workflow_replay.playwright_adapter")
 
@@ -37,12 +40,21 @@ class PlaywrightAdapter:
 
     page: Page
     llm: BaseChatModel | None
+    locator_resolver: ResilientLocatorResolver
     last_extraction_result: str | None
     live_results: list[str]
 
-    def __init__(self, page: Page, llm: BaseChatModel | None = None) -> None:
+    def __init__(
+        self,
+        page: Page,
+        llm: BaseChatModel | None = None,
+        locator_resolver: ResilientLocatorResolver | None = None,
+    ) -> None:
         self.page = page
         self.llm = llm
+        self.locator_resolver = locator_resolver or ResilientLocatorResolver(
+            page, timeout_ms=3000
+        )
         self.last_extraction_result = None
         self.live_results = []
 
@@ -168,20 +180,20 @@ class PlaywrightAdapter:
                 self.live_results.append(f"Navigated to '{url}' successfully.")
 
             case ClickAction(element_context=context):
-                locator = self.page.locator(f"xpath={context.xpath}").first
+                locator = await self.locator_resolver.resolve(context)
                 try:
                     await locator.click(timeout=3000)
-                except Exception:  # noqa: BLE001
-                    # JS fallback click if click is obstructed
-                    logger.debug(
-                        "Playwright standard click failed; falling back to JS executor click."
+                except Exception as e:
+                    logger.warning(
+                        f"Playwright standard click failed ({e}); falling back to JS executor click.",
+                        exc_info=True,
                     )
                     await locator.evaluate("(el) => el.click()")
                 await self._wait_for_load()
                 self.live_results.append(f"Clicked element at XPath '{context.xpath}'.")
 
             case InputTextAction(element_context=context, text=text):
-                locator = self.page.locator(f"xpath={context.xpath}").first
+                locator = await self.locator_resolver.resolve(context)
                 await locator.fill("")
                 await locator.type(text)
                 await self._wait_for_load()
