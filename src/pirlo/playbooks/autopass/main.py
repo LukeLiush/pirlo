@@ -7,11 +7,11 @@ from pirlo.core.instructions import AutopassInstructions, Instruction
 from pirlo.core.models.link import ApiKeyLink, LlmLink
 from pirlo.core.ports.pitch import LinkParameter, Parameter
 from pirlo.infrastructure.adapters.cli.terminal_pitch import TerminalPitch
-from pirlo.playground.autopass.adapters.browser_manager import CloakBrowserManager
-from pirlo.playground.autopass.adapters.cdp_checker import HttpCdpConnectionChecker
-from pirlo.playground.autopass.adapters.workflow_executor import SelfHealingWorkflowExecutor
-from pirlo.playground.autopass.core.ports import ProgressListener
-from pirlo.playground.autopass.core.use_cases import RunAutopassUseCase
+from pirlo.playbooks.autopass.adapters.browser_manager import CloakBrowserManager
+from pirlo.playbooks.autopass.adapters.cdp_checker import HttpCdpConnectionChecker
+from pirlo.playbooks.autopass.adapters.workflow_executor import SelfHealingWorkflowExecutor
+from pirlo.playbooks.autopass.core.ports import ProgressListener
+from pirlo.playbooks.autopass.core.use_cases import RunAutopassUseCase
 
 PIRLO_WORKSPACE = Path(os.environ.get("PIRLO_WORKSPACE", "~/.pirlo-pitch")).expanduser()
 

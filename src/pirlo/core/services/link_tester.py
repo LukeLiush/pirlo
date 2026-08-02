@@ -1,5 +1,5 @@
 from pirlo.core.models.link import LlmLink, ApiKeyLink, LinkTestResult
-from pirlo.playground.autopass.adapters.llm_factory import LlmFactory
+from pirlo.playbooks.autopass.adapters.llm_factory import LlmFactory
 
 
 class LinkTester:

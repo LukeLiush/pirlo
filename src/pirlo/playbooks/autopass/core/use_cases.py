@@ -1,6 +1,6 @@
 from pathlib import Path
 from typing import Any
-from pirlo.playground.autopass.core.ports import (
+from pirlo.playbooks.autopass.core.ports import (
     BrowserManager,
     CdpChecker,
     WorkflowExecutor,

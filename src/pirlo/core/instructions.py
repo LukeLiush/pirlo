@@ -18,7 +18,7 @@ class AutopassInstructions:
         detail=(
             "Please provide a task prompt using the --task parameter or by setting it in your playbook configuration.\n\n"
             "Example:\n"
-            "  python src/pirlo/playground/autopass/main.py --task \"go to google.com and search for 'openai'\""
+            "  python src/pirlo/playbooks/autopass/main.py --task \"go to google.com and search for 'openai'\""
         )
     )
     PROFILE_MISSING = Instruction(

@@ -42,7 +42,7 @@ def _build_api_key_langchain(
     extra_headers: dict | None = None,
 ) -> LangChainBaseChatModel:
     provider = link.provider.lower()
-    from pirlo.playground.autopass.providers import SUPPORTED_PROVIDERS
+    from pirlo.playbooks.autopass.providers import SUPPORTED_PROVIDERS
 
     base_url = link.base_url
     if not base_url and provider in SUPPORTED_PROVIDERS:
@@ -159,7 +159,7 @@ def _build_api_key_browser_use(
     timeout: float = 30.0,
 ) -> BrowserUseChatModel:
     provider = link.provider.lower()
-    from pirlo.playground.autopass.providers import SUPPORTED_PROVIDERS
+    from pirlo.playbooks.autopass.providers import SUPPORTED_PROVIDERS
 
     base_url = link.base_url
     if not base_url and provider in SUPPORTED_PROVIDERS:

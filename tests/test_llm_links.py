@@ -60,7 +60,7 @@ class TestLlmLinks(unittest.TestCase):
     def test_llm_factory_registry_resolution(self):
         """Verify LlmFactory creates correct LangChain LLMs for ApiKeyLink, BedrockLink, and AzureOpenAiLink."""
         from pirlo.core.models.link import ApiKeyLink, AzureOpenAiLink, BedrockLink
-        from pirlo.playground.autopass.adapters.llm_factory import LlmFactory
+        from pirlo.playbooks.autopass.adapters.llm_factory import LlmFactory
 
         # 1. ApiKeyLink
         api_link = ApiKeyLink(

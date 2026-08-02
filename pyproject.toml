@@ -35,6 +35,6 @@ dev = [
 ignore_missing_imports = true
 
 [tool.pirlo.playbooks]
-dummy = "pirlo.playground.dummy:DummySession"
-autopass = "pirlo.playground.autopass.main:AutopassSession"
+dummy = "pirlo.playbooks.dummy:DummySession"
+autopass = "pirlo.playbooks.autopass.main:AutopassSession"
 

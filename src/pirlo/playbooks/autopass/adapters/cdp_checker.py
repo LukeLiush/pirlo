@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import urllib.request
-from pirlo.playground.autopass.core.ports import CdpChecker
+from pirlo.playbooks.autopass.core.ports import CdpChecker
 
 logger = logging.getLogger("autopass.cdp")
 

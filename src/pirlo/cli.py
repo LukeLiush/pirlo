@@ -80,7 +80,7 @@ def main():
             from pirlo.infrastructure.adapters.cli.link_commands import (
                 link_main,
             )
-            from pirlo.playground.autopass.providers import SUPPORTED_PROVIDERS
+            from pirlo.playbooks.autopass.providers import SUPPORTED_PROVIDERS
             link_main(SUPPORTED_PROVIDERS)
         except Exception as e:  # noqa: BLE001
             print(f"Error: Link management failed: {e}", file=sys.stderr)

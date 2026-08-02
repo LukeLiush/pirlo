@@ -10,8 +10,8 @@ from pirlo.infrastructure.services.llm_workflow import LlmWorkflowRunner
 from pirlo.infrastructure.services.playwright_workflow import PlaywrightReplayRunner
 from pirlo.infrastructure.services.self_healing_workflow import SelfHealingRunner
 
-from pirlo.playground.autopass.adapters.llm_factory import LlmFactory
-from pirlo.playground.autopass.core.ports import WorkflowExecutor
+from pirlo.playbooks.autopass.adapters.llm_factory import LlmFactory
+from pirlo.playbooks.autopass.core.ports import WorkflowExecutor
 
 PIRLO_WORKSPACE = Path(os.environ.get("PIRLO_WORKSPACE", "~/.pirlo-pitch")).expanduser()
 
