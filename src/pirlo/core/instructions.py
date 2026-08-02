@@ -19,12 +19,25 @@ class AutopassInstructions:
         detail=(
             "Please provide a task prompt using the --task parameter or by setting it in your playbook configuration.\n\n"
             "Example:\n"
-            "  python src/pirlo/playbooks/autopass/main.py --task \"go to google.com and search for 'openai'\""
+            "  pirlo autopass --task \"go to google.com and search for 'openai'\""
         ),
     )
     PROFILE_MISSING = Instruction(
-        message="Google profile directory not found",
-        detail="Please run the login script first to log in and save your session.",
+        message="Browser profile '{profile}' missing or not initialized",
+        detail=(
+            "The specified browser profile '{profile}' was not found.\n"
+            "{existing_info}\n"
+            "To create and authenticate this profile, please run:\n"
+            "  pirlo login --profile {profile} --urls <target_urls>"
+        ),
+    )
+    PROFILE_EXPIRED = Instruction(
+        message="Browser profile '{profile}' session has expired",
+        detail=(
+            "The browser profile session '{profile}' has expired (expired on {expires_at}).\n"
+            "To regenerate and refresh this session, please re-authenticate:\n"
+            "  pirlo login --profile {profile} --urls {authenticated_urls}"
+        ),
     )
 
 

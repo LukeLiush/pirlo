@@ -4,6 +4,7 @@ from typing import Any
 
 from pirlo.core.instructions import AutopassInstructions, Instruction
 from pirlo.core.ports.pitch import LinkParameter, Parameter
+from pirlo.core.services.profile_manager import ProfileManager
 from pirlo.infrastructure.adapters.cli.terminal_pitch import TerminalPitch
 from pirlo.playbooks.autopass.adapters.browser_manager import CloakBrowserManager
 from pirlo.playbooks.autopass.adapters.cdp_checker import HttpCdpConnectionChecker
@@ -16,11 +17,6 @@ from pirlo.playbooks.autopass.core.use_cases import RunAutopassUseCase
 PIRLO_WORKSPACE = Path(os.environ.get("PIRLO_WORKSPACE", "~/.pirlo-pitch")).expanduser()
 
 
-def get_profile_path(profile_name: str = "login-profile") -> Path:
-    PIRLO_WORKSPACE.mkdir(parents=True, exist_ok=True)
-    return PIRLO_WORKSPACE / profile_name
-
-
 CDP_PORT = 9222
 CDP_URL = f"http://localhost:{CDP_PORT}"
 
@@ -30,6 +26,12 @@ class AutopassSession(TerminalPitch, ProgressListener):
 
     default_config_path = PIRLO_WORKSPACE / "autopass" / "autopass.json"
 
+    profile = Parameter(
+        str,
+        default="default",
+        help="Name or path of the browser profile to use (default: 'default')",
+        env_name="PROFILE",
+    )
     headless = Parameter(
         bool, default=False, help="Run browser in headless mode", env_name="HEADLESS"
     )
@@ -97,10 +99,37 @@ class AutopassSession(TerminalPitch, ProgressListener):
             subtitle="Autonomous Browser Automation",
         )
 
-        profile_path: Path = get_profile_path()
-        if not profile_path.exists():
-            self.yellow_card(AutopassInstructions.PROFILE_MISSING)
-            profile_path.mkdir(parents=True, exist_ok=True)
+        if not ProfileManager.exists(self.profile):
+            all_profiles = ProfileManager.list_profiles()
+            if all_profiles:
+                profiles_info = "Existing Saved Profiles:\n" + "\n".join(
+                    f"  • {p.name} {'[ACTIVE]' if not ProfileManager.is_expired(p.name) else '[EXPIRED]'} (URLs: {', '.join(p.authenticated_urls) or 'None'})"
+                    for p in all_profiles
+                )
+            else:
+                profiles_info = "No browser profiles currently exist."
+
+            instruction = AutopassInstructions.PROFILE_MISSING.format(
+                profile=self.profile, existing_info=profiles_info
+            )
+            self.yellow_card(instruction)
+            return
+
+        if ProfileManager.is_expired(self.profile):
+            meta = ProfileManager.load_profile_metadata(self.profile)
+            exp_date = meta.expires_at if meta else "N/A"
+            urls_str = (
+                " ".join(meta.authenticated_urls)
+                if (meta and meta.authenticated_urls)
+                else "<target_urls>"
+            )
+            instruction = AutopassInstructions.PROFILE_EXPIRED.format(
+                profile=self.profile, expires_at=exp_date, authenticated_urls=urls_str
+            )
+            self.yellow_card(instruction)
+            return
+
+        profile_path: Path = ProfileManager.resolve_profile_path(self.profile)
 
         if self.task is None:
             self.yellow_card(AutopassInstructions.TASK_REQUIRED)

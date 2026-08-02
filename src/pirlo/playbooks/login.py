@@ -4,11 +4,24 @@ from pathlib import Path
 from cloakbrowser import launch_persistent_context_async
 
 from pirlo.core.ports.pitch import Parameter
+from pirlo.core.services.profile_manager import ProfileManager
 from pirlo.infrastructure.adapters.cli.terminal_pitch import TerminalPitch
 
 
 class LoginSession(TerminalPitch):
     """Launch a browser to authenticate and save persistent cookies."""
+
+    profile = Parameter(
+        str,
+        default="default",
+        help="Name or path of the browser profile to authenticate and save",
+    )
+
+    ttl_days = Parameter(
+        int,
+        default=7,
+        help="Session expiration TTL in days (default: 7)",
+    )
 
     urls = Parameter(
         list[str],
@@ -25,7 +38,7 @@ class LoginSession(TerminalPitch):
         # 1. Header (Banner)
         self.header(
             "Pirlo Login Manager",
-            subtitle="Manage persistent user session cookies",
+            subtitle=f"Manage persistent session cookies for profile '{self.profile}'",
         )
 
         target_urls: list[str] = self.urls.copy() if self.urls else []
@@ -52,14 +65,14 @@ class LoginSession(TerminalPitch):
                     "  1. Pass URLs directly using [bold]--urls[/bold] (e.g., --urls https://github.com)\n"
                     "  2. Pass a text file with URLs using [bold]--urls-file[/bold] (e.g., --urls-file urls.txt)\n\n"
                     "Example:\n"
-                    "  [cyan]pirlo login --urls https://github.com https://google.com[/cyan]"
+                    "  [cyan]pirlo login --profile work --urls https://github.com https://google.com[/cyan]"
                 ),
             )
             return
 
         # 2. Status (Loading spinner)
-        with self.status("Launching browser session..."):
-            profile_path = Path("~/.pirlo-pitch/login-profile")
+        profile_path = ProfileManager.resolve_profile_path(self.profile)
+        with self.status(f"Launching browser session for profile '{self.profile}'..."):
             ctx = await launch_persistent_context_async(
                 str(profile_path),
                 headless=False,
@@ -95,10 +108,22 @@ class LoginSession(TerminalPitch):
                 await self.var_check(
                     "Press [ENTER] once you are successfully logged in to save and exit"
                 )
+
+                # Save metadata
+                metadata = ProfileManager.save_profile_metadata(
+                    profile_input=self.profile,
+                    urls=target_urls,
+                    ttl_days=self.ttl_days,
+                )
+
                 # 6. Goal! (Success box)
                 self.goal(
                     "Session Saved Successfully!",
-                    detail=f"Browser cookies saved to: {profile_path.resolve()}",
+                    detail=(
+                        f"Browser cookies saved to: {profile_path.resolve()}\n"
+                        f"Profile Name: {metadata.name}\n"
+                        f"Expires At: {metadata.expires_at} (TTL: {self.ttl_days} days)"
+                    ),
                 )
             finally:
                 await ctx.close()

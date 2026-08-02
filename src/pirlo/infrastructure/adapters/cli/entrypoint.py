@@ -33,6 +33,7 @@ def main():
         print("Usage: pirlo <command> [<args>]")
         print("\nAvailable commands:")
         print("  link          - Manage LLM links (API keys, base URLs)")
+        print("  profile       - Manage browser profiles (list, delete)")
         if playbooks:
             # To show a nice description, we can dynamically load the classes and show their docstrings!
             for cmd, entrypoint in sorted(playbooks.items()):
@@ -86,6 +87,21 @@ def main():
             link_main(SUPPORTED_PROVIDERS)
         except Exception as e:  # noqa: BLE001
             print(f"Error: Link management failed: {e}", file=sys.stderr)
+            import traceback
+
+            traceback.print_exc()
+            sys.exit(1)
+        sys.exit(0)
+
+    if command == "profile":
+        try:
+            from pirlo.infrastructure.adapters.cli.profile_commands import (
+                profile_main,
+            )
+
+            profile_main()
+        except Exception as e:  # noqa: BLE001
+            print(f"Error: Profile management failed: {e}", file=sys.stderr)
             import traceback
 
             traceback.print_exc()
