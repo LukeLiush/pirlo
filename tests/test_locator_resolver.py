@@ -83,6 +83,28 @@ class TestResilientLocatorResolver(unittest.IsolatedAsyncioTestCase):
         resolved = await resolver.resolve(context)
         self.assertEqual(resolved, attr_locator)
 
+    async def test_resolve_editable_child_when_for_input_true(self):
+        page = MagicMock()
+        primary_locator = MagicMock()
+        primary_locator.wait_for = AsyncMock()
+
+        child_locator = MagicMock()
+        child_locator.count = AsyncMock(return_value=1)
+        primary_locator.locator.return_value.first = child_locator
+
+        page.locator.return_value.first = primary_locator
+
+        resolver = ResilientLocatorResolver(page, timeout_ms=3000)
+        context = ElementContext(
+            xpath="/html/body/rich-textarea",
+            tag_name="rich-textarea",
+            text="",
+            attributes={},
+        )
+
+        resolved = await resolver.resolve(context, for_input=True)
+        self.assertEqual(resolved, child_locator)
+
 
 if __name__ == "__main__":
     unittest.main()

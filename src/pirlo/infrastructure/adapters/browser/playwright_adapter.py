@@ -193,9 +193,24 @@ class PlaywrightAdapter:
                 self.live_results.append(f"Clicked element at XPath '{context.xpath}'.")
 
             case InputTextAction(element_context=context, text=text):
-                locator = await self.locator_resolver.resolve(context)
-                await locator.fill("")
-                await locator.type(text)
+                locator = await self.locator_resolver.resolve(context, for_input=True)
+                try:
+                    await locator.fill("")
+                    await locator.type(text)
+                except Exception as fill_err:
+                    logger.warning(
+                        f"Standard fill failed for XPath '{context.xpath}' ({fill_err}); "
+                        "focusing element and typing with keyboard.",
+                        exc_info=True,
+                    )
+                    try:
+                        await locator.focus()
+                    except Exception as focus_err:
+                        logger.debug(
+                            f"Focus prior to typing failed: {focus_err}",
+                            exc_info=True,
+                        )
+                    await self.page.keyboard.type(text)
                 await self._wait_for_load()
                 self.live_results.append(
                     f"Inputted text '{text}' into element at XPath '{context.xpath}'."
