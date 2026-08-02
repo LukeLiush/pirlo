@@ -1,9 +1,11 @@
 import asyncio
 import logging
 import urllib.request
+
 from pirlo.playbooks.autopass.core.ports import CdpChecker
 
 logger = logging.getLogger("autopass.cdp")
+
 
 class HttpCdpConnectionChecker(CdpChecker):
     """Adapter implementing CdpChecker via HTTP requests to the CDP version endpoint."""
@@ -20,7 +22,9 @@ class HttpCdpConnectionChecker(CdpChecker):
                 loop = asyncio.get_running_loop()
 
                 def check():
-                    with urllib.request.urlopen(f"{self.cdp_url}/json/version", timeout=2) as resp:
+                    with urllib.request.urlopen(
+                        f"{self.cdp_url}/json/version", timeout=2
+                    ) as resp:
                         return resp.status == 200
 
                 is_live = await loop.run_in_executor(None, check)

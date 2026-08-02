@@ -59,6 +59,7 @@ def main():
                         sys.path.remove(path)
                 except Exception:  # noqa: BLE001
                     import traceback
+
                     sys.stderr.write(f"Error loading playbook command '{cmd}':\n")
                     traceback.print_exc()
 
@@ -81,6 +82,7 @@ def main():
                 link_main,
             )
             from pirlo.playbooks.autopass.providers import SUPPORTED_PROVIDERS
+
             link_main(SUPPORTED_PROVIDERS)
         except Exception as e:  # noqa: BLE001
             print(f"Error: Link management failed: {e}", file=sys.stderr)

@@ -1,7 +1,10 @@
 from pathlib import Path
 from typing import Any
+
 from cloakbrowser import launch_persistent_context_async
+
 from pirlo.playbooks.autopass.core.ports import BrowserManager
+
 
 class CloakBrowserManager(BrowserManager):
     """Adapter implementing BrowserManager using CloakBrowser."""

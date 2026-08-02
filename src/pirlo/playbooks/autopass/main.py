@@ -1,15 +1,16 @@
 import os
-from contextlib import AbstractContextManager
 from pathlib import Path
 from typing import Any
 
 from pirlo.core.instructions import AutopassInstructions, Instruction
-from pirlo.core.models.link import ApiKeyLink, LlmLink
+from pirlo.core.models.link import ApiKeyLink
 from pirlo.core.ports.pitch import LinkParameter, Parameter
 from pirlo.infrastructure.adapters.cli.terminal_pitch import TerminalPitch
 from pirlo.playbooks.autopass.adapters.browser_manager import CloakBrowserManager
 from pirlo.playbooks.autopass.adapters.cdp_checker import HttpCdpConnectionChecker
-from pirlo.playbooks.autopass.adapters.workflow_executor import SelfHealingWorkflowExecutor
+from pirlo.playbooks.autopass.adapters.workflow_executor import (
+    SelfHealingWorkflowExecutor,
+)
 from pirlo.playbooks.autopass.core.ports import ProgressListener
 from pirlo.playbooks.autopass.core.use_cases import RunAutopassUseCase
 
@@ -27,6 +28,7 @@ CDP_URL = f"http://localhost:{CDP_PORT}"
 
 class AutopassSession(TerminalPitch, ProgressListener):
     """Run self-healing browser automation workflows."""
+
     default_config_path = PIRLO_WORKSPACE / "autopass" / "autopass.json"
 
     headless = Parameter(
@@ -35,17 +37,20 @@ class AutopassSession(TerminalPitch, ProgressListener):
     task = Parameter(
         str, default=None, help="Task prompt to execute autonomously", env_name="TASK"
     )
-    playmaker: LlmLink = LinkParameter(
+    playmaker = LinkParameter(
         help="Link name for Playmaker (decision brain)", env_name="PLAYMAKER"
     )
-    analyst: LlmLink = LinkParameter(
+    analyst = LinkParameter(
         help="Link name for Analyst (DOM summary / selector healer)", env_name="ANALYST"
     )
     use_vision = Parameter(
         bool, default=False, help="Enable vision for the Agent", env_name="USE_VISION"
     )
     max_failures = Parameter(
-        int, default=5, help="Maximum failure attempts before stopping", env_name="MAX_FAILURES"
+        int,
+        default=5,
+        help="Maximum failure attempts before stopping",
+        env_name="MAX_FAILURES",
     )
     retry_delay = Parameter(
         int, default=10, help="Retry delay in seconds", env_name="RETRY_DELAY"
@@ -58,16 +63,16 @@ class AutopassSession(TerminalPitch, ProgressListener):
             super().yellow_card(message, detail=detail)
 
     # Implement ProgressListener port
-    def status_context(self, message: str) -> AbstractContextManager[None]:
+    def status_context(self, message: str) -> Any:
         return self.status(message)
 
-    def show_warning(self, message: Any, detail: str = None) -> None:
+    def show_warning(self, message: Any, detail: str | None = None) -> None:
         self.yellow_card(message, detail=detail)
 
-    def show_goal(self, message: str, detail: str = None) -> None:
+    def show_goal(self, message: str, detail: str | None = None) -> None:
         self.goal(message, detail=detail)
 
-    def show_red_card(self, message: str, detail: str = None) -> None:
+    def show_red_card(self, message: str, detail: str | None = None) -> None:
         self.red_card(message, detail=detail)
 
     async def play(self):
@@ -94,8 +99,12 @@ class AutopassSession(TerminalPitch, ProgressListener):
             return
 
         # self.playmaker and self.analyst are resolved LlmLink domain objects
-        pm_base_url = self.playmaker.base_url if isinstance(self.playmaker, ApiKeyLink) else "N/A"
-        an_base_url = self.analyst.base_url if isinstance(self.analyst, ApiKeyLink) else "N/A"
+        pm_base_url = (
+            self.playmaker.base_url if isinstance(self.playmaker, ApiKeyLink) else "N/A"
+        )
+        an_base_url = (
+            self.analyst.base_url if isinstance(self.analyst, ApiKeyLink) else "N/A"
+        )
 
         self.lineup(
             "Active Run Configuration",
@@ -104,10 +113,16 @@ class AutopassSession(TerminalPitch, ProgressListener):
                 ["Profile Path", str(profile_path.resolve())],
                 ["Headless", str(self.headless)],
                 ["Task", self.task],
-                ["Playmaker Link (Provider)", f"{self.playmaker.name} ({self.playmaker.provider})"],
+                [
+                    "Playmaker Link (Provider)",
+                    f"{self.playmaker.name} ({self.playmaker.provider})",
+                ],
                 ["Playmaker Model", self.playmaker.model],
                 ["Playmaker Base URL", pm_base_url or "N/A"],
-                ["Analyst Link (Provider)", f"{self.analyst.name} ({self.analyst.provider})"],
+                [
+                    "Analyst Link (Provider)",
+                    f"{self.analyst.name} ({self.analyst.provider})",
+                ],
                 ["Analyst Model", self.analyst.model],
                 ["Analyst Base URL", an_base_url or "N/A"],
                 ["Vision Enabled", str(self.use_vision)],
@@ -127,17 +142,13 @@ class AutopassSession(TerminalPitch, ProgressListener):
             workflow_executor=workflow_executor,
         )
 
-        try:
-            await use_case.run(
-                task_prompt=self.task,
-                profile_path=profile_path,
-                headless=self.headless,
-                cdp_port=CDP_PORT,
-                listener=self,
-            )
-        except Exception as e:
-            # We already notify the red_card in the use case via listener
-            raise e
+        await use_case.run(
+            task_prompt=self.task,
+            profile_path=profile_path,
+            headless=self.headless,
+            cdp_port=CDP_PORT,
+            listener=self,
+        )
 
 
 if __name__ == "__main__":

@@ -4,6 +4,7 @@ from dataclasses import dataclass
 @dataclass(frozen=True)
 class LinkTestResult:
     """Result of testing connectivity to an LLM provider."""
+
     success: bool
     message: str
 
@@ -22,14 +23,13 @@ class LlmLink:
 
     def get_display_fields(self) -> list[tuple[str, str]]:
         """Returns a list of (Label, Formatted Value) pairs to display in UI cards."""
-        return [
-            ("Model", self.model)
-        ]
+        return [("Model", self.model)]
 
 
 @dataclass
 class ApiKeyLink(LlmLink):
     """Link type for standard HTTP / API Key based providers (e.g. OpenAI, DashScope, Gemini, Anthropic)."""
+
     api_key: str
     base_url: str | None = None
 
@@ -47,18 +47,23 @@ class ApiKeyLink(LlmLink):
             masked_key = masked_key[:4] + "..." + masked_key[-4:]
         else:
             masked_key = "..."
-        fields.extend([
-            ("API Key", masked_key),
-            ("Base URL", self.base_url or "N/A")
-        ])
+        fields.extend([("API Key", masked_key), ("Base URL", self.base_url or "N/A")])
         return fields
 
     @classmethod
     def from_dict(cls, name: str, data: dict) -> "ApiKeyLink":
         provider = data["provider"]
-        default_model = "qwen3.6-flash" if provider == "dashscope" else (
-            "gemini-1.5-flash" if provider == "gemini" else (
-                "claude-3-5-haiku-20241022" if provider == "anthropic" else "gpt-4o-mini"
+        default_model = (
+            "qwen3.6-flash"
+            if provider == "dashscope"
+            else (
+                "gemini-1.5-flash"
+                if provider == "gemini"
+                else (
+                    "claude-3-5-haiku-20241022"
+                    if provider == "anthropic"
+                    else "gpt-4o-mini"
+                )
             )
         )
         return cls(
@@ -73,6 +78,7 @@ class ApiKeyLink(LlmLink):
 @dataclass
 class BedrockLink(LlmLink):
     """Link type for AWS Bedrock integration."""
+
     aws_access_key_id: str
     aws_secret_access_key: str
     aws_region: str
@@ -91,11 +97,13 @@ class BedrockLink(LlmLink):
             masked_secret = masked_secret[:4] + "..." + masked_secret[-4:]
         else:
             masked_secret = "..."
-        fields.extend([
-            ("Access Key ID", self.aws_access_key_id),
-            ("Secret Access Key", masked_secret),
-            ("Region", self.aws_region)
-        ])
+        fields.extend(
+            [
+                ("Access Key ID", self.aws_access_key_id),
+                ("Secret Access Key", masked_secret),
+                ("Region", self.aws_region),
+            ]
+        )
         return fields
 
     @classmethod
@@ -113,6 +121,7 @@ class BedrockLink(LlmLink):
 @dataclass
 class AzureOpenAiLink(LlmLink):
     """Link type for Azure OpenAI integration."""
+
     api_key: str
     azure_endpoint: str
     api_version: str
@@ -131,11 +140,13 @@ class AzureOpenAiLink(LlmLink):
             masked_key = masked_key[:4] + "..." + masked_key[-4:]
         else:
             masked_key = "..."
-        fields.extend([
-            ("API Key", masked_key),
-            ("Endpoint", self.azure_endpoint),
-            ("API Version", self.api_version)
-        ])
+        fields.extend(
+            [
+                ("API Key", masked_key),
+                ("Endpoint", self.azure_endpoint),
+                ("API Version", self.api_version),
+            ]
+        )
         return fields
 
     @classmethod

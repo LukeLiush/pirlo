@@ -25,18 +25,26 @@ def link_main(supported_providers: dict):
     # 2. create
     create_parser = subparsers.add_parser("create", help="Create or update an LLM link")
     create_parser.add_argument("name", nargs="?", help="Link Name")
-    create_parser.add_argument("--provider", help="Provider type (e.g. dashscope, gemini, openai, anthropic)")
-    create_parser.add_argument("--model", help="LLM model (e.g. gemini-1.5-flash, qwen-turbo)")
+    create_parser.add_argument(
+        "--provider", help="Provider type (e.g. dashscope, gemini, openai, anthropic)"
+    )
+    create_parser.add_argument(
+        "--model", help="LLM model (e.g. gemini-1.5-flash, qwen-turbo)"
+    )
     create_parser.add_argument("--api-key", help="Provider API Key")
     create_parser.add_argument("--base-url", help="Override Base URL")
-    create_parser.add_argument("--test", action="store_true", help="Test connection after creation")
+    create_parser.add_argument(
+        "--test", action="store_true", help="Test connection after creation"
+    )
 
     # 3. show
     show_parser = subparsers.add_parser("show", help="Show details of a specific link")
     show_parser.add_argument("name", help="Link Name")
 
     # 4. test
-    test_parser = subparsers.add_parser("test", help="Test connectivity of a specific link")
+    test_parser = subparsers.add_parser(
+        "test", help="Test connectivity of a specific link"
+    )
     test_parser.add_argument("name", help="Link Name")
 
     # 5. delete
@@ -92,7 +100,7 @@ def run_create(repo: JsonLinkRepository, args, supported_providers: dict):
             if not name:
                 print("Error: Link Name is required.")
                 sys.exit(1)
-        
+
         if not provider:
             print("? Select Provider:")
             choices = list(supported_providers.keys())
@@ -105,9 +113,11 @@ def run_create(repo: JsonLinkRepository, args, supported_providers: dict):
                     break
                 except (ValueError, IndexError):
                     print("Invalid selection. Try again.")
-        
+
         if not model:
-            model = input("? Input Model Name (required, e.g. gemini-1.5-flash, qwen-turbo): ").strip()
+            model = input(
+                "? Input Model Name (required, e.g. gemini-1.5-flash, qwen-turbo): "
+            ).strip()
             if not model:
                 print("Error: Model Name is required.")
                 sys.exit(1)
@@ -117,27 +127,37 @@ def run_create(repo: JsonLinkRepository, args, supported_providers: dict):
             if not api_key:
                 print("Error: API Key is required.")
                 sys.exit(1)
-                
+
         if not base_url:
-            default_url = supported_providers.get(provider, {}).get("default_base_url", "https://api.openai.com/v1")
-            base_url_input = input(f"? Input Base URL (optional, e.g. {default_url}): ").strip()
+            default_url = supported_providers.get(provider, {}).get(
+                "default_base_url", "https://api.openai.com/v1"
+            )
+            base_url_input = input(
+                f"? Input Base URL (optional, e.g. {default_url}): "
+            ).strip()
             base_url = base_url_input if base_url_input else None
-                
+
         test_input = input("? Test connection now? [Y/n]: ").strip().lower()
         test = test_input in ("", "y", "yes")
 
     else:
         if provider not in supported_providers:
-            print(f"Error: Invalid provider '{provider}'. Supported: {', '.join(supported_providers.keys())}")
+            print(
+                f"Error: Invalid provider '{provider}'. Supported: {', '.join(supported_providers.keys())}"
+            )
             sys.exit(1)
         if not model:
             print("Error: Model Name is required via --model flag.")
             sys.exit(1)
 
-    link = ApiKeyLink(name=name, provider=provider, model=model, api_key=api_key, base_url=base_url)
+    link = ApiKeyLink(
+        name=name, provider=provider, model=model, api_key=api_key, base_url=base_url
+    )
 
     if test:
-        print(f"Checking connection to {provider.capitalize()} using model '{model}'...")
+        print(
+            f"Checking connection to {provider.capitalize()} using model '{model}'..."
+        )
         result = LinkTester.test_link(link)
         if result.success:
             print(f"[PASS] {result.message}")

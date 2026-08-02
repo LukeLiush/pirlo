@@ -36,7 +36,9 @@ def convert_value(val: Any, type_func: Callable) -> Any:
                     return [convert_value(item, item_type) for item in parsed_list]
             except json.JSONDecodeError as e:
                 if val.strip().startswith("["):
-                    sys.stderr.write(f"Warning: Failed to decode list parameter as JSON: {e}\n")
+                    sys.stderr.write(
+                        f"Warning: Failed to decode list parameter as JSON: {e}\n"
+                    )
             # Fall back to comma-separated split
             if not val.strip():
                 return []
@@ -54,7 +56,9 @@ def convert_value(val: Any, type_func: Callable) -> Any:
                     return parsed_dict
             except json.JSONDecodeError as e:
                 if val.strip().startswith("{"):
-                    sys.stderr.write(f"Warning: Failed to decode dict parameter as JSON: {e}\n")
+                    sys.stderr.write(
+                        f"Warning: Failed to decode dict parameter as JSON: {e}\n"
+                    )
         return dict(val) if val else {}
 
     if type_func == bool:
@@ -181,7 +185,11 @@ class TerminalPitch(Pitch, ABC):
                 val = convert_value(val, param.type_func)
             # 3. Environment Variable
             elif getattr(param, "env_name", None):
-                env_names = [param.env_name] if isinstance(param.env_name, str) else param.env_name
+                env_names = (
+                    [param.env_name]
+                    if isinstance(param.env_name, str)
+                    else param.env_name
+                )
                 env_val = None
                 for env_name in env_names:
                     if env_name in os.environ:
@@ -202,6 +210,7 @@ class TerminalPitch(Pitch, ABC):
                         from pirlo.infrastructure.adapters.storage.json_link_repository import (
                             JsonLinkRepository,
                         )
+
                         links_file = Path("~/.pirlo-pitch/links.json").expanduser()
                         link_repo = JsonLinkRepository(links_file)
 
@@ -230,9 +239,8 @@ class TerminalPitch(Pitch, ABC):
             elif playbook_name.endswith("pitch"):
                 playbook_name = playbook_name[:-5]
 
-        from pirlo.core.services.run_id_generator import generate_task_id
-
         from pirlo.core.models.link import LlmLink
+        from pirlo.core.services.run_id_generator import generate_task_id
 
         param_dict = {}
         for k, v in instance._parsed_options.items():

@@ -1,5 +1,4 @@
 import io
-import json
 import shutil
 import sqlite3
 import sys
@@ -9,7 +8,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import MagicMock
 
-from pirlo.core.models.run import Run, RunCreateDTO, RunStatus
+from pirlo.core.models.run import Run, RunStatus
 from pirlo.core.services.run_id_generator import generate_run_id, generate_task_id
 from pirlo.infrastructure.adapters.cli.tee import main as tee_main
 from pirlo.infrastructure.adapters.db.sqlite_run_history_repository import (
@@ -146,8 +145,6 @@ class TestRunHistoryAndMVC(unittest.TestCase):
         loaded = self.parameter_storage.load_parameters(loc)
         self.assertEqual(loaded, params)
 
-
-
     def test_sqlite_repository_run_type_and_step_executions(self):
         from pirlo.core.models.run import RunType
 
@@ -232,9 +229,15 @@ class TestRunHistoryAndMVC(unittest.TestCase):
         # 1. Create a dummy workflow with actions
         actions = [
             NavigateAction(url="https://www.google.com"),
-            ClickAction(element_context=ElementContext(xpath="//button", tag_name="button", text="click me")),
+            ClickAction(
+                element_context=ElementContext(
+                    xpath="//button", tag_name="button", text="click me"
+                )
+            ),
         ]
-        workflow = Workflow(workflow_id="dummy-flow", description="test description", actions=actions)
+        workflow = Workflow(
+            workflow_id="dummy-flow", description="test description", actions=actions
+        )
 
         # 2. Mock Playwright page and adapter
         mock_page = AsyncMock()
@@ -244,7 +247,9 @@ class TestRunHistoryAndMVC(unittest.TestCase):
         # We need mock_page.locator(...).first to return a mock locator
         mock_locator = AsyncMock()
         mock_locator.scroll_into_view_if_needed = AsyncMock()
-        mock_locator.evaluate = AsyncMock(side_effect=lambda js: "BUTTON" if "tagName" in js else {})
+        mock_locator.evaluate = AsyncMock(
+            side_effect=lambda js: "BUTTON" if "tagName" in js else {}
+        )
         mock_locator.inner_text = AsyncMock(return_value="click me")
         mock_page.locator.return_value.first = mock_locator
 
@@ -255,15 +260,19 @@ class TestRunHistoryAndMVC(unittest.TestCase):
 
         # 3. Define callback to verify incremental invocations
         called_steps = []
+
         async def on_step_update(step_num: int, action):
             called_steps.append((step_num, action.status.value))
 
         # 4. Execute
         import asyncio
+
         original_sleep = asyncio.sleep
         asyncio.sleep = AsyncMock()  # Mock sleep to speed up test execution
         try:
-            asyncio.run(adapter.execute_workflow(workflow, on_step_update=on_step_update))
+            asyncio.run(
+                adapter.execute_workflow(workflow, on_step_update=on_step_update)
+            )
         finally:
             asyncio.sleep = original_sleep
 

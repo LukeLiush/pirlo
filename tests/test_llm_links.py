@@ -1,4 +1,3 @@
-import json
 import os
 import tempfile
 import unittest
@@ -15,7 +14,7 @@ class TestLlmLinks(unittest.TestCase):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.filepath = Path(self.temp_dir.name) / "links.json"
         self.repo = JsonLinkRepository(self.filepath)
-        
+
         self.original_env = dict(os.environ)
 
     def tearDown(self):
@@ -30,12 +29,12 @@ class TestLlmLinks(unittest.TestCase):
             provider="gemini",
             model="gemini-1.5-flash",
             api_key="key123",
-            base_url="https://gemini.url"
+            base_url="https://gemini.url",
         )
-        
+
         # 1. Save
         self.repo.save(link)
-        
+
         # 2. Get by name
         fetched = self.repo.get_by_name("test-gemini")
         self.assertIsNotNone(fetched)
@@ -45,12 +44,12 @@ class TestLlmLinks(unittest.TestCase):
         self.assertTrue(isinstance(fetched, ApiKeyLink))
         self.assertEqual(fetched.api_key, "key123")
         self.assertEqual(fetched.base_url, "https://gemini.url")
-        
+
         # 3. List all
         links = self.repo.list_all()
         self.assertEqual(len(links), 1)
         self.assertEqual(links[0].name, "test-gemini")
-        
+
         # 4. Delete
         success = self.repo.delete("test-gemini")
         self.assertTrue(success)
@@ -70,8 +69,8 @@ class TestLlmLinks(unittest.TestCase):
             api_key="sk-test",
         )
         llm = LlmFactory.create_langchain_llm(api_link)
-        self.assertEqual(getattr(llm, "provider"), "openai")
-        self.assertEqual(getattr(llm, "model"), "gpt-4o-mini")
+        self.assertEqual(llm.provider, "openai")
+        self.assertEqual(llm.model, "gpt-4o-mini")
 
         # 2. BedrockLink
         bedrock_link = BedrockLink(
@@ -83,12 +82,17 @@ class TestLlmLinks(unittest.TestCase):
             aws_region="us-east-1",
         )
         from unittest.mock import MagicMock, patch
+
         mock_bedrock = MagicMock()
         with patch.dict("sys.modules", {"langchain_aws": mock_bedrock}):
-            mock_bedrock.ChatBedrockConverse = MagicMock(return_value=MagicMock(provider="bedrock", model="anthropic.claude-3-5-sonnet"))
+            mock_bedrock.ChatBedrockConverse = MagicMock(
+                return_value=MagicMock(
+                    provider="bedrock", model="anthropic.claude-3-5-sonnet"
+                )
+            )
             bedrock_llm = LlmFactory.create_langchain_llm(bedrock_link)
-            self.assertEqual(getattr(bedrock_llm, "provider"), "bedrock")
-            self.assertEqual(getattr(bedrock_llm, "model"), "anthropic.claude-3-5-sonnet")
+            self.assertEqual(bedrock_llm.provider, "bedrock")
+            self.assertEqual(bedrock_llm.model, "anthropic.claude-3-5-sonnet")
 
         # 3. AzureOpenAiLink
         azure_link = AzureOpenAiLink(
@@ -100,21 +104,20 @@ class TestLlmLinks(unittest.TestCase):
             api_version="2024-02-15",
         )
         azure_llm = LlmFactory.create_langchain_llm(azure_link)
-        self.assertEqual(getattr(azure_llm, "provider"), "azure")
-        self.assertEqual(getattr(azure_llm, "model"), "gpt-4o")
-
+        self.assertEqual(azure_llm.provider, "azure")
+        self.assertEqual(azure_llm.model, "gpt-4o")
 
     def test_link_display_fields(self):
         """Verify get_display_fields returns correctly formatted and masked details for all subclasses."""
         from pirlo.core.models.link import ApiKeyLink, AzureOpenAiLink, BedrockLink
-        
+
         # 1. ApiKeyLink
         apilink = ApiKeyLink(
             name="my-gemini",
             provider="gemini",
             model="gemini-1.5-flash",
             api_key="123456789abcdef",
-            base_url="https://gemini.url"
+            base_url="https://gemini.url",
         )
         fields = dict(apilink.get_display_fields())
         self.assertEqual(fields["Model"], "gemini-1.5-flash")
@@ -128,7 +131,7 @@ class TestLlmLinks(unittest.TestCase):
             model="anthropic.claude-v3",
             aws_access_key_id="access123",
             aws_secret_access_key="secret456789abc",
-            aws_region="us-east-1"
+            aws_region="us-east-1",
         )
         fields = dict(bedrock.get_display_fields())
         self.assertEqual(fields["Model"], "anthropic.claude-v3")
@@ -143,7 +146,7 @@ class TestLlmLinks(unittest.TestCase):
             model="gpt-4",
             api_key="key78910abcdef",
             azure_endpoint="https://myazure.openai.azure.com",
-            api_version="2024-02-15"
+            api_version="2024-02-15",
         )
         fields = dict(azure.get_display_fields())
         self.assertEqual(fields["Model"], "gpt-4")

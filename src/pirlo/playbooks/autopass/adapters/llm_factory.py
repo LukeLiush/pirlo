@@ -1,35 +1,43 @@
-from typing import Callable, Type
-from langchain_core.language_models.chat_models import BaseChatModel as LangChainBaseChatModel
-from browser_use.llm.base import BaseChatModel as BrowserUseChatModel
+from collections.abc import Callable
 
-from pirlo.core.models.link import (
-    LlmLink,
-    ApiKeyLink,
-    BedrockLink,
-    AzureOpenAiLink,
+from browser_use.llm.base import BaseChatModel as BrowserUseChatModel
+from langchain_core.language_models.chat_models import (
+    BaseChatModel as LangChainBaseChatModel,
 )
 
-LANGCHAIN_BUILDERS: dict[Type[LlmLink], Callable[..., LangChainBaseChatModel]] = {}
-BROWSER_USE_BUILDERS: dict[Type[LlmLink], Callable[..., BrowserUseChatModel]] = {}
+from pirlo.core.models.link import (
+    ApiKeyLink,
+    AzureOpenAiLink,
+    BedrockLink,
+    LlmLink,
+)
+
+LANGCHAIN_BUILDERS: dict[type[LlmLink], Callable[..., LangChainBaseChatModel]] = {}
+BROWSER_USE_BUILDERS: dict[type[LlmLink], Callable[..., BrowserUseChatModel]] = {}
 
 
-def register_langchain_builder(link_cls: Type[LlmLink]):
+def register_langchain_builder(link_cls: type[LlmLink]):
     """Decorator to register a LangChain LLM builder for an LlmLink type."""
+
     def decorator(fn: Callable[..., LangChainBaseChatModel]):
         LANGCHAIN_BUILDERS[link_cls] = fn
         return fn
+
     return decorator
 
 
-def register_browser_use_builder(link_cls: Type[LlmLink]):
+def register_browser_use_builder(link_cls: type[LlmLink]):
     """Decorator to register a Browser-Use LLM builder for an LlmLink type."""
+
     def decorator(fn: Callable[..., BrowserUseChatModel]):
         BROWSER_USE_BUILDERS[link_cls] = fn
         return fn
+
     return decorator
 
 
 # --- LangChain LLM Builders ---
+
 
 @register_langchain_builder(ApiKeyLink)
 def _build_api_key_langchain(
@@ -58,16 +66,19 @@ def _build_api_key_langchain(
 
     if provider == "google":
         from langchain_google_genai import ChatGoogleGenerativeAI
+
         kwargs["google_api_key"] = link.api_key
         kwargs["model"] = link.model
         llm = ChatGoogleGenerativeAI(**kwargs)
     elif provider == "anthropic":
         from langchain_anthropic import ChatAnthropic
+
         kwargs["api_key"] = link.api_key
         kwargs["model"] = link.model
         llm = ChatAnthropic(**kwargs)
     else:  # OpenAI, DashScope, OpenAI-compatible
         from langchain_openai import ChatOpenAI
+
         kwargs["api_key"] = link.api_key
         kwargs["model"] = link.model
         kwargs["base_url"] = base_url
@@ -127,6 +138,7 @@ def _build_azure_langchain(
     extra_headers: dict | None = None,
 ) -> LangChainBaseChatModel:
     from langchain_openai import AzureChatOpenAI
+
     kwargs: dict = {
         "azure_deployment": link.model,
         "api_key": link.api_key,
@@ -152,6 +164,7 @@ def _build_azure_langchain(
 
 # --- Browser-Use LLM Builders ---
 
+
 @register_browser_use_builder(ApiKeyLink)
 def _build_api_key_browser_use(
     link: ApiKeyLink,
@@ -167,6 +180,7 @@ def _build_api_key_browser_use(
 
     if provider == "google":
         from browser_use.llm.google.chat import ChatGoogle
+
         return ChatGoogle(
             model=link.model,
             api_key=link.api_key or None,
@@ -174,6 +188,7 @@ def _build_api_key_browser_use(
         )
     elif provider == "anthropic":
         from browser_use.llm.anthropic.chat import ChatAnthropic as BUAnthropic
+
         return BUAnthropic(
             model=link.model,
             api_key=link.api_key or None,
@@ -181,6 +196,7 @@ def _build_api_key_browser_use(
         )
     else:
         from browser_use.llm.openai.chat import ChatOpenAI as BUOpenAI
+
         return BUOpenAI(
             model=link.model,
             api_key=link.api_key or None,
@@ -197,6 +213,7 @@ def _build_azure_browser_use(
     timeout: float = 30.0,
 ) -> BrowserUseChatModel:
     from browser_use.llm.openai.chat import ChatOpenAI as BUOpenAI
+
     return BUOpenAI(
         model=link.model,
         api_key=link.api_key,
@@ -207,6 +224,7 @@ def _build_azure_browser_use(
 
 
 # --- Public Factory Interface ---
+
 
 class LlmFactory:
     """Factory for creating LLMs via registry lookup."""
@@ -223,7 +241,9 @@ class LlmFactory:
     ) -> LangChainBaseChatModel:
         builder = LANGCHAIN_BUILDERS.get(type(link))
         if not builder:
-            raise ValueError(f"No LangChain LLM builder registered for link type '{type(link).__name__}'")
+            raise ValueError(
+                f"No LangChain LLM builder registered for link type '{type(link).__name__}'"
+            )
         return builder(
             link,
             temperature=temperature,
@@ -242,5 +262,7 @@ class LlmFactory:
     ) -> BrowserUseChatModel:
         builder = BROWSER_USE_BUILDERS.get(type(link))
         if not builder:
-            raise ValueError(f"No Browser-Use LLM builder registered for link type '{type(link).__name__}'")
+            raise ValueError(
+                f"No Browser-Use LLM builder registered for link type '{type(link).__name__}'"
+            )
         return builder(link, temperature=temperature, timeout=timeout)

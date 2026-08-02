@@ -42,4 +42,3 @@ class RunHistoryRepository(ABC):
     @abstractmethod
     def get_steps(self, run_id: str) -> list[dict[str, Any]]:
         """Retrieves all step execution records for a run."""
-

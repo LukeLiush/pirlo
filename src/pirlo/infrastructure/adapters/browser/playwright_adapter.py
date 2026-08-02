@@ -49,7 +49,8 @@ class PlaywrightAdapter:
     async def execute_workflow(
         self,
         workflow: Workflow,
-        on_step_update: Callable[[int, Action], Coroutine[Any, Any, None]] | None = None,
+        on_step_update: Callable[[int, Action], Coroutine[Any, Any, None]]
+        | None = None,
     ) -> None:
         """Iterates through and executes all actions in a Workflow sequence."""
         from datetime import UTC, datetime

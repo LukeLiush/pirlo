@@ -1,6 +1,7 @@
+from typing import Any
+
 from browser_use import Agent, Browser, Controller
 from browser_use.agent.prompts import SystemPrompt
-from langchain_core.language_models.chat_models import BaseChatModel
 
 from pirlo.core.ports.browser_agent_factory import BrowserAgentFactory
 
@@ -8,7 +9,7 @@ from pirlo.core.ports.browser_agent_factory import BrowserAgentFactory
 class DefaultBrowserAgentFactory(BrowserAgentFactory):
     def __init__(
         self,
-        llm: BaseChatModel,
+        llm: Any,
         controller: Controller | None = None,
         use_vision: bool = False,
         system_prompt_class: type[SystemPrompt] | None = None,

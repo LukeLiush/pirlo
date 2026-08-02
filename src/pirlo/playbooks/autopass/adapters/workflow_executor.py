@@ -4,12 +4,13 @@ from pathlib import Path
 
 from pirlo.core.models.browser_config import BrowserConfig
 from pirlo.core.models.link import LlmLink
-from pirlo.infrastructure.adapters.browser.browser_agent_factory import DefaultBrowserAgentFactory
+from pirlo.infrastructure.adapters.browser.browser_agent_factory import (
+    DefaultBrowserAgentFactory,
+)
 from pirlo.infrastructure.repository import JsonFileWorkflowRepository
 from pirlo.infrastructure.services.llm_workflow import LlmWorkflowRunner
 from pirlo.infrastructure.services.playwright_workflow import PlaywrightReplayRunner
 from pirlo.infrastructure.services.self_healing_workflow import SelfHealingRunner
-
 from pirlo.playbooks.autopass.adapters.llm_factory import LlmFactory
 from pirlo.playbooks.autopass.core.ports import WorkflowExecutor
 
@@ -35,11 +36,15 @@ class SelfHealingWorkflowExecutor(WorkflowExecutor):
 
         playmaker_link: LlmLink | None = self.config.get("playmaker")
         if not playmaker_link or not isinstance(playmaker_link, LlmLink):
-            raise ValueError("Playmaker link parameter ('playmaker') must be a valid LlmLink object.")
+            raise ValueError(
+                "Playmaker link parameter ('playmaker') must be a valid LlmLink object."
+            )
 
         analyst_link: LlmLink | None = self.config.get("analyst")
         if not analyst_link or not isinstance(analyst_link, LlmLink):
-            raise ValueError("Analyst link parameter ('analyst') must be a valid LlmLink object.")
+            raise ValueError(
+                "Analyst link parameter ('analyst') must be a valid LlmLink object."
+            )
 
         transform_llm = LlmFactory.create_langchain_llm(
             link=analyst_link,

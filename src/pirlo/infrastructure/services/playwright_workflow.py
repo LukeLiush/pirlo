@@ -9,9 +9,9 @@ from playwright.async_api import async_playwright
 from pirlo.core.models.actions import Action, DoneAction
 from pirlo.core.models.browser_config import BrowserConfig
 from pirlo.core.models.workflow import Workflow
+from pirlo.core.ports.run_history import RunHistoryRepository
 from pirlo.core.repository.workflow import WorkflowRepository
 from pirlo.core.services.workflow_runner import WorkflowRunner
-from pirlo.core.ports.run_history import RunHistoryRepository
 from pirlo.infrastructure.adapters.browser.playwright_adapter import PlaywrightAdapter
 from pirlo.infrastructure.services.workflow_service import generate_deterministic_id
 

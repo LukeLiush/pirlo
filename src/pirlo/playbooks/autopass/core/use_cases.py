@@ -1,11 +1,13 @@
 from pathlib import Path
 from typing import Any
+
 from pirlo.playbooks.autopass.core.ports import (
     BrowserManager,
     CdpChecker,
-    WorkflowExecutor,
     ProgressListener,
+    WorkflowExecutor,
 )
+
 
 class RunAutopassUseCase:
     """Application Service (Use Case) that coordinates the browser automation process."""
@@ -41,11 +43,13 @@ class RunAutopassUseCase:
             with listener.status_context("Executing autonomous autopass play..."):
                 result = await self.workflow_executor.execute(task_prompt)
 
-            listener.show_goal("Play completed successfully!", detail=f"Result: {result}")
+            listener.show_goal(
+                "Play completed successfully!", detail=f"Result: {result}"
+            )
             return result
         except Exception as e:
             listener.show_red_card("Play failed with error!", detail=str(e))
-            raise e
+            raise
         finally:
             # 4. Clean up browser context
             with listener.status_context("Closing browser..."):

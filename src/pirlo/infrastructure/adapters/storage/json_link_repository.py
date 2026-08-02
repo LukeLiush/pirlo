@@ -1,6 +1,5 @@
 import json
 from pathlib import Path
-from typing import Optional
 
 from pirlo.core.models.link import LlmLink, deserialize_link
 from pirlo.core.ports.link_repository import LinkRepository
@@ -17,7 +16,7 @@ class JsonLinkRepository(LinkRepository):
             with open(self.filepath, "r", encoding="utf-8") as f:
                 data = json.load(f)
                 return data if isinstance(data, dict) else {}
-        except Exception:
+        except Exception:  # noqa: BLE001
             return {}
 
     def _save_data(self, data: dict) -> None:
@@ -30,7 +29,7 @@ class JsonLinkRepository(LinkRepository):
         data[link.name] = link.to_dict()
         self._save_data(data)
 
-    def get_by_name(self, name: str) -> Optional[LlmLink]:
+    def get_by_name(self, name: str) -> LlmLink | None:
         data = self._load_data()
         if name in data:
             return deserialize_link(name, data[name])
