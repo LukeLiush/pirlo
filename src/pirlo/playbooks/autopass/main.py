@@ -34,7 +34,14 @@ class AutopassSession(TerminalPitch, ProgressListener):
         bool, default=False, help="Run browser in headless mode", env_name="HEADLESS"
     )
     task = Parameter(
-        str, default=None, help="Task prompt to execute autonomously", env_name="TASK"
+        str,
+        default=None,
+        help=(
+            "Task prompt to execute autonomously "
+            '(e.g. "Go to google.com and search for OpenAI" or '
+            '"Navigate to github.com and find trending Python repositories").'
+        ),
+        env_name="TASK",
     )
     playmaker = LinkParameter(
         help=(
