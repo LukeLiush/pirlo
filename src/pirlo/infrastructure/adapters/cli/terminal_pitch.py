@@ -122,7 +122,11 @@ class TerminalPitch(Pitch, ABC):
 
         parser.add_argument("--run-id", help="The unique execution run ID")
         parser.add_argument(
-            "--config", help="Path to a JSON configuration file containing parameters"
+            "--config",
+            help=(
+                "Path to a JSON config file containing parameter key-values "
+                '(e.g. {"playmaker": "my-qwen", "task": "..."}). CLI flags override config file values.'
+            ),
         )
         parsed_args = parser.parse_args()
 
