@@ -1,3 +1,5 @@
+from datetime import datetime
+from enum import Enum
 from typing import TYPE_CHECKING, Annotated, Literal
 from urllib.parse import urlparse
 
@@ -5,6 +7,13 @@ from pydantic import BaseModel, Field, field_validator
 
 if TYPE_CHECKING:
     from pirlo.core.models.specifications import SafetyCandidate
+
+
+class ActionStatus(str, Enum):
+    NOT_STARTED = "not_started"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
 
 
 class ElementContext(BaseModel):
@@ -34,6 +43,10 @@ class ActionBase(BaseModel):
     expected_url: str | None = None
     goal: str | None = None  # Saves the agent's goal for every step
     recorded_at: str | None = None  # ISO timestamp of the action
+    step_number: int | None = None
+    status: ActionStatus = ActionStatus.NOT_STARTED
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
 
     def check_safety_rules(self, candidate: "SafetyCandidate") -> None: ...
 

@@ -2,7 +2,7 @@ import sqlite3
 from datetime import datetime
 from typing import Any
 
-from pirlo.core.models.run import Run, RunStatus
+from pirlo.core.models.run import Run, RunStatus, RunType
 from pirlo.core.ports.run_history import RunHistoryRepository
 
 
@@ -15,6 +15,9 @@ class SqliteRunHistoryRepository(RunHistoryRepository):
 
     def _init_db(self):
         with self.conn:
+            # Enable foreign key support
+            self.conn.execute("PRAGMA foreign_keys = ON")
+
             # Check if task_id column exists to handle schema upgrade
             cursor = self.conn.execute("PRAGMA table_info(run_history)")
             columns = [row["name"] for row in cursor.fetchall()]
@@ -27,6 +30,7 @@ class SqliteRunHistoryRepository(RunHistoryRepository):
                     run_id TEXT PRIMARY KEY,
                     task_id TEXT NOT NULL,
                     playbook TEXT NOT NULL,
+                    run_type TEXT NOT NULL DEFAULT 'llm',
                     status TEXT NOT NULL,
                     parameter_file_location TEXT NOT NULL,
                     log_file_location TEXT NOT NULL,
@@ -34,6 +38,20 @@ class SqliteRunHistoryRepository(RunHistoryRepository):
                     updated_at TEXT NOT NULL,
                     started_at TEXT,
                     finished_at TEXT
+                )
+            """)
+
+            self.conn.execute("""
+                CREATE TABLE IF NOT EXISTS run_step_history (
+                    run_id TEXT NOT NULL,
+                    step_number INTEGER NOT NULL,
+                    action_type TEXT NOT NULL,
+                    goal TEXT,
+                    status TEXT NOT NULL,
+                    started_at TEXT,
+                    finished_at TEXT,
+                    PRIMARY KEY (run_id, step_number),
+                    FOREIGN KEY (run_id) REFERENCES run_history (run_id) ON DELETE CASCADE
                 )
             """)
 
@@ -46,16 +64,21 @@ class SqliteRunHistoryRepository(RunHistoryRepository):
                     self.conn.execute(
                         "ALTER TABLE run_history ADD COLUMN finished_at TEXT"
                     )
+                if "run_type" not in columns:
+                    self.conn.execute(
+                        "ALTER TABLE run_history ADD COLUMN run_type TEXT NOT NULL DEFAULT 'llm'"
+                    )
 
     def save(self, run: Run) -> None:
         with self.conn:
             self.conn.execute(
                 """
                 INSERT INTO run_history (
-                    run_id, task_id, playbook, status, parameter_file_location, log_file_location, created_at, updated_at, started_at, finished_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    run_id, task_id, playbook, run_type, status, parameter_file_location, log_file_location, created_at, updated_at, started_at, finished_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(run_id) DO UPDATE SET
                     task_id=excluded.task_id,
+                    run_type=excluded.run_type,
                     status=excluded.status,
                     parameter_file_location=excluded.parameter_file_location,
                     log_file_location=excluded.log_file_location,
@@ -67,6 +90,7 @@ class SqliteRunHistoryRepository(RunHistoryRepository):
                     run.run_id,
                     run.task_id,
                     run.playbook,
+                    run.run_type.value,
                     run.status.value,
                     run.parameter_file_location,
                     run.log_file_location,
@@ -87,6 +111,7 @@ class SqliteRunHistoryRepository(RunHistoryRepository):
             run_id=row["run_id"],
             task_id=row["task_id"],
             playbook=row["playbook"],
+            run_type=RunType(row["run_type"]),
             status=RunStatus(row["status"]),
             parameter_file_location=row["parameter_file_location"],
             log_file_location=row["log_file_location"],
@@ -117,6 +142,7 @@ class SqliteRunHistoryRepository(RunHistoryRepository):
                 run_id=row["run_id"],
                 task_id=row["task_id"],
                 playbook=row["playbook"],
+                run_type=RunType(row["run_type"]),
                 status=RunStatus(row["status"]),
                 parameter_file_location=row["parameter_file_location"],
                 log_file_location=row["log_file_location"],
@@ -140,3 +166,59 @@ class SqliteRunHistoryRepository(RunHistoryRepository):
             params.append(playbook)
 
         return self.conn.execute(query, params).fetchone()[0]
+
+    def save_step(
+        self,
+        run_id: str,
+        step_number: int,
+        action_type: str,
+        status: str,
+        goal: str | None = None,
+        started_at: datetime | None = None,
+        finished_at: datetime | None = None,
+    ) -> None:
+        with self.conn:
+            self.conn.execute(
+                """
+                INSERT INTO run_step_history (
+                    run_id, step_number, action_type, goal, status, started_at, finished_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(run_id, step_number) DO UPDATE SET
+                    action_type=excluded.action_type,
+                    goal=excluded.goal,
+                    status=excluded.status,
+                    started_at=excluded.started_at,
+                    finished_at=excluded.finished_at
+            """,
+                (
+                    run_id,
+                    step_number,
+                    action_type,
+                    goal,
+                    status,
+                    started_at.isoformat() if started_at else None,
+                    finished_at.isoformat() if finished_at else None,
+                ),
+            )
+
+    def get_steps(self, run_id: str) -> list[dict[str, Any]]:
+        rows = self.conn.execute(
+            "SELECT * FROM run_step_history WHERE run_id = ? ORDER BY step_number ASC",
+            (run_id,),
+        ).fetchall()
+        return [
+            {
+                "run_id": row["run_id"],
+                "step_number": row["step_number"],
+                "action_type": row["action_type"],
+                "goal": row["goal"],
+                "status": row["status"],
+                "started_at": datetime.fromisoformat(row["started_at"])
+                if row["started_at"]
+                else None,
+                "finished_at": datetime.fromisoformat(row["finished_at"])
+                if row["finished_at"]
+                else None,
+            }
+            for row in rows
+        ]

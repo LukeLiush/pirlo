@@ -32,7 +32,7 @@ def main():
     if len(sys.argv) < 2 or sys.argv[1] in ("-h", "--help"):
         print("Usage: pirlo <command> [<args>]")
         print("\nAvailable commands:")
-        print("  console       - Launch the unified Flet GUI console")
+        print("  link          - Manage LLM links (API keys, base URLs)")
         if playbooks:
             # To show a nice description, we can dynamically load the classes and show their docstrings!
             for cmd, entrypoint in sorted(playbooks.items()):
@@ -57,8 +57,10 @@ def main():
 
                     for path in sys_path_added:
                         sys.path.remove(path)
-                except Exception:  # noqa: BLE001, S110
-                    pass
+                except Exception:  # noqa: BLE001
+                    import traceback
+                    sys.stderr.write(f"Error loading playbook command '{cmd}':\n")
+                    traceback.print_exc()
 
                 desc_str = f" - {description}" if description else ""
                 print(f"  {cmd:<13}{desc_str}")
@@ -72,23 +74,16 @@ def main():
         sys.exit(0)
 
     command = sys.argv[1]
-    if command == "console":
-        try:
-            from pirlo.infrastructure.adapters.gui.console import (
-                run_console,
-            )
 
-            web = "--web" in sys.argv
-            port = 8550
-            if "--port" in sys.argv:
-                try:
-                    port_idx = sys.argv.index("--port")
-                    port = int(sys.argv[port_idx + 1])
-                except (ValueError, IndexError):
-                    pass
-            run_console(web=web, port=port)
+    if command == "link":
+        try:
+            from pirlo.infrastructure.adapters.cli.link_commands import (
+                link_main,
+            )
+            from pirlo.playground.autopass.providers import SUPPORTED_PROVIDERS
+            link_main(SUPPORTED_PROVIDERS)
         except Exception as e:  # noqa: BLE001
-            print(f"Error: Failed to load or run console: {e}", file=sys.stderr)
+            print(f"Error: Link management failed: {e}", file=sys.stderr)
             import traceback
 
             traceback.print_exc()

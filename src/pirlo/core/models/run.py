@@ -12,6 +12,11 @@ class RunStatus(str, Enum):
     COMPLETED = "completed"
 
 
+class RunType(str, Enum):
+    REPLAY = "replay"
+    LLM = "llm"
+
+
 class RunCreateDTO(BaseModel):
     playbook: str
     parameters: dict[str, Any]
@@ -21,6 +26,7 @@ class Run(BaseModel):
     run_id: str
     task_id: str
     playbook: str
+    run_type: RunType = RunType.LLM
     status: RunStatus
     parameter_file_location: str  # Workspace-relative location
     log_file_location: str  # Workspace-relative location

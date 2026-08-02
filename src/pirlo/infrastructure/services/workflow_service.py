@@ -270,6 +270,8 @@ def convert_history_to_workflow(
             "No actions were successfully recorded during the agent's run. "
             "Please check your browser connection or verify if the target page loaded correctly."
         )
+    for idx, action in enumerate(domain_actions):
+        action.step_number = idx + 1
     return Workflow(
         workflow_id=workflow_id,
         description=description,

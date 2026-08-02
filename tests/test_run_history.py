@@ -15,7 +15,6 @@ from pirlo.infrastructure.adapters.cli.tee import main as tee_main
 from pirlo.infrastructure.adapters.db.sqlite_run_history_repository import (
     SqliteRunHistoryRepository,
 )
-from pirlo.infrastructure.adapters.gui.controller import ConsoleController
 from pirlo.infrastructure.adapters.storage.json_file_parameter_storage import (
     JsonFileParameterStorage,
 )
@@ -32,13 +31,6 @@ class TestRunHistoryAndMVC(unittest.TestCase):
 
         # Parameter storage using temp dir workspace
         self.parameter_storage = JsonFileParameterStorage(self.test_dir)
-
-        # MVC Controller
-        self.controller = ConsoleController(
-            workspace=self.test_dir,
-            run_repository=self.repository,
-            parameter_storage=self.parameter_storage,
-        )
 
     def tearDown(self):
         self.conn.close()
@@ -154,28 +146,139 @@ class TestRunHistoryAndMVC(unittest.TestCase):
         loaded = self.parameter_storage.load_parameters(loc)
         self.assertEqual(loaded, params)
 
-    def test_controller_kickoff_run_flow(self):
-        params = {"profile": "default", "verbose": True}
-        dto = RunCreateDTO(playbook="dummy", parameters=params)
 
-        # Kickoff
-        run = self.controller.kickoff_run(dto)
 
-        self.assertEqual(run.playbook, "dummy")
-        self.assertEqual(run.status, RunStatus.NOT_STARTED)
-        self.assertIsNotNone(run.task_id)
+    def test_sqlite_repository_run_type_and_step_executions(self):
+        from pirlo.core.models.run import RunType
 
-        # Verify run was saved to database
-        db_run = self.repository.get_by_id(run.run_id)
-        self.assertIsNotNone(db_run)
-        self.assertEqual(db_run.task_id, run.task_id)
+        # 1. Create a run with REPLAY type
+        run = Run(
+            run_id="replay-run-123",
+            task_id="replay-task-123",
+            playbook="login",
+            run_type=RunType.REPLAY,
+            status=RunStatus.NOT_STARTED,
+            parameter_file_location="login/logs/replay-run-123_params.json",
+            log_file_location="login/logs/replay-run-123.log",
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
+        )
+        self.repository.save(run)
 
-        # Verify parameter file was written by ParameterStorage under task_id (stable path)
-        param_abs_path = run.get_parameter_location(self.test_dir)
-        self.assertTrue(param_abs_path.exists())
-        with open(param_abs_path, "r", encoding="utf-8") as f:
-            written_params = json.load(f)
-        self.assertEqual(written_params, params)
+        # Verify run_type is preserved in DB retrieval
+        fetched = self.repository.get_by_id(run.run_id)
+        self.assertIsNotNone(fetched)
+        self.assertEqual(fetched.run_type, RunType.REPLAY)
+
+        # 2. Save step execution history
+        started_time = datetime.now(UTC)
+        finished_time = datetime.now(UTC)
+
+        # Step 1
+        self.repository.save_step(
+            run_id=run.run_id,
+            step_number=1,
+            action_type="navigate",
+            status="completed",
+            goal="Open target page",
+            started_at=started_time,
+            finished_at=finished_time,
+        )
+        # Step 2
+        self.repository.save_step(
+            run_id=run.run_id,
+            step_number=2,
+            action_type="click",
+            status="running",
+            goal="Click login button",
+            started_at=started_time,
+        )
+
+        # 3. Retrieve and assert step executions
+        steps = self.repository.get_steps(run.run_id)
+        self.assertEqual(len(steps), 2)
+
+        # Assert Step 1 properties
+        step1 = steps[0]
+        self.assertEqual(step1["step_number"], 1)
+        self.assertEqual(step1["action_type"], "navigate")
+        self.assertEqual(step1["status"], "completed")
+        self.assertEqual(step1["goal"], "Open target page")
+        self.assertEqual(step1["started_at"], started_time)
+        self.assertEqual(step1["finished_at"], finished_time)
+
+        # Assert Step 2 properties
+        step2 = steps[1]
+        self.assertEqual(step2["step_number"], 2)
+        self.assertEqual(step2["action_type"], "click")
+        self.assertEqual(step2["status"], "running")
+        self.assertEqual(step2["goal"], "Click login button")
+        self.assertEqual(step2["started_at"], started_time)
+        self.assertIsNone(step2["finished_at"])
+
+    def test_playwright_adapter_step_callback(self):
+        from unittest.mock import AsyncMock
+
+        from pirlo.core.models.actions import (
+            ClickAction,
+            ElementContext,
+            NavigateAction,
+        )
+        from pirlo.core.models.workflow import Workflow
+        from pirlo.infrastructure.adapters.browser.playwright_adapter import (
+            PlaywrightAdapter,
+        )
+
+        # 1. Create a dummy workflow with actions
+        actions = [
+            NavigateAction(url="https://www.google.com"),
+            ClickAction(element_context=ElementContext(xpath="//button", tag_name="button", text="click me")),
+        ]
+        workflow = Workflow(workflow_id="dummy-flow", description="test description", actions=actions)
+
+        # 2. Mock Playwright page and adapter
+        mock_page = AsyncMock()
+        mock_page.url = "https://www.google.com"
+        mock_page.locator = MagicMock()
+
+        # We need mock_page.locator(...).first to return a mock locator
+        mock_locator = AsyncMock()
+        mock_locator.scroll_into_view_if_needed = AsyncMock()
+        mock_locator.evaluate = AsyncMock(side_effect=lambda js: "BUTTON" if "tagName" in js else {})
+        mock_locator.inner_text = AsyncMock(return_value="click me")
+        mock_page.locator.return_value.first = mock_locator
+
+        adapter = PlaywrightAdapter(mock_page)
+
+        # Mock execute_action to prevent real browser actions
+        adapter.execute_action = AsyncMock()
+
+        # 3. Define callback to verify incremental invocations
+        called_steps = []
+        async def on_step_update(step_num: int, action):
+            called_steps.append((step_num, action.status.value))
+
+        # 4. Execute
+        import asyncio
+        original_sleep = asyncio.sleep
+        asyncio.sleep = AsyncMock()  # Mock sleep to speed up test execution
+        try:
+            asyncio.run(adapter.execute_workflow(workflow, on_step_update=on_step_update))
+        finally:
+            asyncio.sleep = original_sleep
+
+        # 5. Verify the callback was called in sequence:
+        # Step 1: not_started, Step 2: not_started (initial reset)
+        # Step 1: running
+        # Step 1: completed
+        # Step 2: running
+        # Step 2: completed
+        self.assertIn((1, "not_started"), called_steps)
+        self.assertIn((2, "not_started"), called_steps)
+        self.assertIn((1, "running"), called_steps)
+        self.assertIn((1, "completed"), called_steps)
+        self.assertIn((2, "running"), called_steps)
+        self.assertIn((2, "completed"), called_steps)
 
     def test_tee_redirection_cross_platform(self):
         log_file = self.test_dir / "logs" / "tee_test.log"

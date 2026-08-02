@@ -24,7 +24,12 @@ class SelfHealingRunner(WorkflowRunner):
         self.fallback_runner = fallback_runner
         self.repository = repository
 
-    async def run(self, task_prompt: str, workflow_id: str | None = None) -> str:
+    async def run(
+        self,
+        task_prompt: str,
+        workflow_id: str | None = None,
+        run_id: str | None = None,
+    ) -> str:
         if not workflow_id:
             workflow_id = generate_deterministic_id(task_prompt)
 
@@ -35,7 +40,7 @@ class SelfHealingRunner(WorkflowRunner):
             )
             try:
                 result: str = await self.replay_runner.run(
-                    task_prompt=task_prompt, workflow_id=workflow_id
+                    task_prompt=task_prompt, workflow_id=workflow_id, run_id=run_id
                 )
                 logger.info("Deterministic replay completed successfully.")
                 return result
@@ -54,5 +59,5 @@ class SelfHealingRunner(WorkflowRunner):
 
         # 2. Execute fallback runner (runs browser-use agent and updates the repository cache)
         return await self.fallback_runner.run(
-            task_prompt=task_prompt, workflow_id=workflow_id
+            task_prompt=task_prompt, workflow_id=workflow_id, run_id=run_id
         )

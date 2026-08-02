@@ -5,18 +5,70 @@ import json
 import os
 import sqlite3
 import sys
+from abc import ABC
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from rich.console import Console
 from rich.panel import Panel
 from rich.status import Status
 from rich.table import Table
 
-from pirlo.core.ports.pitch import Parameter, Pitch
+from pirlo.core.ports.pitch import LinkParameter, Parameter, Pitch
 
 
-class TerminalPitch(Pitch):
+def convert_value(val: Any, type_func: Callable) -> Any:
+    if val is None:
+        return None
+
+    origin = getattr(type_func, "__origin__", type_func)
+    if origin is list:
+        # Extract item type, default to str
+        type_args = getattr(type_func, "__args__", ())
+        item_type = type_args[0] if type_args else str
+        if isinstance(val, str):
+            # Try to parse as JSON first (e.g. '["a", "b"]')
+            try:
+                parsed_list = json.loads(val)
+                if isinstance(parsed_list, list):
+                    return [convert_value(item, item_type) for item in parsed_list]
+            except json.JSONDecodeError as e:
+                if val.strip().startswith("["):
+                    sys.stderr.write(f"Warning: Failed to decode list parameter as JSON: {e}\n")
+            # Fall back to comma-separated split
+            if not val.strip():
+                return []
+            return [convert_value(item.strip(), item_type) for item in val.split(",")]
+        elif isinstance(val, list):
+            return [convert_value(item, item_type) for item in val]
+        else:
+            return [convert_value(val, item_type)]
+
+    if origin is dict:
+        if isinstance(val, str):
+            try:
+                parsed_dict = json.loads(val)
+                if isinstance(parsed_dict, dict):
+                    return parsed_dict
+            except json.JSONDecodeError as e:
+                if val.strip().startswith("{"):
+                    sys.stderr.write(f"Warning: Failed to decode dict parameter as JSON: {e}\n")
+        return dict(val) if val else {}
+
+    if type_func == bool:
+        if isinstance(val, str):
+            return val.lower() in ("true", "1", "yes", "on")
+        return bool(val)
+
+    try:
+        return type_func(val)
+    except (ValueError, TypeError):
+        return val
+
+
+class TerminalPitch(Pitch, ABC):
     """Concrete adapter of Pitch for Terminal screens."""
 
     def __init__(self):
@@ -37,8 +89,8 @@ class TerminalPitch(Pitch):
                 parameters.append(attr_val)
                 flag = f"--{attr_name.replace('_', '-')}"
                 kwargs = {
-                    "default": attr_val.default,
                     "help": attr_val.help,
+                    "default": argparse.SUPPRESS,
                 }
 
                 # Check if the type is a list or list-like generic alias (e.g. list[str])
@@ -100,8 +152,12 @@ class TerminalPitch(Pitch):
                 )
 
         config_data = {}
-        if getattr(parsed_args, "config", None):
-            config_path = Path(parsed_args.config)
+        config_path_str = getattr(parsed_args, "config", None)
+        if not config_path_str and hasattr(cls, "default_config_path"):
+            config_path_str = cls.default_config_path
+
+        if config_path_str:
+            config_path = Path(config_path_str).expanduser()
             if config_path.exists():
                 try:
                     with open(config_path, "r", encoding="utf-8") as f:
@@ -112,13 +168,55 @@ class TerminalPitch(Pitch):
                         file=sys.stderr,
                     )
 
+        link_repo = None
+
         for param in parameters:
+            # 1. Config file (JSON)
             if param.name in config_data:
                 val = config_data[param.name]
-                if val is not None and param.type_func in (Path, int, float):
-                    val = param.type_func(val)
-            else:
+                val = convert_value(val, param.type_func)
+            # 2. CLI argument
+            elif hasattr(parsed_args, param.name):
                 val = getattr(parsed_args, param.name)
+                val = convert_value(val, param.type_func)
+            # 3. Environment Variable
+            elif getattr(param, "env_name", None):
+                env_names = [param.env_name] if isinstance(param.env_name, str) else param.env_name
+                env_val = None
+                for env_name in env_names:
+                    if env_name in os.environ:
+                        env_val = os.environ[env_name]
+                        break
+                if env_val is not None:
+                    val = convert_value(env_val, param.type_func)
+                else:
+                    val = param.default
+            # 4. Default
+            else:
+                val = param.default
+
+            # Resolve LinkParameter into LlmLink domain object
+            if isinstance(param, LinkParameter):
+                if val:
+                    if link_repo is None:
+                        from pirlo.infrastructure.adapters.storage.json_link_repository import (
+                            JsonLinkRepository,
+                        )
+                        links_file = Path("~/.pirlo-pitch/links.json").expanduser()
+                        link_repo = JsonLinkRepository(links_file)
+
+                    link_obj = link_repo.get_by_name(val)
+                    if not link_obj:
+                        flag_name = f"--{param.name.replace('_', '-')}"
+                        instance.red_card(
+                            f"Missing required link '{val}' for parameter '{flag_name}'",
+                            detail="Run 'pirlo link list' to check available links or 'pirlo link create' to register a new link.",
+                        )
+                        sys.exit(1)
+                    val = link_obj
+                else:
+                    val = None
+
             instance._parsed_options[param.name] = val
 
         # Compute task_id deterministically based on playbook and parameters
@@ -134,10 +232,14 @@ class TerminalPitch(Pitch):
 
         from pirlo.core.services.run_id_generator import generate_task_id
 
+        from pirlo.core.models.link import LlmLink
+
         param_dict = {}
         for k, v in instance._parsed_options.items():
             if isinstance(v, Path):
                 param_dict[k] = str(v)
+            elif isinstance(v, LlmLink):
+                param_dict[k] = v.name
             else:
                 param_dict[k] = v
         instance.task_id = generate_task_id(playbook_name, param_dict)
@@ -164,8 +266,11 @@ class TerminalPitch(Pitch):
                 finally:
                     try:
                         repo.conn.close()
-                    except Exception:  # noqa: BLE001, S110
-                        pass
+                    except Exception as e:  # noqa: BLE001
+                        print(
+                            f"Warning: Failed to close repository connection: {e}",
+                            file=sys.stderr,
+                        )
 
     # --- Concrete Port Implementations ---
 

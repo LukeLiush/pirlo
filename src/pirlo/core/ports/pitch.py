@@ -12,11 +12,13 @@ class Parameter:
         default: Any = None,
         help: str | None = None,
         short: str | None = None,
+        env_name: str | list[str] | None = None,
     ):
         self.type_func = type_func
         self.default = default
         self.help = help
         self.short = short
+        self.env_name = env_name
         self.name = None
 
     def __set_name__(self, owner, name):
@@ -26,6 +28,25 @@ class Parameter:
         if instance is None:
             return self
         return instance._parsed_options.get(self.name, self.default)
+
+
+class LinkParameter(Parameter):
+    """Descriptor class for defining CLI parameters that resolve to an LlmLink object."""
+
+    def __init__(
+        self,
+        default: Any = None,
+        help: str | None = None,
+        short: str | None = None,
+        env_name: str | list[str] | None = None,
+    ):
+        super().__init__(
+            type_func=str,
+            default=default,
+            help=help,
+            short=short,
+            env_name=env_name,
+        )
 
 
 class Pitch(ABC):

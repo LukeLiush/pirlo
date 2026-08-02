@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from collections.abc import Callable, Coroutine
 from typing import Any
 
 import httpx
@@ -45,17 +46,40 @@ class PlaywrightAdapter:
         self.last_extraction_result = None
         self.live_results = []
 
-    async def execute_workflow(self, workflow: Workflow) -> None:
+    async def execute_workflow(
+        self,
+        workflow: Workflow,
+        on_step_update: Callable[[int, Action], Coroutine[Any, Any, None]] | None = None,
+    ) -> None:
         """Iterates through and executes all actions in a Workflow sequence."""
+        from datetime import UTC, datetime
+
+        from pirlo.core.models.actions import ActionStatus
+
+        # Reset all steps first
+        for idx, action in enumerate(workflow.actions):
+            action.step_number = idx + 1
+            action.status = ActionStatus.NOT_STARTED
+            action.started_at = None
+            action.finished_at = None
+            if on_step_update:
+                await on_step_update(action.step_number, action)
+
         for step_idx, action in enumerate(workflow.actions):
+            step_num = step_idx + 1
+            action.status = ActionStatus.RUNNING
+            action.started_at = datetime.now(UTC)
+            if on_step_update:
+                await on_step_update(step_num, action)
+
             # Print description of the step if available
             if action.goal:
                 logger.info(
-                    f"Replaying step {step_idx + 1}/{len(workflow.actions)}: {action.action_type} | Goal: {action.goal}"
+                    f"Replaying step {step_num}/{len(workflow.actions)}: {action.action_type} | Goal: {action.goal}"
                 )
             else:
                 logger.info(
-                    f"Replaying step {step_idx + 1}/{len(workflow.actions)}: {action.action_type}"
+                    f"Replaying step {step_num}/{len(workflow.actions)}: {action.action_type}"
                 )
 
             try:
@@ -65,9 +89,17 @@ class PlaywrightAdapter:
 
                 # 2. Perform the execution
                 await self.execute_action(action)
+                action.status = ActionStatus.COMPLETED
+                action.finished_at = datetime.now(UTC)
+                if on_step_update:
+                    await on_step_update(step_num, action)
             except Exception as e:
+                action.status = ActionStatus.FAILED
+                action.finished_at = datetime.now(UTC)
+                if on_step_update:
+                    await on_step_update(step_num, action)
                 logger.error(
-                    f"Execution failed at step {step_idx + 1}/{len(workflow.actions)} "
+                    f"Execution failed at step {step_num}/{len(workflow.actions)} "
                     f"[{action.action_type.upper()} action]. "
                     f"Action goal: '{action.goal or 'none'}'. "
                     f"Error details: {e}"
@@ -118,8 +150,8 @@ class PlaywrightAdapter:
         """Resiliently waits for the page DOM to be parsed with a short timeout."""
         try:
             await self.page.wait_for_load_state("domcontentloaded", timeout=5000)
-        except Exception:  # noqa: BLE001, S110
-            pass
+        except Exception as e:  # noqa: BLE001
+            logger.debug(f"Resilient wait_for_load_state timed out or failed: {e}")
 
     async def execute_action(self, action: Action) -> None:
         """Translates a single domain action to a Playwright page interaction."""

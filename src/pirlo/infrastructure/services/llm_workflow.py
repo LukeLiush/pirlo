@@ -10,6 +10,7 @@ from browser_use.agent.views import AgentHistoryList
 
 from pirlo.core.models.browser_config import BrowserConfig
 from pirlo.core.models.workflow import Workflow, WorkflowMetadata
+from pirlo.core.ports.run_history import RunHistoryRepository
 from pirlo.core.repository.workflow import WorkflowRepository
 from pirlo.core.services.workflow_runner import WorkflowRunner
 from pirlo.infrastructure.adapters.browser.browser_agent_factory import (
@@ -29,16 +30,19 @@ class LlmWorkflowRunner(WorkflowRunner):
     agent_factory: BrowserAgentFactory
     repository: WorkflowRepository
     browser_config: BrowserConfig
+    run_history_repository: RunHistoryRepository | None
 
     def __init__(
         self,
         agent_factory: BrowserAgentFactory,
         repository: WorkflowRepository,
         browser_config: BrowserConfig,
+        run_history_repository: RunHistoryRepository | None = None,
     ) -> None:
         self.agent_factory = agent_factory
         self.repository = repository
         self.browser_config = browser_config
+        self.run_history_repository = run_history_repository
 
     def _build_metadata(
         self, agent: Agent, task_prompt: str, elapsed: float
@@ -66,8 +70,8 @@ class LlmWorkflowRunner(WorkflowRunner):
                 stderr=subprocess.DEVNULL,
                 text=True,
             ).strip()
-        except Exception:  # noqa: BLE001, S110
-            pass
+        except Exception as e:  # noqa: BLE001
+            logger.debug(f"Failed to retrieve git commit SHA: {e}")
 
         return WorkflowMetadata(
             creator=creator,
@@ -83,7 +87,12 @@ class LlmWorkflowRunner(WorkflowRunner):
             git_commit_sha=git_commit_sha,
         )
 
-    async def run(self, task_prompt: str, workflow_id: str | None = None) -> str:
+    async def run(
+        self,
+        task_prompt: str,
+        workflow_id: str | None = None,
+        run_id: str | None = None,
+    ) -> str:
         if not workflow_id:
             workflow_id = generate_deterministic_id(task_prompt)
 
@@ -93,6 +102,17 @@ class LlmWorkflowRunner(WorkflowRunner):
             headless=self.browser_config.headless,
         )
         agent: Agent = self.agent_factory.create_agent(task_prompt, browser)
+
+        started_dt = datetime.now(UTC)
+        if run_id and self.run_history_repository:
+            self.run_history_repository.save_step(
+                run_id=run_id,
+                step_number=1,
+                action_type="llm_execution",
+                status="running",
+                goal=task_prompt,
+                started_at=started_dt,
+            )
 
         try:
             logger.info("Agent run started...")
@@ -115,6 +135,30 @@ class LlmWorkflowRunner(WorkflowRunner):
 
             # Save workflow representation to cache repo
             self.repository.save(workflow)
+
+            if run_id and self.run_history_repository:
+                self.run_history_repository.save_step(
+                    run_id=run_id,
+                    step_number=1,
+                    action_type="llm_execution",
+                    status="completed",
+                    goal=task_prompt,
+                    started_at=started_dt,
+                    finished_at=datetime.now(UTC),
+                )
+
             return history.final_result() or "Workflow finished."
+        except Exception:
+            if run_id and self.run_history_repository:
+                self.run_history_repository.save_step(
+                    run_id=run_id,
+                    step_number=1,
+                    action_type="llm_execution",
+                    status="failed",
+                    goal=task_prompt,
+                    started_at=started_dt,
+                    finished_at=datetime.now(UTC),
+                )
+            raise
         finally:
             await browser.close()

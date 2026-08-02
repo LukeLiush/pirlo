@@ -15,7 +15,6 @@ dependencies = [
     "playwright>=1.61.0",
     "pydantic>=2.12.5",
     "typing-extensions>=4.15.0",
-    "flet>=0.23.0",
 ]
 
 [project.scripts]
@@ -37,4 +36,5 @@ ignore_missing_imports = true
 
 [tool.pirlo.playbooks]
 dummy = "pirlo.playground.dummy:DummySession"
+autopass = "pirlo.playground.autopass.main:AutopassSession"
 
