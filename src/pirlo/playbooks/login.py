@@ -10,9 +10,16 @@ from pirlo.infrastructure.adapters.cli.terminal_pitch import TerminalPitch
 class LoginSession(TerminalPitch):
     """Launch a browser to authenticate and save persistent cookies."""
 
-    links = Parameter(list[str], default=[], help="List of target URLs")
+    urls = Parameter(
+        list[str],
+        default=[],
+        help="List of target website URLs to open for manual authentication",
+    )
 
-    link_path = Parameter(Path, help="Path to a file containing a list of URLs")
+    urls_file = Parameter(
+        Path,
+        help="Path to a text file containing a list of target URLs (one per line)",
+    )
 
     async def play(self):
         # 1. Header (Banner)
@@ -21,31 +28,31 @@ class LoginSession(TerminalPitch):
             subtitle="Manage persistent user session cookies",
         )
 
-        the_links: list[str] = self.links.copy() if self.links else []
-        if self.link_path:
-            if self.link_path.exists():
-                with open(self.link_path, "r") as f:  # noqa: ASYNC230
-                    the_links.extend(
+        target_urls: list[str] = self.urls.copy() if self.urls else []
+        if self.urls_file:
+            if self.urls_file.exists():
+                with open(self.urls_file, "r") as f:  # noqa: ASYNC230
+                    target_urls.extend(
                         line.strip() for line in f.read().splitlines() if line.strip()
                     )
             else:
                 self.yellow_card(
-                    "Link path not found",
-                    detail=f"The specified file '{self.link_path}' does not exist.",
+                    "URLs file not found",
+                    detail=f"The specified file '{self.urls_file}' does not exist.",
                 )
 
         # Filter out empty strings
-        the_links = [link.strip() for link in the_links if link.strip()]
+        target_urls = [url.strip() for url in target_urls if url.strip()]
 
-        if not the_links:
+        if not target_urls:
             self.yellow_card(
                 "No URLs to open",
                 detail=(
                     "Please provide at least one target URL. You can:\n"
-                    "  1. Pass URLs directly using [bold]--links[/bold] (e.g., --links https://github.com)\n"
-                    "  2. Pass a text file with URLs using [bold]--link-path[/bold] (e.g., --link-path urls.txt)\n\n"
+                    "  1. Pass URLs directly using [bold]--urls[/bold] (e.g., --urls https://github.com)\n"
+                    "  2. Pass a text file with URLs using [bold]--urls-file[/bold] (e.g., --urls-file urls.txt)\n\n"
                     "Example:\n"
-                    "  [cyan]uv run pirlo login --links https://github.com https://google.com[/cyan]"
+                    "  [cyan]pirlo login --urls https://github.com https://google.com[/cyan]"
                 ),
             )
             return
@@ -63,7 +70,7 @@ class LoginSession(TerminalPitch):
             tasks = []
 
             try:
-                for i, url in enumerate(the_links):
+                for i, url in enumerate(target_urls):
                     if i < len(initial_pages):
                         page = initial_pages[i]
                     else:
@@ -72,9 +79,9 @@ class LoginSession(TerminalPitch):
 
                 await asyncio.gather(*tasks)
 
-                # 4. Lineup (Table of targets dynamically built from self.links)
+                # 4. Lineup (Table of targets dynamically built from target_urls)
                 rows = []
-                for url in the_links:
+                for url in target_urls:
                     domain = url.split("://")[-1].split("/")[0].replace("www.", "")
                     rows.append([domain.capitalize(), url, "Manual Login"])
 
