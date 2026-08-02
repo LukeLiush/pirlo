@@ -126,14 +126,24 @@ class SqliteRunHistoryRepository(RunHistoryRepository):
         )
 
     def list_runs(
-        self, playbook: str | None = None, limit: int = 50, offset: int = 0
+        self,
+        playbook: str | None = None,
+        status: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
     ) -> list[Run]:
         query = "SELECT * FROM run_history"
+        conditions = []
         params: list[Any] = []
         if playbook:
-            query += " WHERE playbook = ?"
+            conditions.append("playbook = ?")
             params.append(playbook)
-        query += " ORDER BY updated_at DESC LIMIT ? OFFSET ?"
+        if status:
+            conditions.append("status = ?")
+            params.append(status.lower() if isinstance(status, str) else status)
+        if conditions:
+            query += " WHERE " + " AND ".join(conditions)
+        query += " ORDER BY created_at DESC, updated_at DESC LIMIT ? OFFSET ?"
         params.extend([limit, offset])
 
         rows = self.conn.execute(query, params).fetchall()

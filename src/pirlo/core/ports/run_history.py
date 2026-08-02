@@ -18,9 +18,13 @@ class RunHistoryRepository(ABC):
 
     @abstractmethod
     def list_runs(
-        self, playbook: str | None = None, limit: int = 50, offset: int = 0
+        self,
+        playbook: str | None = None,
+        status: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
     ) -> list[Run]:
-        """Lists runs with pagination, optionally filtered by playbook."""
+        """Lists runs with pagination, optionally filtered by playbook and status."""
 
     @abstractmethod
     def count_runs(self, playbook: str | None = None) -> int:

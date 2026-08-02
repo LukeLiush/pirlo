@@ -130,6 +130,42 @@ class TestRunHistoryAndMVC(unittest.TestCase):
         page2 = self.repository.list_runs(playbook=None, limit=5, offset=10)
         self.assertEqual(len(page2), 2)
 
+    def test_list_runs_with_status_filter(self):
+        # Insert completed and failed runs
+        for i in range(3):
+            run = Run(
+                run_id=f"completed-{i}",
+                task_id="task-1",
+                playbook="autopass",
+                status=RunStatus.COMPLETED,
+                parameter_file_location=f"p_{i}.json",
+                log_file_location=f"l_{i}.log",
+                created_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC),
+            )
+            self.repository.save(run)
+
+        failed_run = Run(
+            run_id="failed-1",
+            task_id="task-2",
+            playbook="autopass",
+            status=RunStatus.FAILED,
+            parameter_file_location="p_failed.json",
+            log_file_location="l_failed.log",
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
+        )
+        self.repository.save(failed_run)
+
+        # Query only failed runs
+        failed_list = self.repository.list_runs(status="failed")
+        self.assertEqual(len(failed_list), 1)
+        self.assertEqual(failed_list[0].run_id, "failed-1")
+
+        # Query completed runs
+        completed_list = self.repository.list_runs(status="completed")
+        self.assertEqual(len(completed_list), 3)
+
     def test_json_file_parameter_storage(self):
         params = {"url": "https://example.com", "headless": True}
         loc = "login/logs/test_run_params.json"

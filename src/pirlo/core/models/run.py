@@ -10,6 +10,7 @@ class RunStatus(str, Enum):
     NOT_STARTED = "not_started"
     STARTED = "started"
     COMPLETED = "completed"
+    FAILED = "failed"
 
 
 class RunType(str, Enum):
