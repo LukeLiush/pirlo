@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Any
 
 from browser_use import Agent, Browser, Controller
@@ -16,7 +17,7 @@ class DefaultBrowserAgentFactory(BrowserAgentFactory):
         include_attributes: list[str] | None = None,
         max_failures: int = 5,
         retry_delay: int = 10,
-        generate_gif: bool = True,
+        generate_gif: bool | str | Path = False,
         max_actions_per_step: int = 10,
         save_conversation_path: str | None = None,
     ):
@@ -43,9 +44,8 @@ class DefaultBrowserAgentFactory(BrowserAgentFactory):
                 before the agent stops execution. Defaults to 5.
             retry_delay (int, optional):
                 Delay in seconds between retrying a failed step. Defaults to 10.
-            generate_gif (bool, optional):
-                Whether to capture screenshots and generate a GIF recording of the complete session
-                for developer debugging. Defaults to True.
+            generate_gif (Union[bool, str, Path], optional):
+                Whether to capture screenshots and generate a GIF recording, or path to destination GIF file. Defaults to False.
             max_actions_per_step (int, optional):
                 Maximum actions the agent can output in a single model turn. Lower numbers reduce cascades
                 of wrong actions. Defaults to 10.
@@ -59,7 +59,12 @@ class DefaultBrowserAgentFactory(BrowserAgentFactory):
         self.include_attributes = include_attributes
         self.max_failures = max_failures
         self.retry_delay = retry_delay
-        self.generate_gif = generate_gif
+
+        if isinstance(generate_gif, Path):
+            self.generate_gif: bool | str = str(generate_gif)
+        else:
+            self.generate_gif = generate_gif
+
         self.max_actions_per_step = max_actions_per_step
         self.save_conversation_path = save_conversation_path
 

@@ -277,6 +277,8 @@ class TerminalPitch(Pitch, ABC):
             os.environ.get("PIRLO_WORKSPACE", "~/.pirlo-pitch")
         ).expanduser()
         run_dir = pirlo_workspace / playbook_name / "runs" / effective_run_id
+        instance.run_id = effective_run_id
+        instance.run_dir = run_dir
         run_params_path = run_dir / "params.json"
         try:
             run_dir.mkdir(parents=True, exist_ok=True)

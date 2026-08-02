@@ -22,9 +22,10 @@ logger = logging.getLogger("autopass.workflow")
 class SelfHealingWorkflowExecutor(WorkflowExecutor):
     """Adapter executing workflows via Pirlo's SelfHealingRunner."""
 
-    def __init__(self, cdp_url: str, config: dict):
+    def __init__(self, cdp_url: str, config: dict, run_dir: Path | str | None = None):
         self.cdp_url = cdp_url
         self.config = config
+        self.run_dir = Path(run_dir) if run_dir else None
 
     async def execute(self, task_prompt: str) -> str:
         runs_dir = PIRLO_WORKSPACE / "autopass" / "runs"
@@ -65,11 +66,16 @@ class SelfHealingWorkflowExecutor(WorkflowExecutor):
             browser_config=browser_config,
         )
 
+        gif_setting = self.config.get("generate_gif", False)
+        if gif_setting is True and self.run_dir:
+            gif_setting = self.run_dir / "agent_history.gif"
+
         agent_factory = DefaultBrowserAgentFactory(
             llm=thinking_llm,
             use_vision=self.config.get("use_vision", False),
             max_failures=self.config.get("max_failures", 5),
             retry_delay=self.config.get("retry_delay", 10),
+            generate_gif=gif_setting,
         )
 
         fallback_runner = LlmWorkflowRunner(

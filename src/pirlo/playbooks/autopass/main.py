@@ -174,7 +174,9 @@ class AutopassSession(TerminalPitch, ProgressListener):
         # Instantiate adapters
         browser_manager = CloakBrowserManager()
         cdp_checker = HttpCdpConnectionChecker(CDP_URL)
-        workflow_executor = SelfHealingWorkflowExecutor(CDP_URL, self._parsed_options)
+        workflow_executor = SelfHealingWorkflowExecutor(
+            CDP_URL, self._parsed_options, run_dir=getattr(self, "run_dir", None)
+        )
 
         # Instantiate and run use case
         use_case = RunAutopassUseCase(
