@@ -31,24 +31,10 @@ class LlmLink:
 
     @classmethod
     def from_dict(cls, name: str, data: dict) -> "LlmLink":
-        provider = data.get("provider", "")
-        default_model = (
-            "qwen3.6-flash"
-            if provider == "dashscope"
-            else (
-                "gemini-1.5-flash"
-                if provider == "gemini"
-                else (
-                    "claude-3-5-haiku-20241022"
-                    if provider == "anthropic"
-                    else "gpt-4o-mini"
-                )
-            )
-        )
         return cls(
             name=name,
-            provider=provider,
-            model=data.get("model", default_model),
+            provider=data.get("provider", ""),
+            model=data.get("model", ""),
             api_key=data.get("api_key", ""),
             base_url=data.get("base_url"),
         )
