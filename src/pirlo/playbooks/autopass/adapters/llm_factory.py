@@ -35,19 +35,37 @@ class LlmFactory:
             kwargs["max_tokens"] = max_tokens
 
         if provider == "google":
-            from langchain_google_genai import ChatGoogleGenerativeAI
+            try:
+                from langchain_google_genai import ChatGoogleGenerativeAI
+            except ImportError as e:
+                raise ImportError(
+                    "The 'langchain-google-genai' package is required for Google provider links. "
+                    "Please install it using 'pip install langchain-google-genai' or 'uv add langchain-google-genai'."
+                ) from e
 
             kwargs["google_api_key"] = link.api_key
             kwargs["model"] = link.model
             llm = ChatGoogleGenerativeAI(**kwargs)
         elif provider == "anthropic":
-            from langchain_anthropic import ChatAnthropic
+            try:
+                from langchain_anthropic import ChatAnthropic
+            except ImportError as e:
+                raise ImportError(
+                    "The 'langchain-anthropic' package is required for Anthropic provider links. "
+                    "Please install it using 'pip install langchain-anthropic' or 'uv add langchain-anthropic'."
+                ) from e
 
             kwargs["api_key"] = link.api_key
             kwargs["model"] = link.model
             llm = ChatAnthropic(**kwargs)
         else:  # OpenAI, DashScope, OpenAI-compatible
-            from langchain_openai import ChatOpenAI
+            try:
+                from langchain_openai import ChatOpenAI
+            except ImportError as e:
+                raise ImportError(
+                    "The 'langchain-openai' package is required for OpenAI/DashScope provider links. "
+                    "Please install it using 'pip install langchain-openai' or 'uv add langchain-openai'."
+                ) from e
 
             kwargs["api_key"] = link.api_key
             kwargs["model"] = link.model
@@ -77,7 +95,13 @@ class LlmFactory:
             base_url = SUPPORTED_PROVIDERS[provider].get("default_base_url")
 
         if provider == "google":
-            from browser_use.llm.google.chat import ChatGoogle
+            try:
+                from browser_use.llm.google.chat import ChatGoogle
+            except ImportError as e:
+                raise ImportError(
+                    "The 'google-genai' package is required for Google browser-use LLMs. "
+                    "Please install it using 'pip install google-genai'."
+                ) from e
 
             return ChatGoogle(
                 model=link.model,
@@ -85,7 +109,13 @@ class LlmFactory:
                 temperature=temperature,
             )
         elif provider == "anthropic":
-            from browser_use.llm.anthropic.chat import ChatAnthropic as BUAnthropic
+            try:
+                from browser_use.llm.anthropic.chat import ChatAnthropic as BUAnthropic
+            except ImportError as e:
+                raise ImportError(
+                    "The 'anthropic' package is required for Anthropic browser-use LLMs. "
+                    "Please install it using 'pip install anthropic'."
+                ) from e
 
             return BUAnthropic(
                 model=link.model,
@@ -93,7 +123,13 @@ class LlmFactory:
                 temperature=temperature,
             )
         else:
-            from browser_use.llm.openai.chat import ChatOpenAI as BUOpenAI
+            try:
+                from browser_use.llm.openai.chat import ChatOpenAI as BUOpenAI
+            except ImportError as e:
+                raise ImportError(
+                    "The 'openai' package is required for OpenAI browser-use LLMs. "
+                    "Please install it using 'pip install openai'."
+                ) from e
 
             return BUOpenAI(
                 model=link.model,
