@@ -37,4 +37,5 @@ ignore_missing_imports = true
 [tool.pirlo.playbooks]
 dummy = "pirlo.playbooks.dummy:DummySession"
 autopass = "pirlo.playbooks.autopass.main:AutopassSession"
+login = "pirlo.playbooks.login:LoginSession"
 
