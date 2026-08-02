@@ -55,18 +55,18 @@ def link_main(supported_providers: dict):
     repo = get_repo()
 
     if args.subcommand == "list":
-        run_list(repo)
+        run_list(repo, supported_providers)
     elif args.subcommand == "create":
         run_create(repo, args, supported_providers)
     elif args.subcommand == "show":
-        run_show(repo, args.name)
+        run_show(repo, args.name, supported_providers)
     elif args.subcommand == "test":
         run_test(repo, args.name)
     elif args.subcommand == "delete":
         run_delete(repo, args.name)
 
 
-def run_list(repo: JsonLinkRepository):
+def run_list(repo: JsonLinkRepository, supported_providers: dict):
     links = repo.list_all()
     if not links:
         print("No active LLM links registered. Run 'pirlo link create' to add one.")
@@ -76,10 +76,28 @@ def run_list(repo: JsonLinkRepository):
     print(f"{'Name':<20} {'Provider':<12} {'Model':<20} {'Base URL'}")
     print("─" * 90)
     for link in links:
-        base_url_str = link.base_url or "N/A"
-        if len(base_url_str) > 34:
-            base_url_str = base_url_str[:31] + "..."
+        if link.base_url:
+            base_url_str = link.base_url
+        else:
+            def_url = supported_providers.get(link.provider, {}).get(
+                "default_base_url"
+            )
+            if def_url:
+                base_url_str = f"Default ({def_url})"
+            else:
+                base_url_str = "Default (Official API)"
+
+        if len(base_url_str) > 36:
+            base_url_str = base_url_str[:33] + "..."
         print(f"{link.name:<20} {link.provider:<12} {link.model:<20} {base_url_str}")
+
+    print("\n💡 Base URL Guide:")
+    print(
+        "   • Default: Automatically routes requests to the provider's official API endpoint."
+    )
+    print(
+        "   • Custom:  Used for local models (Ollama, LM Studio), enterprise gateways, or proxies."
+    )
 
 
 def run_create(repo: JsonLinkRepository, args, supported_providers: dict):
@@ -128,10 +146,15 @@ def run_create(repo: JsonLinkRepository, args, supported_providers: dict):
 
         if not base_url:
             default_url = supported_providers.get(provider, {}).get(
-                "default_base_url", "https://api.openai.com/v1"
+                "default_base_url"
+            )
+            default_info = (
+                f"default: {default_url}"
+                if default_url
+                else "official provider endpoint"
             )
             base_url_input = input(
-                f"? Input Base URL (optional, e.g. {default_url}): "
+                f"? Input Base URL (optional - press ENTER to use {default_info}): "
             ).strip()
             base_url = base_url_input if base_url_input else None
 
@@ -171,7 +194,7 @@ def run_create(repo: JsonLinkRepository, args, supported_providers: dict):
     print(f"\nSuccessfully saved link '{name}'!")
 
 
-def run_show(repo: JsonLinkRepository, name: str):
+def run_show(repo: JsonLinkRepository, name: str, supported_providers: dict):
     link = repo.get_by_name(name)
     if not link:
         print(f"Error: Link '{name}' not found.")
@@ -187,7 +210,19 @@ def run_show(repo: JsonLinkRepository, name: str):
         masked_key = masked_key[:4] + "*" * (len(masked_key) - 8) + masked_key[-4:]
     else:
         masked_key = "****"
-    print(f"  Base URL:    {link.base_url or 'N/A'}")
+
+    if link.base_url:
+        base_url_display = f"{link.base_url} (Custom)"
+    else:
+        def_url = supported_providers.get(link.provider, {}).get(
+            "default_base_url"
+        )
+        if def_url:
+            base_url_display = f"Default ({def_url})"
+        else:
+            base_url_display = "Default (Official API)"
+
+    print(f"  Base URL:    {base_url_display}")
     print(f"  API Key:     {masked_key}")
 
 
