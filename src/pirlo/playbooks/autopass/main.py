@@ -37,10 +37,20 @@ class AutopassSession(TerminalPitch, ProgressListener):
         str, default=None, help="Task prompt to execute autonomously", env_name="TASK"
     )
     playmaker = LinkParameter(
-        help="Link name for Playmaker (decision brain)", env_name="PLAYMAKER"
+        help=(
+            "Link name for Playmaker (decision brain). "
+            "Use 'pirlo link list' to view registered link names, "
+            "or 'pirlo link create <name>' to register a new link."
+        ),
+        env_name="PLAYMAKER",
     )
     analyst = LinkParameter(
-        help="Link name for Analyst (DOM summary / selector healer)", env_name="ANALYST"
+        help=(
+            "Link name for Analyst (DOM summary / selector healer). "
+            "Use 'pirlo link list' to view registered link names, "
+            "or 'pirlo link create <name>' to register a new link."
+        ),
+        env_name="ANALYST",
     )
     use_vision = Parameter(
         bool, default=False, help="Enable vision for the Agent", env_name="USE_VISION"
