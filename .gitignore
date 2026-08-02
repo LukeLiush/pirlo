@@ -19,3 +19,7 @@ wheels/
 # IDE / OS files
 .idea/
 .DS_Store
+
+# Generated runtime assets & logs
+*.gif
+agent_history.gif
