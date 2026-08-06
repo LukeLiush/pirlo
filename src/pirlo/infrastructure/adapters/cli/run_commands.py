@@ -1,6 +1,5 @@
 import argparse
 import json
-import os
 import sqlite3
 import sys
 from datetime import datetime
@@ -63,9 +62,9 @@ def run_main():
 
 
 def get_repository() -> tuple[SqliteRunHistoryRepository, Path]:
-    pirlo_workspace = Path(
-        os.environ.get("PIRLO_WORKSPACE", "~/.pirlo-pitch")
-    ).expanduser()
+    from pirlo.core.config import get_workspace_path
+
+    pirlo_workspace = get_workspace_path()
     db_path = pirlo_workspace / "pirlo.db"
     if not db_path.exists():
         print(f"No execution database found at '{db_path}'. Run a playbook first.")

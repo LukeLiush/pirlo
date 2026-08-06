@@ -135,14 +135,13 @@ class TerminalPitch(Pitch, ABC):
         run = None
 
         if run_id:
+            from pirlo.core.config import get_workspace_path
             from pirlo.core.models.run import RunStatus
             from pirlo.infrastructure.adapters.db.sqlite_run_history_repository import (
                 SqliteRunHistoryRepository,
             )
 
-            pirlo_workspace = Path(
-                os.environ.get("PIRLO_WORKSPACE", "~/.pirlo-pitch")
-            ).expanduser()
+            pirlo_workspace = get_workspace_path()
             db_path = pirlo_workspace / "pirlo.db"
             try:
                 conn = sqlite3.connect(str(db_path), check_same_thread=False)
@@ -258,9 +257,9 @@ class TerminalPitch(Pitch, ABC):
         from pirlo.core.services.run_id_generator import generate_run_id
 
         effective_run_id = run_id or generate_run_id(instance.task_id)
-        pirlo_workspace = Path(
-            os.environ.get("PIRLO_WORKSPACE", "~/.pirlo-pitch")
-        ).expanduser()
+        from pirlo.core.config import get_workspace_path
+
+        pirlo_workspace = get_workspace_path()
         run_dir = pirlo_workspace / playbook_name / "runs" / effective_run_id
         instance.run_id = effective_run_id
         instance.run_dir = run_dir

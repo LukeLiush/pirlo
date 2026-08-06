@@ -1,21 +1,15 @@
-import os
 from pathlib import Path
 from typing import Any
 
 from pirlo.core.instructions import AutopassInstructions, Instruction
+from pirlo.core.ports.orchestrator import AutopassExecutionOptions
 from pirlo.core.ports.pitch import LinkParameter, Parameter
 from pirlo.core.services.profile_manager import ProfileManager
 from pirlo.infrastructure.adapters.cli.terminal_pitch import TerminalPitch
-from pirlo.playbooks.autopass.adapters.browser_manager import CloakBrowserManager
-from pirlo.playbooks.autopass.adapters.cdp_checker import HttpCdpConnectionChecker
-from pirlo.playbooks.autopass.adapters.workflow_executor import (
-    SelfHealingWorkflowExecutor,
+from pirlo.infrastructure.adapters.orchestrator.prefect_orchestrator import (
+    SmartPrefectTaskOrchestrator,
 )
 from pirlo.playbooks.autopass.core.ports import ProgressListener
-from pirlo.playbooks.autopass.core.use_cases import RunAutopassUseCase
-
-PIRLO_WORKSPACE = Path(os.environ.get("PIRLO_WORKSPACE", "~/.pirlo-pitch")).expanduser()
-
 
 CDP_PORT = 9222
 CDP_URL = f"http://localhost:{CDP_PORT}"
@@ -169,26 +163,22 @@ class AutopassSession(TerminalPitch, ProgressListener):
             ],
         )
 
-        # Instantiate adapters
-        browser_manager = CloakBrowserManager()
-        cdp_checker = HttpCdpConnectionChecker(CDP_URL)
-        workflow_executor = SelfHealingWorkflowExecutor(
-            CDP_URL, self._parsed_options, run_dir=getattr(self, "run_dir", None)
+        options = AutopassExecutionOptions(
+            playmaker=self.playmaker,
+            analyst=self.analyst,
+            use_vision=self.use_vision,
+            max_failures=self.max_failures,
+            retry_delay=self.retry_delay,
+            generate_gif=getattr(self, "generate_gif", False),
         )
 
-        # Instantiate and run use case
-        use_case = RunAutopassUseCase(
-            browser_manager=browser_manager,
-            cdp_checker=cdp_checker,
-            workflow_executor=workflow_executor,
-        )
-
-        await use_case.run(
+        orchestrator = SmartPrefectTaskOrchestrator()
+        await orchestrator.execute(
             task_prompt=self.task,
             profile_path=profile_path,
+            options=options,
             headless=self.headless,
             cdp_port=CDP_PORT,
-            listener=self,
         )
 
 

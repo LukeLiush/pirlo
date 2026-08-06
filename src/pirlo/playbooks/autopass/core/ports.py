@@ -24,14 +24,6 @@ class CdpChecker(ABC):
         """Block until the CDP endpoint becomes responsive, or timeout expires."""
 
 
-class WorkflowExecutor(ABC):
-    """Port for executing web automation workflows."""
-
-    @abstractmethod
-    async def execute(self, task_prompt: str) -> Any:
-        """Execute the workflow for the given task and return the result."""
-
-
 class ProgressListener(ABC):
     """Port for presenting status updates and notifications to the user."""
 

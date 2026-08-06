@@ -1,5 +1,4 @@
 import json
-import os
 import shutil
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime, timedelta
@@ -21,10 +20,9 @@ class ProfileManager:
 
     @staticmethod
     def get_workspace_dir() -> Path:
-        raw_workspace = os.environ.get("PIRLO_WORKSPACE", "~/.pirlo-pitch")
-        path = Path(raw_workspace).expanduser()
-        path.mkdir(parents=True, exist_ok=True)
-        return path
+        from pirlo.core.config import get_workspace_path
+
+        return get_workspace_path()
 
     @staticmethod
     def get_profiles_dir() -> Path:

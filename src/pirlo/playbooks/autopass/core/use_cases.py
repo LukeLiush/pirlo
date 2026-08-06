@@ -1,12 +1,17 @@
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 from pirlo.playbooks.autopass.core.ports import (
     BrowserManager,
     CdpChecker,
     ProgressListener,
-    WorkflowExecutor,
 )
+
+
+class WorkflowRunnerProtocol(Protocol):
+    """Protocol for workflow execution runners."""
+
+    async def run(self, task_prompt: str) -> Any: ...
 
 
 class RunAutopassUseCase:
@@ -16,11 +21,11 @@ class RunAutopassUseCase:
         self,
         browser_manager: BrowserManager,
         cdp_checker: CdpChecker,
-        workflow_executor: WorkflowExecutor,
+        workflow_runner: WorkflowRunnerProtocol,
     ):
         self.browser_manager = browser_manager
         self.cdp_checker = cdp_checker
-        self.workflow_executor = workflow_executor
+        self.workflow_runner = workflow_runner
 
     async def run(
         self,
@@ -41,7 +46,7 @@ class RunAutopassUseCase:
 
             # 3. Execute the autonomous workflow
             with listener.status_context("Executing autonomous autopass play..."):
-                result = await self.workflow_executor.execute(task_prompt)
+                result = await self.workflow_runner.run(task_prompt=task_prompt)
 
             listener.show_goal(
                 "Play completed successfully!", detail=f"Result: {result}"
