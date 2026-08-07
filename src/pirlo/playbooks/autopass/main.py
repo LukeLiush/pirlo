@@ -177,6 +177,7 @@ class AutopassSession(TerminalPitch, ProgressListener):
             task_prompt=self.task,
             profile_path=profile_path,
             options=options,
+            run_id=self.run_id,
             headless=self.headless,
             cdp_port=CDP_PORT,
         )

@@ -10,7 +10,7 @@ from pirlo.core.config import get_workspace_path
 from pirlo.core.models.browser_config import BrowserConfig
 from pirlo.core.models.run import Run, RunStatus
 from pirlo.core.ports.orchestrator import AutopassExecutionOptions, TaskOrchestrator
-from pirlo.core.services.run_id_generator import generate_run_id, generate_task_id
+from pirlo.core.services.run_id_generator import generate_task_id
 from pirlo.infrastructure.adapters.browser.browser_agent_factory import (
     DefaultBrowserAgentFactory,
 )
@@ -203,13 +203,11 @@ class SmartPrefectTaskOrchestrator(TaskOrchestrator):
         task_prompt: str,
         profile_path: Path,
         options: AutopassExecutionOptions,
+        run_id: str,
         headless: bool = False,
         cdp_port: int = 9222,
     ) -> Any:
         workspace = get_workspace_path()
-        task_id = generate_task_id("autopass", {"task": task_prompt})
-        run_id = generate_run_id(task_id)
-
         run_dir = workspace / "autopass" / "runs" / run_id
 
         def get_active_task_prefix() -> str:

@@ -33,6 +33,7 @@ class TaskOrchestrator(ABC):
         task_prompt: str,
         profile_path: Path,
         options: AutopassExecutionOptions,
+        run_id: str,
         headless: bool = False,
         cdp_port: int = 9222,
     ) -> Any:

@@ -61,6 +61,7 @@ async def test_smart_prefect_orchestrator_execution(tmp_path, monkeypatch):
             task_prompt="Search Google for OpenAI",
             profile_path=tmp_path / "profiles" / "default",
             options=options,
+            run_id="test-run-12345",
             headless=True,
             cdp_port=9222,
         )
