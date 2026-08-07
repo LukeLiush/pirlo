@@ -1,3 +1,4 @@
+import logging
 import sys
 from contextlib import contextmanager
 from datetime import UTC, datetime
@@ -46,16 +47,27 @@ class StdioTee:
 
 @contextmanager
 def capture_run_logs(run_dir: Path, get_prefix_fn=None):
-    """Context manager capturing all stdout/stderr into run_dir/run.log."""
+    """Context manager capturing all stdout/stderr and logging module calls into run_dir/run.log."""
     run_dir.mkdir(parents=True, exist_ok=True)
     log_path = run_dir / "run.log"
     with open(log_path, "a", encoding="utf-8") as log_file:
         old_stdout = sys.stdout
         old_stderr = sys.stderr
-        sys.stdout = StdioTee(old_stdout, log_file, get_prefix_fn=get_prefix_fn)
-        sys.stderr = StdioTee(old_stderr, log_file, get_prefix_fn=get_prefix_fn)
+
+        tee_stdout = StdioTee(old_stdout, log_file, get_prefix_fn=get_prefix_fn)
+        tee_stderr = StdioTee(old_stderr, log_file, get_prefix_fn=get_prefix_fn)
+
+        sys.stdout = tee_stdout
+        sys.stderr = tee_stderr
+
+        # Attach StreamHandler using tee_stdout so logger calls flow through StdioTee
+        stream_handler = logging.StreamHandler(tee_stdout)
+        root_logger = logging.getLogger()
+        root_logger.addHandler(stream_handler)
+
         try:
             yield log_path
         finally:
+            root_logger.removeHandler(stream_handler)
             sys.stdout = old_stdout
             sys.stderr = old_stderr
