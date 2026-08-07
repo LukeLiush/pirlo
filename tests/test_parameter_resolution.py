@@ -1,4 +1,3 @@
-import json
 import os
 import sys
 import tempfile
@@ -137,53 +136,6 @@ class TestParameterResolution(unittest.TestCase):
         self.assertEqual(inst.count, 100)
         self.assertEqual(inst.enabled, True)
         self.assertEqual(inst.items, ["x", "y"])
-
-    def test_cli_overrides_config_json(self):
-        """Verify that CLI flags override JSON config, while non-specified flags fall back to config JSON."""
-        os.environ["TEST_TASK"] = "env-task"
-        os.environ["TEST_COUNT"] = "42"
-
-        # Write config
-        config_data = {
-            "task": "json-task",
-            "count": 999,
-            "enabled": True,
-            "items": ["json1", "json2"],
-            "details": {"json_key": "val"},
-            "path_val": "/tmp/test",
-            "multi_env": "json-multi",
-        }
-        with open(self.config_file, "w") as f:
-            json.dump(config_data, f)
-
-        sys.argv = [
-            "pirlo dummy_resolution",
-            "--config",
-            str(self.config_file),
-            "--task",
-            "cli-task",
-            "--count",
-            "100",
-        ]
-
-        captured_instance = []
-
-        async def mock_play(self_instance):
-            captured_instance.append(self_instance)
-
-        DummyResolutionSession.play = mock_play
-        DummyResolutionSession.cli()
-
-        inst = captured_instance[0]
-        # CLI flags take top priority over JSON config
-        self.assertEqual(inst.task, "cli-task")
-        self.assertEqual(inst.count, 100)
-        # Non-overridden parameters fall back to JSON config
-        self.assertEqual(inst.enabled, True)
-        self.assertEqual(inst.items, ["json1", "json2"])
-        self.assertEqual(inst.details, {"json_key": "val"})
-        self.assertEqual(inst.path_val, Path("/tmp/test"))
-        self.assertEqual(inst.multi_env, "json-multi")
 
 
 if __name__ == "__main__":

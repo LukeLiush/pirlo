@@ -76,6 +76,49 @@ class TerminalPitch(Pitch, ABC):
     def __init__(self):
         super().__init__()
         self.console = Console()
+        self._run_id: str | None = None
+
+    @property
+    def run_id(self) -> str:
+        """Framework-managed execution run ID, lazily generated if not set."""
+        if self._run_id is None:
+            playbook_name = self._resolve_playbook_name()
+            param_dict = self._build_param_dict()
+            if not self.task_id:
+                from pirlo.core.services.run_id_generator import generate_task_id
+
+                self.task_id = generate_task_id(playbook_name, param_dict)
+            from pirlo.core.services.run_id_generator import generate_run_id
+
+            self._run_id = generate_run_id(self.task_id)
+        return self._run_id
+
+    @run_id.setter
+    def run_id(self, value: str | None) -> None:
+        self._run_id = value
+
+    def _resolve_playbook_name(self) -> str:
+        if sys.argv and len(sys.argv) > 1 and sys.argv[0].startswith("pirlo "):
+            return sys.argv[0].split(" ")[1]
+        name = self.__class__.__name__.lower()
+        if name.endswith("session"):
+            return name[:-7]
+        if name.endswith("pitch"):
+            return name[:-5]
+        return name
+
+    def _build_param_dict(self) -> dict[str, Any]:
+        from pirlo.core.models.link import LlmLink
+
+        param_dict = {}
+        for k, v in self._parsed_options.items():
+            if isinstance(v, Path):
+                param_dict[k] = str(v)
+            elif isinstance(v, LlmLink):
+                param_dict[k] = v.name
+            else:
+                param_dict[k] = v
+        return param_dict
 
     @classmethod
     def cli(cls):
@@ -102,7 +145,6 @@ class TerminalPitch(Pitch, ABC):
 
                 if origin is list:
                     is_list = True
-                    # Extract the item type, default to str if not specified (e.g. list[str] -> str)
                     type_args = getattr(type_func, "__args__", ())
                     type_func = type_args[0] if type_args else str
 
@@ -117,30 +159,8 @@ class TerminalPitch(Pitch, ABC):
                     parser.add_argument(attr_val.short, flag, **kwargs)
                 else:
                     parser.add_argument(flag, **kwargs)
-        parser.add_argument(
-            "--config",
-            help=(
-                "Path to a JSON config file containing parameter key-values "
-                '(e.g. {"playmaker": "my-qwen", "task": "..."}). CLI flags override config file values.'
-            ),
-        )
+
         parsed_args = parser.parse_args()
-
-        config_data = {}
-        config_path_str = getattr(parsed_args, "config", None)
-
-        if config_path_str:
-            config_path = Path(config_path_str).expanduser()
-            if config_path.exists():
-                try:
-                    with open(config_path, "r", encoding="utf-8") as f:
-                        config_data = json.load(f)
-                except Exception as e:  # noqa: BLE001
-                    print(
-                        f"Warning: Failed to load config from {config_path}: {e}",
-                        file=sys.stderr,
-                    )
-
         link_repo = None
 
         for param in parameters:
@@ -148,11 +168,7 @@ class TerminalPitch(Pitch, ABC):
             if hasattr(parsed_args, param.name):
                 val = getattr(parsed_args, param.name)
                 val = convert_value(val, param.type_func)
-            # 2. Config file (JSON preset)
-            elif param.name in config_data:
-                val = config_data[param.name]
-                val = convert_value(val, param.type_func)
-            # 3. Environment Variable
+            # 2. Environment Variable
             elif getattr(param, "env_name", None):
                 env_names = (
                     [param.env_name]
@@ -168,7 +184,7 @@ class TerminalPitch(Pitch, ABC):
                     val = convert_value(env_val, param.type_func)
                 else:
                     val = param.default
-            # 4. Default
+            # 3. Default
             else:
                 val = param.default
 
@@ -197,38 +213,16 @@ class TerminalPitch(Pitch, ABC):
 
             instance._parsed_options[param.name] = val
 
-        # Compute task_id deterministically based on playbook and parameters
-        playbook_name = "unknown"
-        if sys.argv and sys.argv[0].startswith("pirlo "):
-            playbook_name = sys.argv[0].split(" ")[1]
-        else:
-            playbook_name = cls.__name__.lower()
-            if playbook_name.endswith("session"):
-                playbook_name = playbook_name[:-7]
-            elif playbook_name.endswith("pitch"):
-                playbook_name = playbook_name[:-5]
-
-        from pirlo.core.models.link import LlmLink
-        from pirlo.core.services.run_id_generator import generate_task_id
-
-        param_dict = {}
-        for k, v in instance._parsed_options.items():
-            if isinstance(v, Path):
-                param_dict[k] = str(v)
-            elif isinstance(v, LlmLink):
-                param_dict[k] = v.name
-            else:
-                param_dict[k] = v
-        instance.task_id = generate_task_id(playbook_name, param_dict)
-
         # Auto-persist per-run parameter snapshot under runs/<run_id>/params.json
         from pirlo.core.config import get_workspace_path
-        from pirlo.core.services.run_id_generator import generate_run_id
+        from pirlo.core.services.run_id_generator import generate_task_id
 
-        effective_run_id = generate_run_id(instance.task_id)
+        playbook_name = instance._resolve_playbook_name()
+        param_dict = instance._build_param_dict()
+        instance.task_id = generate_task_id(playbook_name, param_dict)
+
         pirlo_workspace = get_workspace_path()
-        run_dir = pirlo_workspace / playbook_name / "runs" / effective_run_id
-        instance.run_id = effective_run_id
+        run_dir = pirlo_workspace / playbook_name / "runs" / instance.run_id
         instance.run_dir = run_dir
         run_params_path = run_dir / "params.json"
         try:
