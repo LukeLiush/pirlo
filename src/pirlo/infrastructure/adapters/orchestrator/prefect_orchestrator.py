@@ -28,7 +28,7 @@ from pirlo.playbooks.autopass.adapters.llm_factory import LlmFactory
 
 
 @task(name="Pre-Register Run in pirlo.db")
-def preregister_run_task(
+async def preregister_run_task(
     workspace: Path, playbook: str, task_id: str, run_id: str
 ) -> Run:
     """Pre-registers run in pirlo.db before execution starts."""
@@ -146,7 +146,7 @@ async def run_self_healing_worker_task(
 
 
 @task(name="Finalize Run Status in pirlo.db")
-def finalize_run_task(workspace: Path, run_id: str, status: RunStatus):
+async def finalize_run_task(workspace: Path, run_id: str, status: RunStatus):
     """Updates run status to COMPLETED or FAILED in pirlo.db."""
     db_path = workspace / "pirlo.db"
     conn = sqlite3.connect(str(db_path), timeout=30.0, check_same_thread=False)
@@ -173,7 +173,7 @@ async def pirlo_autopass_flow(
     task_id = generate_task_id("autopass", {"task": task_prompt})
 
     # 1. Pre-register run in DB
-    preregister_run_task(workspace, "autopass", task_id, run_id)
+    await preregister_run_task(workspace, "autopass", task_id, run_id)
 
     try:
         # 2. Directly execute SelfHealingRunner worker task
@@ -182,11 +182,11 @@ async def pirlo_autopass_flow(
             task_prompt, profile_path, headless, cdp_port, options, run_dir
         )
         # 3. Mark COMPLETED
-        finalize_run_task(workspace, run_id, RunStatus.COMPLETED)
+        await finalize_run_task(workspace, run_id, RunStatus.COMPLETED)
         return result
     except Exception:
         # 4. Mark FAILED
-        finalize_run_task(workspace, run_id, RunStatus.FAILED)
+        await finalize_run_task(workspace, run_id, RunStatus.FAILED)
         raise
 
 
@@ -218,7 +218,10 @@ class SmartPrefectTaskOrchestrator(TaskOrchestrator):
 
                 ctx = get_run_context()
                 if hasattr(ctx, "task_run") and ctx.task_run:
-                    return f"[{ctx.task_run.task_name}]"
+                    task_name = getattr(ctx.task_run, "name", None) or getattr(
+                        ctx.task_run, "task_key", "Task"
+                    )
+                    return f"[{task_name}]"
                 if hasattr(ctx, "flow_run") and ctx.flow_run:
                     return f"[{ctx.flow_run.name}]"
             return "[Autopass Flow]"
@@ -235,6 +238,7 @@ class SmartPrefectTaskOrchestrator(TaskOrchestrator):
             # 1. Discover active Prefect server URL
             active_api_url = discover_prefect_server_url()
 
+            override_settings: dict[Any, Any]
             if active_api_url:
                 web_ui_base = active_api_url.rstrip("/").replace("/api", "")
                 print(f"🌐 Prefect Server Detected: {web_ui_base}")
