@@ -1,3 +1,4 @@
+import contextlib
 import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
@@ -32,7 +33,7 @@ def preregister_run_task(
 ) -> Run:
     """Pre-registers run in pirlo.db before execution starts."""
     db_path = workspace / "pirlo.db"
-    conn = sqlite3.connect(str(db_path), check_same_thread=False)
+    conn = sqlite3.connect(str(db_path), timeout=30.0, check_same_thread=False)
     repo = SqliteRunHistoryRepository(conn)
 
     run = Run(
@@ -148,7 +149,7 @@ async def run_self_healing_worker_task(
 def finalize_run_task(workspace: Path, run_id: str, status: RunStatus):
     """Updates run status to COMPLETED or FAILED in pirlo.db."""
     db_path = workspace / "pirlo.db"
-    conn = sqlite3.connect(str(db_path), check_same_thread=False)
+    conn = sqlite3.connect(str(db_path), timeout=30.0, check_same_thread=False)
     repo = SqliteRunHistoryRepository(conn)
     run = repo.get_by_id(run_id)
     if run:
@@ -209,34 +210,50 @@ class SmartPrefectTaskOrchestrator(TaskOrchestrator):
         task_id = generate_task_id("autopass", {"task": task_prompt})
         run_id = generate_run_id(task_id)
 
+        run_dir = workspace / "autopass" / "runs" / run_id
+
+        def get_active_task_prefix() -> str:
+            with contextlib.suppress(Exception):
+                from prefect.context import get_run_context
+
+                ctx = get_run_context()
+                if hasattr(ctx, "task_run") and ctx.task_run:
+                    return f"[{ctx.task_run.task_name}]"
+                if hasattr(ctx, "flow_run") and ctx.flow_run:
+                    return f"[{ctx.flow_run.name}]"
+            return "[Autopass Flow]"
+
         from prefect.settings import (
             PREFECT_API_URL,
             PREFECT_SERVER_ALLOW_EPHEMERAL_MODE,
             temporary_settings,
         )
 
-        # 1. Discover active Prefect server URL
-        active_api_url = discover_prefect_server_url()
+        from pirlo.infrastructure.services.log_streamer import capture_run_logs
 
-        if active_api_url:
-            web_ui_base = active_api_url.rstrip("/").replace("/api", "")
-            print(f"🌐 Prefect Server Detected: {web_ui_base}")
-            override_settings = {PREFECT_API_URL: active_api_url}
-        else:
-            print("⚡ Running in Prefect Ephemeral Mode (In-Process)")
-            override_settings = {
-                PREFECT_API_URL: None,
-                PREFECT_SERVER_ALLOW_EPHEMERAL_MODE: True,
-            }
+        with capture_run_logs(run_dir, get_prefix_fn=get_active_task_prefix):
+            # 1. Discover active Prefect server URL
+            active_api_url = discover_prefect_server_url()
 
-        # 2. Execute Prefect flow under temporary settings
-        with temporary_settings(override_settings):
-            return await pirlo_autopass_flow(
-                task_prompt=task_prompt,
-                profile_path=profile_path,
-                headless=headless,
-                cdp_port=cdp_port,
-                options=options,
-                run_id=run_id,
-                workspace=workspace,
-            )
+            if active_api_url:
+                web_ui_base = active_api_url.rstrip("/").replace("/api", "")
+                print(f"🌐 Prefect Server Detected: {web_ui_base}")
+                override_settings = {PREFECT_API_URL: active_api_url}
+            else:
+                print("⚡ Running in Prefect Ephemeral Mode (In-Process)")
+                override_settings = {
+                    PREFECT_API_URL: None,
+                    PREFECT_SERVER_ALLOW_EPHEMERAL_MODE: True,
+                }
+
+            # 2. Execute Prefect flow under temporary settings
+            with temporary_settings(override_settings):
+                return await pirlo_autopass_flow(
+                    task_prompt=task_prompt,
+                    profile_path=profile_path,
+                    headless=headless,
+                    cdp_port=cdp_port,
+                    options=options,
+                    run_id=run_id,
+                    workspace=workspace,
+                )

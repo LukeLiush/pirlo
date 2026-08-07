@@ -75,4 +75,11 @@ async def test_smart_prefect_orchestrator_execution(tmp_path, monkeypatch):
     runs = repo.list_runs(playbook="autopass")
     assert len(runs) == 1
     assert runs[0].status == RunStatus.COMPLETED
+
+    run_dir = tmp_path / "autopass" / "runs" / runs[0].run_id
+    log_file = run_dir / "run.log"
+    assert log_file.exists()
+    log_content = log_file.read_text(encoding="utf-8")
+    assert "Running in Prefect Ephemeral Mode" in log_content
+
     conn.close()

@@ -3,11 +3,9 @@ import asyncio
 import inspect
 import json
 import os
-import sqlite3
 import sys
 from abc import ABC
 from collections.abc import Callable
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -119,8 +117,6 @@ class TerminalPitch(Pitch, ABC):
                     parser.add_argument(attr_val.short, flag, **kwargs)
                 else:
                     parser.add_argument(flag, **kwargs)
-
-        parser.add_argument("--run-id", help="The unique execution run ID")
         parser.add_argument(
             "--config",
             help=(
@@ -129,34 +125,6 @@ class TerminalPitch(Pitch, ABC):
             ),
         )
         parsed_args = parser.parse_args()
-
-        run_id = parsed_args.run_id
-        repo = None
-        run = None
-
-        if run_id:
-            from pirlo.core.config import get_workspace_path
-            from pirlo.core.models.run import RunStatus
-            from pirlo.infrastructure.adapters.db.sqlite_run_history_repository import (
-                SqliteRunHistoryRepository,
-            )
-
-            pirlo_workspace = get_workspace_path()
-            db_path = pirlo_workspace / "pirlo.db"
-            try:
-                conn = sqlite3.connect(str(db_path), check_same_thread=False)
-                repo = SqliteRunHistoryRepository(conn)
-                run = repo.get_by_id(run_id)
-                if run:
-                    run.status = RunStatus.STARTED
-                    run.started_at = datetime.now(UTC)
-                    run.updated_at = datetime.now(UTC)
-                    repo.save(run)
-            except Exception as e:  # noqa: BLE001
-                print(
-                    f"Warning: Failed to update run status to STARTED: {e}",
-                    file=sys.stderr,
-                )
 
         config_data = {}
         config_path_str = getattr(parsed_args, "config", None)
@@ -254,11 +222,10 @@ class TerminalPitch(Pitch, ABC):
         instance.task_id = generate_task_id(playbook_name, param_dict)
 
         # Auto-persist per-run parameter snapshot under runs/<run_id>/params.json
+        from pirlo.core.config import get_workspace_path
         from pirlo.core.services.run_id_generator import generate_run_id
 
-        effective_run_id = run_id or generate_run_id(instance.task_id)
-        from pirlo.core.config import get_workspace_path
-
+        effective_run_id = generate_run_id(instance.task_id)
         pirlo_workspace = get_workspace_path()
         run_dir = pirlo_workspace / playbook_name / "runs" / effective_run_id
         instance.run_id = effective_run_id
@@ -274,33 +241,10 @@ class TerminalPitch(Pitch, ABC):
                 file=sys.stderr,
             )
 
-        try:
-            if inspect.iscoroutinefunction(instance.play):
-                asyncio.run(instance.play())
-            else:
-                instance.play()
-        finally:
-            if run_id and run and repo:
-                try:
-                    from pirlo.core.models.run import RunStatus
-
-                    run.status = RunStatus.COMPLETED
-                    run.finished_at = datetime.now(UTC)
-                    run.updated_at = datetime.now(UTC)
-                    repo.save(run)
-                except Exception as e:  # noqa: BLE001
-                    print(
-                        f"Warning: Failed to update run status to COMPLETED: {e}",
-                        file=sys.stderr,
-                    )
-                finally:
-                    try:
-                        repo.conn.close()
-                    except Exception as e:  # noqa: BLE001
-                        print(
-                            f"Warning: Failed to close repository connection: {e}",
-                            file=sys.stderr,
-                        )
+        if inspect.iscoroutinefunction(instance.play):
+            asyncio.run(instance.play())
+        else:
+            instance.play()
 
     # --- Concrete Port Implementations ---
 
