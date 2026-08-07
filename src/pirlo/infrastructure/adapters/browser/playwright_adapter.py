@@ -207,7 +207,7 @@ class PlaywrightAdapter:
                     try:
                         await locator.focus()
                     except Exception as focus_err:
-                        logger.debug(
+                        logger.warning(
                             f"Focus prior to typing failed: {focus_err}",
                             exc_info=True,
                         )
