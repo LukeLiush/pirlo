@@ -250,7 +250,7 @@ class SmartPrefectTaskOrchestrator(TaskOrchestrator):
 
             # 2. Execute Prefect flow under temporary settings
             with temporary_settings(override_settings):
-                return await pirlo_autopass_flow(
+                result = await pirlo_autopass_flow(
                     task_prompt=task_prompt,
                     profile_path=profile_path,
                     headless=headless,
@@ -259,3 +259,9 @@ class SmartPrefectTaskOrchestrator(TaskOrchestrator):
                     run_id=run_id,
                     workspace=workspace,
                 )
+
+        print(
+            f"\n💡 To view detailed inspection & execution history, run:\n"
+            f"   pirlo run show {run_id}"
+        )
+        return result
