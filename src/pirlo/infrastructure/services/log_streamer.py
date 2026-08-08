@@ -8,6 +8,9 @@ from pathlib import Path
 
 from rich.text import Text
 
+# Match both standard ANSI escape codes and orphan color code fragments (e.g. [34m, [35m, [0m)
+ANSI_BRACKET_REGEX = re.compile(r"(\x1b)?\[[0-9;?]*[a-zA-Z]")
+
 
 class StdioTee:
     """Tees stdout/stderr output: sends raw ANSI to terminal, delegates ANSI parsing to Rich for log_file."""
@@ -24,8 +27,9 @@ class StdioTee:
         if not data:
             return
 
-        # Delegate ANSI escape code parsing directly to Rich's built-in parser
-        clean_data = Text.from_ansi(data).plain.replace("\r", "")
+        # Delegate ANSI escape code parsing to Rich + strip orphan bracket color codes (e.g. [34m, [0m)
+        plain_text = Text.from_ansi(data).plain.replace("\r", "")
+        clean_data = ANSI_BRACKET_REGEX.sub("", plain_text)
         lines = clean_data.splitlines()
 
         for raw_line in lines:
