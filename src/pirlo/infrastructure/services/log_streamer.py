@@ -47,27 +47,39 @@ class StdioTee:
 
 @contextmanager
 def capture_run_logs(run_dir: Path, get_prefix_fn=None):
-    """Context manager capturing all stdout/stderr and logging module calls into run_dir/run.log."""
+    """Context manager capturing all stdout/stderr and logging module calls into run_dir/run.log without duplicating terminal output."""
     run_dir.mkdir(parents=True, exist_ok=True)
     log_path = run_dir / "run.log"
+
     with open(log_path, "a", encoding="utf-8") as log_file:
         old_stdout = sys.stdout
         old_stderr = sys.stderr
 
+        # 1. Tee raw print() calls to terminal + run.log
         tee_stdout = StdioTee(old_stdout, log_file, get_prefix_fn=get_prefix_fn)
         tee_stderr = StdioTee(old_stderr, log_file, get_prefix_fn=get_prefix_fn)
 
         sys.stdout = tee_stdout
         sys.stderr = tee_stderr
 
-        # Attach StreamHandler using tee_stdout so logger calls flow through StdioTee
-        stream_handler = logging.StreamHandler(tee_stdout)
+        # 2. Attach FileHandler directly to root and prefect loggers
+        # (Writes directly to run.log file without re-printing to terminal stdout)
+        file_handler = logging.FileHandler(log_path, encoding="utf-8")
+        file_handler.setFormatter(
+            logging.Formatter("[%(asctime)s] [%(name)s] %(message)s")
+        )
+
         root_logger = logging.getLogger()
-        root_logger.addHandler(stream_handler)
+        prefect_logger = logging.getLogger("prefect")
+
+        root_logger.addHandler(file_handler)
+        prefect_logger.addHandler(file_handler)
 
         try:
             yield log_path
         finally:
-            root_logger.removeHandler(stream_handler)
+            root_logger.removeHandler(file_handler)
+            prefect_logger.removeHandler(file_handler)
+            file_handler.close()
             sys.stdout = old_stdout
             sys.stderr = old_stderr
