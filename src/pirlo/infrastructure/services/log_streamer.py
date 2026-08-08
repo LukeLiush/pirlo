@@ -48,12 +48,20 @@ class StdioTee:
 
         now_str = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
         formatted_prefix = f"[{now_str}] {prefix} " if prefix else f"[{now_str}] "
-        self.log_file.write(formatted_prefix + clean_text + "\n")
-        self.log_file.flush()
+        if self.log_file:
+            self.log_file.write(formatted_prefix + clean_text + "\n")
+            self.log_file.flush()
 
     def flush(self):
         self.original_stream.flush()
-        self.log_file.flush()
+        if self.log_file:
+            self.log_file.flush()
+
+    def isatty(self) -> bool:
+        return getattr(self.original_stream, "isatty", lambda: False)()
+
+    def fileno(self) -> int:
+        return self.original_stream.fileno()
 
 
 @contextmanager

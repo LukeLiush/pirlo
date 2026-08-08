@@ -68,7 +68,7 @@ class PrefectProgressListener(ProgressListener):
 
     def __init__(self):
         super().__init__()
-        self.console = Console()
+        self.console = Console(force_terminal=True)
 
     def status_context(self, message: str) -> Status:
         return self.console.status(
