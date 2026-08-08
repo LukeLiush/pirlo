@@ -1,7 +1,6 @@
 from pathlib import Path
-from typing import Any
 
-from pirlo.core.instructions import AutopassInstructions, Instruction
+from pirlo.core.instructions import AutopassInstructions
 from pirlo.core.ports.orchestrator import AutopassExecutionOptions
 from pirlo.core.ports.pitch import LinkParameter, Parameter
 from pirlo.core.services.profile_manager import ProfileManager
@@ -9,13 +8,12 @@ from pirlo.infrastructure.adapters.cli.terminal_pitch import TerminalPitch
 from pirlo.infrastructure.adapters.orchestrator.prefect_orchestrator import (
     SmartPrefectTaskOrchestrator,
 )
-from pirlo.playbooks.autopass.core.ports import ProgressListener
 
 CDP_PORT = 9222
 CDP_URL = f"http://localhost:{CDP_PORT}"
 
 
-class AutopassSession(TerminalPitch, ProgressListener):
+class AutopassSession(TerminalPitch):
     """Run self-healing browser automation workflows."""
 
     profile = Parameter(
@@ -65,25 +63,6 @@ class AutopassSession(TerminalPitch, ProgressListener):
     retry_delay = Parameter(
         int, default=10, help="Retry delay in seconds", env_name="RETRY_DELAY"
     )
-
-    def yellow_card(self, message: str | Instruction, detail: str | None = None):
-        if isinstance(message, Instruction):
-            super().yellow_card(message.message, detail=message.detail)
-        else:
-            super().yellow_card(message, detail=detail)
-
-    # Implement ProgressListener port
-    def status_context(self, message: str) -> Any:
-        return self.status(message)
-
-    def show_warning(self, message: Any, detail: str | None = None) -> None:
-        self.yellow_card(message, detail=detail)
-
-    def show_goal(self, message: str, detail: str | None = None) -> None:
-        self.goal(message, detail=detail)
-
-    def show_red_card(self, message: str, detail: str | None = None) -> None:
-        self.red_card(message, detail=detail)
 
     async def play(self):
         self.header(

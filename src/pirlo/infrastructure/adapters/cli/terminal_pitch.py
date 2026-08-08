@@ -282,8 +282,15 @@ class TerminalPitch(Pitch, ABC):
             text += f"\n[dim]{detail}[/dim]"
         self.console.print(Panel(text, border_style="red", expand=False))
 
-    def yellow_card(self, message: str, detail: str | None = None):
-        text = f"🟨 [bold yellow]YELLOW CARD: {message}[/bold yellow] "
-        if detail:
-            text += f"\n[dim]{detail}[/dim]"
+    def yellow_card(self, message: Any, detail: str | None = None):
+        if hasattr(message, "message"):
+            msg_str = message.message
+            det_str = getattr(message, "detail", detail)
+        else:
+            msg_str = str(message)
+            det_str = detail
+
+        text = f"🟨 [bold yellow]YELLOW CARD: {msg_str}[/bold yellow] "
+        if det_str:
+            text += f"\n[dim]{det_str}[/dim]"
         self.console.print(Panel(text, border_style="yellow", expand=False))
