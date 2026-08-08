@@ -1,23 +1,43 @@
 import logging
+import re
 import sys
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 
+# Match ANSI escape codes (colors, cursor movements, erase line)
+ANSI_REGEX = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]")
+
 
 class StdioTee:
-    """Tees stdout/stderr output to both original stream and a log file with task prefixes."""
+    """Tees stdout/stderr output: sends raw ANSI to terminal, filters ANSI/redraws for log_file."""
 
     def __init__(self, original_stream, log_file, get_prefix_fn=None):
         self.original_stream = original_stream
         self.log_file = log_file
         self.get_prefix_fn = get_prefix_fn
         self._at_line_start = True
+        self._last_logged_status: str | None = None
 
     def write(self, data):
         self.original_stream.write(data)
         if not data:
             return
+
+        # Strip ANSI escape codes and carriage returns for log_file
+        clean_text = ANSI_REGEX.sub("", data).replace("\r", "").strip()
+
+        # Remove Rich spinner frame characters (⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏) if present at line start
+        if clean_text:
+            clean_text = re.sub(r"^[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]\s*", "", clean_text).strip()
+
+        if not clean_text:
+            return  # Skip empty erase/redraw frames
+
+        # Prevent writing duplicate intermediate status updates to run.log
+        if clean_text == self._last_logged_status:
+            return
+        self._last_logged_status = clean_text
 
         prefix = ""
         if self.get_prefix_fn:
@@ -26,18 +46,9 @@ class StdioTee:
             except Exception:  # noqa: BLE001
                 prefix = ""
 
-        lines = data.splitlines(keepends=True)
-        for line in lines:
-            if self._at_line_start and line.strip():
-                now_str = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
-                formatted_prefix = (
-                    f"[{now_str}] {prefix} " if prefix else f"[{now_str}] "
-                )
-                self.log_file.write(formatted_prefix + line)
-            else:
-                self.log_file.write(line)
-            self._at_line_start = line.endswith("\n")
-
+        now_str = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
+        formatted_prefix = f"[{now_str}] {prefix} " if prefix else f"[{now_str}] "
+        self.log_file.write(formatted_prefix + clean_text + "\n")
         self.log_file.flush()
 
     def flush(self):

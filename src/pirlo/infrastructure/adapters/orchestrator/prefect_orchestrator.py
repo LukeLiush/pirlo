@@ -52,7 +52,8 @@ async def preregister_run_task(
     return run
 
 
-from contextlib import contextmanager
+from rich.console import Console
+from rich.status import Status
 
 from pirlo.playbooks.autopass.adapters.browser_manager import CloakBrowserManager
 from pirlo.playbooks.autopass.adapters.cdp_checker import HttpCdpConnectionChecker
@@ -61,21 +62,27 @@ from pirlo.playbooks.autopass.core.use_cases import RunAutopassUseCase
 
 
 class PrefectProgressListener(ProgressListener):
-    """Progress listener for Prefect task execution logs."""
+    """Progress listener for Prefect task execution logs with live Rich spinners."""
 
-    @contextmanager
-    def status_context(self, message: str):
-        print(f"🏃 {message}")
-        yield
+    console: Console
+
+    def __init__(self):
+        super().__init__()
+        self.console = Console()
+
+    def status_context(self, message: str) -> Status:
+        return self.console.status(
+            f"[bold green]🏃 {message}[/bold green]", spinner="dots"
+        )
 
     def show_warning(self, message: Any, detail: str | None = None) -> None:
-        print(f"🟨 {message}: {detail or ''}")
+        self.console.print(f"🟨 [yellow]{message}: {detail or ''}[/yellow]")
 
     def show_goal(self, message: str, detail: str | None = None) -> None:
-        print(f"⚽ {message}: {detail or ''}")
+        self.console.print(f"⚽ [bold green]{message}: {detail or ''}[/bold green]")
 
     def show_red_card(self, message: str, detail: str | None = None) -> None:
-        print(f"🟥 {message}: {detail or ''}")
+        self.console.print(f"🟥 [bold red]{message}: {detail or ''}[/bold red]")
 
 
 @task(name="Self-Healing Autopass Execution Worker")

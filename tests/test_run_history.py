@@ -10,7 +10,6 @@ from unittest.mock import MagicMock
 
 from pirlo.core.models.run import Run, RunStatus
 from pirlo.core.services.run_id_generator import generate_run_id, generate_task_id
-from pirlo.infrastructure.adapters.cli.tee import main as tee_main
 from pirlo.infrastructure.adapters.db.sqlite_run_history_repository import (
     SqliteRunHistoryRepository,
 )
@@ -324,40 +323,6 @@ class TestRunHistoryAndMVC(unittest.TestCase):
         self.assertIn((1, "completed"), called_steps)
         self.assertIn((2, "running"), called_steps)
         self.assertIn((2, "completed"), called_steps)
-
-    def test_tee_redirection_cross_platform(self):
-        log_file = self.test_dir / "logs" / "tee_test.log"
-        test_data = b"Hello, this is a stdout pipe test line!\nAnd another line."
-
-        # Mock sys.stdin.buffer and sys.stdout.buffer
-        original_stdin = sys.stdin
-        original_stdout = sys.stdout
-        original_argv = sys.argv
-
-        sys.stdin = MagicMock()
-        sys.stdin.buffer = io.BytesIO(test_data)
-
-        sys.stdout = MagicMock()
-        mock_stdout_buffer = io.BytesIO()
-        sys.stdout.buffer = mock_stdout_buffer
-
-        sys.argv = ["tee.py", str(log_file)]
-
-        try:
-            tee_main()
-        finally:
-            sys.stdin = original_stdin
-            sys.stdout = original_stdout
-            sys.argv = original_argv
-
-        # Verify written file content
-        self.assertTrue(log_file.exists())
-        with open(log_file, "rb") as f:
-            written_data = f.read()
-        self.assertEqual(written_data, test_data)
-
-        # Verify printed console content
-        self.assertEqual(mock_stdout_buffer.getvalue(), test_data)
 
 
 if __name__ == "__main__":

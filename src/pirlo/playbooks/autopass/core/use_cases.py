@@ -1,17 +1,12 @@
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any
 
+from pirlo.core.services import WorkflowRunner
 from pirlo.playbooks.autopass.core.ports import (
     BrowserManager,
     CdpChecker,
     ProgressListener,
 )
-
-
-class WorkflowRunnerProtocol(Protocol):
-    """Protocol for workflow execution runners."""
-
-    async def run(self, task_prompt: str) -> Any: ...
 
 
 class RunAutopassUseCase:
@@ -21,7 +16,7 @@ class RunAutopassUseCase:
         self,
         browser_manager: BrowserManager,
         cdp_checker: CdpChecker,
-        workflow_runner: WorkflowRunnerProtocol,
+        workflow_runner: WorkflowRunner,
     ):
         self.browser_manager = browser_manager
         self.cdp_checker = cdp_checker

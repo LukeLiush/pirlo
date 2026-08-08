@@ -28,7 +28,7 @@ class ProgressListener(ABC):
     """Port for presenting status updates and notifications to the user."""
 
     @abstractmethod
-    def status_context(self, message: str) -> AbstractContextManager[None]:
+    def status_context(self, message: str) -> AbstractContextManager[Any]:
         """A context manager displaying a pending/loading status message."""
 
     @abstractmethod
