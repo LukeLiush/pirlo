@@ -65,7 +65,7 @@ class PrefectProgressListener(ProgressListener):
 
     @contextmanager
     def status_context(self, message: str):
-        print(f"[Pirlo] {message}")
+        print(f"[🏃] {message}")
         yield
 
     def show_warning(self, message: Any, detail: str | None = None) -> None:
