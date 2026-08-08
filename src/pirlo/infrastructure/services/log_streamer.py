@@ -5,8 +5,8 @@ from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 
-# Match all ANSI escape codes (colors, cursor movements [?25l/[?25h, erase line)
-ANSI_REGEX = re.compile(r"\x1b(?:[@-Z\\-_]|\[[0-9?]*[ -/]*[@-~])")
+# Match all ANSI escape codes (colors [1;32m, cursor movements [?25l/[?25h, erase line)
+ANSI_REGEX = re.compile(r"\x1b\[[0-9;?]*[a-zA-Z]|\x1b[()]?[a-zA-Z0-9]|\x1b.")
 
 
 class StdioTee:
