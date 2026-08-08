@@ -6,12 +6,11 @@ from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 
-# Match all ANSI escape codes (colors [1;32m, cursor movements [?25l/[?25h, erase line)
-ANSI_REGEX = re.compile(r"\x1b\[[0-9;?]*[a-zA-Z]|\x1b[()]?[a-zA-Z0-9]|\x1b.")
+from rich.text import Text
 
 
 class StdioTee:
-    """Tees stdout/stderr output: sends raw ANSI to terminal, filters ANSI/redraws for log_file."""
+    """Tees stdout/stderr output: sends raw ANSI to terminal, delegates ANSI parsing to Rich for log_file."""
 
     def __init__(self, original_stream, log_file, get_prefix_fn=None):
         self.original_stream = original_stream
@@ -25,8 +24,8 @@ class StdioTee:
         if not data:
             return
 
-        # Strip ANSI escape codes (colors, cursor hide/show [?25l/[?25h, erase line)
-        clean_data = ANSI_REGEX.sub("", data).replace("\r", "")
+        # Delegate ANSI escape code parsing directly to Rich's built-in parser
+        clean_data = Text.from_ansi(data).plain.replace("\r", "")
         lines = clean_data.splitlines()
 
         for raw_line in lines:
