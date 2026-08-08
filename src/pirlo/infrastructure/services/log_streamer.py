@@ -62,24 +62,20 @@ def capture_run_logs(run_dir: Path, get_prefix_fn=None):
         sys.stdout = tee_stdout
         sys.stderr = tee_stderr
 
-        # 2. Attach FileHandler directly to root and prefect loggers
-        # (Writes directly to run.log file without re-printing to terminal stdout)
+        # 2. Attach FileHandler directly to root_logger
+        # (All child loggers including prefect propagate up to root_logger)
         file_handler = logging.FileHandler(log_path, encoding="utf-8")
         file_handler.setFormatter(
             logging.Formatter("[%(asctime)s] [%(name)s] %(message)s")
         )
 
         root_logger = logging.getLogger()
-        prefect_logger = logging.getLogger("prefect")
-
         root_logger.addHandler(file_handler)
-        prefect_logger.addHandler(file_handler)
 
         try:
             yield log_path
         finally:
             root_logger.removeHandler(file_handler)
-            prefect_logger.removeHandler(file_handler)
             file_handler.close()
             sys.stdout = old_stdout
             sys.stderr = old_stderr
