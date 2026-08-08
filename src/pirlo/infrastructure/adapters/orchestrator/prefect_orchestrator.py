@@ -65,17 +65,17 @@ class PrefectProgressListener(ProgressListener):
 
     @contextmanager
     def status_context(self, message: str):
-        print(f"[Prefect Status] {message}")
+        print(f"[Pirlo] {message}")
         yield
 
     def show_warning(self, message: Any, detail: str | None = None) -> None:
-        print(f"[Prefect Warning] {message}: {detail or ''}")
+        print(f"[Warning 🟨] {message}: {detail or ''}")
 
     def show_goal(self, message: str, detail: str | None = None) -> None:
-        print(f"[Prefect Goal] {message}: {detail or ''}")
+        print(f"[Goal ⚽] {message}: {detail or ''}")
 
     def show_red_card(self, message: str, detail: str | None = None) -> None:
-        print(f"[Prefect Error] {message}: {detail or ''}")
+        print(f"[Failure 🟥] {message}: {detail or ''}")
 
 
 @task(name="Self-Healing Autopass Execution Worker")
