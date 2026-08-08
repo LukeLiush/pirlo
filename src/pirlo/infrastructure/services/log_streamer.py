@@ -1,6 +1,7 @@
 import logging
 import re
 import sys
+import time
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
@@ -82,9 +83,11 @@ def capture_run_logs(run_dir: Path, get_prefix_fn=None):
         # 2. Attach FileHandler directly to root_logger
         # (All child loggers including prefect propagate up to root_logger)
         file_handler = logging.FileHandler(log_path, encoding="utf-8")
-        file_handler.setFormatter(
-            logging.Formatter("[%(asctime)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+        formatter = logging.Formatter(
+            "[%(asctime)s UTC] %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
         )
+        formatter.converter = time.gmtime
+        file_handler.setFormatter(formatter)
 
         root_logger = logging.getLogger()
         root_logger.addHandler(file_handler)
