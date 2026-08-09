@@ -221,11 +221,13 @@ class SmartPrefectTaskOrchestrator(TaskOrchestrator):
             else getattr(pitch, "name", "autopass")
         )
 
+        from pirlo.core.services.schedule_resolver import ScheduleResolver
+
         run_dir = getattr(pitch, "run_dir", None) or (
             workspace / pitch_name / "runs" / pitch.run_id
         )
         run_id = pitch.run_id
-        cron_schedule = getattr(pitch, "cron", None)
+        cron_schedule = ScheduleResolver.resolve(getattr(pitch, "schedule", None))
 
         def get_active_task_prefix() -> str:
             with contextlib.suppress(Exception):
@@ -256,9 +258,10 @@ class SmartPrefectTaskOrchestrator(TaskOrchestrator):
             if cron_schedule:
                 if not active_api_url:
                     raise RuntimeError(
-                        "⚠️ Prefect Server is required for --cron schedules. "
+                        "⚠️ Prefect Server is required for --schedule. "
                         "Please start a local server with 'prefect server start' or configure PREFECT_API_URL."
                     )
+
                 from prefect.client.schemas.schedules import CronSchedule
 
                 web_ui_base = active_api_url.rstrip("/").replace("/api", "")

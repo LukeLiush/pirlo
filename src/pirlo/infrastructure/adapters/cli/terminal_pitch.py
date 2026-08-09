@@ -73,6 +73,17 @@ def convert_value(val: Any, type_func: Callable) -> Any:
 class TerminalPitch(Pitch, ABC):
     """Concrete adapter of Pitch for Terminal screens."""
 
+    schedule = Parameter(
+        str,
+        default=None,
+        help=(
+            "Optional schedule preset ('hourly', 'daily', 'weekly', 'monthly') "
+            "or raw 5-field cron expression (e.g. '0 9 * * *' or '*/15 * * * *')"
+        ),
+        env_name="SCHEDULE",
+        short="-s",
+    )
+
     def __init__(self):
         super().__init__()
         self.console = Console()

@@ -95,7 +95,7 @@ async def test_cron_schedule_requires_active_server(tmp_path, monkeypatch):
 
     pitch = DummyPitch()
     pitch.run_id = "cron-test-1"
-    pitch.cron = "0 9 * * *"
+    pitch.schedule = "daily"
 
     orchestrator = SmartPrefectTaskOrchestrator(server_url=None)
 
@@ -104,9 +104,7 @@ async def test_cron_schedule_requires_active_server(tmp_path, monkeypatch):
             "pirlo.infrastructure.adapters.orchestrator.prefect_orchestrator.discover_prefect_server_url",
             return_value=None,
         ),
-        pytest.raises(
-            RuntimeError, match="Prefect Server is required for --cron schedules"
-        ),
+        pytest.raises(RuntimeError, match="Prefect Server is required for --schedule"),
     ):
         await orchestrator.execute(
             pitch,
@@ -122,7 +120,7 @@ async def test_cron_schedule_creates_deployment_when_server_active(
 
     pitch = DummyPitch()
     pitch.run_id = "cron-test-2"
-    pitch.cron = "0 9 * * *"
+    pitch.schedule = "daily"
 
     orchestrator = SmartPrefectTaskOrchestrator(
         server_url="http://localhost:4200/api", work_pool="test-pool"

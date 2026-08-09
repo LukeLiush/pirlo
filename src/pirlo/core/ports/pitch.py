@@ -54,7 +54,7 @@ class Pitch(ABC):
 
     name: str = "playbook"
     run_id: str = "run"
-    cron: str | None = None
+    schedule: str | None = None
 
     def __init__(self):
         self._parsed_options: dict[str, Any] = {}

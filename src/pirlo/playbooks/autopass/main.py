@@ -64,12 +64,7 @@ class AutopassSession(TerminalPitch):
     retry_delay = Parameter(
         int, default=10, help="Retry delay in seconds", env_name="RETRY_DELAY"
     )
-    cron = Parameter(
-        str,
-        default=None,
-        help="Optional cron schedule expression (e.g. '0 9 * * *')",
-        env_name="CRON",
-    )
+
     orchestrator = Parameter(
         str,
         default="prefect",
@@ -165,7 +160,7 @@ class AutopassSession(TerminalPitch):
                 ["Vision Enabled", str(self.use_vision)],
                 ["Max Failures / Delay", f"{self.max_failures} / {self.retry_delay}s"],
                 ["Orchestrator Backend", getattr(self, "orchestrator", "prefect")],
-                ["Cron Schedule", self.cron or "None (Immediate)"],
+                ["Schedule", self.schedule or "None (Immediate)"],
             ],
         )
 
@@ -176,7 +171,7 @@ class AutopassSession(TerminalPitch):
             max_failures=self.max_failures,
             retry_delay=self.retry_delay,
             generate_gif=getattr(self, "generate_gif", False),
-            cron=self.cron,
+            cron=self.schedule,
         )
 
         from pirlo.infrastructure.adapters.orchestrator.factory import (
