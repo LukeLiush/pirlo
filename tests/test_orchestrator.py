@@ -3,9 +3,8 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from pirlo.core.models.link import LlmLink
 from pirlo.core.models.run import RunStatus
-from pirlo.core.ports.orchestrator import AutopassExecutionOptions
+from pirlo.infrastructure.adapters.cli.terminal_pitch import TerminalPitch
 from pirlo.infrastructure.adapters.db.sqlite_run_history_repository import (
     SqliteRunHistoryRepository,
 )
@@ -14,34 +13,28 @@ from pirlo.infrastructure.adapters.orchestrator.prefect_orchestrator import (
 )
 
 
+class DummyAutopassPitch(TerminalPitch):
+    """Mock Autopass pitch for testing."""
+
+    task = "Search Google for OpenAI"
+
+    def _resolve_playbook_name(self) -> str:
+        return "autopass"
+
+    async def play(self):
+        pass
+
+
 @pytest.mark.anyio
 async def test_smart_prefect_orchestrator_execution(tmp_path, monkeypatch):
     monkeypatch.setenv("PIRLO_WORKSPACE", str(tmp_path))
 
-    playmaker = LlmLink(
-        name="qwen-main",
-        provider="openai",
-        model="qwen-max",
-        api_key="mock-key",
-        base_url="http://mock",
-    )
-    analyst = LlmLink(
-        name="qwen-analyst",
-        provider="openai",
-        model="qwen-turbo",
-        api_key="mock-key",
-        base_url="http://mock",
-    )
-
-    options = AutopassExecutionOptions(
-        playmaker=playmaker,
-        analyst=analyst,
-        use_vision=False,
-        max_failures=3,
-        retry_delay=5,
-    )
+    pitch = DummyAutopassPitch()
+    pitch.run_id = "test-run-12345"
 
     orchestrator = SmartPrefectTaskOrchestrator()
+
+    mock_worker = AsyncMock(return_value="Automation successful!")
 
     from prefect.testing.utilities import prefect_test_harness
 
@@ -51,19 +44,10 @@ async def test_smart_prefect_orchestrator_execution(tmp_path, monkeypatch):
             "pirlo.infrastructure.adapters.orchestrator.prefect_orchestrator.discover_prefect_server_url",
             return_value=None,
         ),
-        patch(
-            "pirlo.infrastructure.adapters.orchestrator.prefect_orchestrator.run_self_healing_worker_task",
-            new_callable=AsyncMock,
-            return_value="Automation successful!",
-        ),
     ):
         result = await orchestrator.execute(
-            task_prompt="Search Google for OpenAI",
-            profile_path=tmp_path / "profiles" / "default",
-            options=options,
-            run_id="test-run-12345",
-            headless=True,
-            cdp_port=9222,
+            pitch,
+            worker_fn=mock_worker,
         )
 
         assert result == "Automation successful!"
@@ -81,6 +65,7 @@ async def test_smart_prefect_orchestrator_execution(tmp_path, monkeypatch):
     log_file = run_dir / "run.log"
     assert log_file.exists()
     log_content = log_file.read_text(encoding="utf-8")
+
     assert "Running in Prefect Ephemeral Mode" in log_content
 
     conn.close()

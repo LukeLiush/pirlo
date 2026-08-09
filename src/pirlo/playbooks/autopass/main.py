@@ -6,10 +6,11 @@ from pirlo.core.ports.pitch import LinkParameter, Parameter
 from pirlo.core.services.profile_manager import ProfileManager
 from pirlo.infrastructure.adapters.cli.terminal_pitch import TerminalPitch
 from pirlo.infrastructure.adapters.orchestrator.prefect_orchestrator import (
-    SmartPrefectTaskOrchestrator,
+    run_self_healing_worker_task,
 )
 
 CDP_PORT = 9222
+
 CDP_URL = f"http://localhost:{CDP_PORT}"
 
 
@@ -62,6 +63,30 @@ class AutopassSession(TerminalPitch):
     )
     retry_delay = Parameter(
         int, default=10, help="Retry delay in seconds", env_name="RETRY_DELAY"
+    )
+    cron = Parameter(
+        str,
+        default=None,
+        help="Optional cron schedule expression (e.g. '0 9 * * *')",
+        env_name="CRON",
+    )
+    orchestrator = Parameter(
+        str,
+        default="prefect",
+        help="Orchestrator backend engine name (default: 'prefect')",
+        env_name="ORCHESTRATOR",
+    )
+    server_url = Parameter(
+        str,
+        default=None,
+        help="Orchestrator server API URL override",
+        env_name="SERVER_URL",
+    )
+    work_pool = Parameter(
+        str,
+        default=None,
+        help="Orchestrator work pool override",
+        env_name="WORK_POOL",
     )
 
     async def play(self):
@@ -139,6 +164,8 @@ class AutopassSession(TerminalPitch):
                 ["Analyst Base URL", an_base_url or "N/A"],
                 ["Vision Enabled", str(self.use_vision)],
                 ["Max Failures / Delay", f"{self.max_failures} / {self.retry_delay}s"],
+                ["Orchestrator Backend", getattr(self, "orchestrator", "prefect")],
+                ["Cron Schedule", self.cron or "None (Immediate)"],
             ],
         )
 
@@ -149,16 +176,28 @@ class AutopassSession(TerminalPitch):
             max_failures=self.max_failures,
             retry_delay=self.retry_delay,
             generate_gif=getattr(self, "generate_gif", False),
+            cron=self.cron,
         )
 
-        orchestrator = SmartPrefectTaskOrchestrator()
+        from pirlo.infrastructure.adapters.orchestrator.factory import (
+            OrchestratorFactory,
+        )
+
+        orchestrator = OrchestratorFactory.create(
+            name=getattr(self, "orchestrator", "prefect"),
+            server_url=getattr(self, "server_url", None),
+            work_pool=getattr(self, "work_pool", None),
+        )
         await orchestrator.execute(
-            task_prompt=self.task,
-            profile_path=profile_path,
-            options=options,
-            run_id=self.run_id,
-            headless=self.headless,
-            cdp_port=CDP_PORT,
+            self,
+            worker_fn=lambda: run_self_healing_worker_task(
+                task_prompt=self.task,
+                profile_path=profile_path,
+                headless=self.headless,
+                cdp_port=CDP_PORT,
+                options=options,
+                run_dir=self.run_dir,
+            ),
         )
 
 

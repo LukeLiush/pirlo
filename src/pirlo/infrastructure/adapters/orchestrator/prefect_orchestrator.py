@@ -1,5 +1,7 @@
 import contextlib
+import inspect
 import sqlite3
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -10,6 +12,7 @@ from pirlo.core.config import get_workspace_path
 from pirlo.core.models.browser_config import BrowserConfig
 from pirlo.core.models.run import Run, RunStatus
 from pirlo.core.ports.orchestrator import AutopassExecutionOptions, TaskOrchestrator
+from pirlo.core.ports.pitch import Pitch
 from pirlo.core.services.run_id_generator import generate_task_id
 from pirlo.infrastructure.adapters.browser.browser_agent_factory import (
     DefaultBrowserAgentFactory,
@@ -167,32 +170,28 @@ async def finalize_run_task(workspace: Path, run_id: str, status: RunStatus):
     conn.close()
 
 
-@flow(name="Pirlo Autopass Prefect Flow")
-async def pirlo_autopass_flow(
-    task_prompt: str,
-    profile_path: Path,
-    headless: bool,
-    cdp_port: int,
-    options: AutopassExecutionOptions,
-    run_id: str,
+@flow(name="Pirlo Generic Flow")
+async def pirlo_generic_flow(
     workspace: Path,
+    pitch_name: str,
+    run_id: str,
+    worker_fn: Callable[[], Any],
 ) -> Any:
-    task_id = generate_task_id("autopass", {"task": task_prompt})
+    task_id = generate_task_id(pitch_name, {"run_id": run_id})
 
-    # 1. Pre-register run in DB
-    await preregister_run_task(workspace, "autopass", task_id, run_id)
+    @task(name=f"Worker: {pitch_name} ({run_id})")
+    async def prefect_worker():
+        res = worker_fn()
+        if inspect.isawaitable(res):
+            return await res
+        return res
 
+    await preregister_run_task(workspace, pitch_name, task_id, run_id)
     try:
-        # 2. Directly execute SelfHealingRunner worker task
-        run_dir = workspace / "autopass" / "runs" / run_id
-        result = await run_self_healing_worker_task(
-            task_prompt, profile_path, headless, cdp_port, options, run_dir
-        )
-        # 3. Mark COMPLETED
+        result = await prefect_worker()
         await finalize_run_task(workspace, run_id, RunStatus.COMPLETED)
         return result
     except Exception:
-        # 4. Mark FAILED
         await finalize_run_task(workspace, run_id, RunStatus.FAILED)
         raise
 
@@ -203,19 +202,30 @@ class SmartPrefectTaskOrchestrator(TaskOrchestrator):
     - Auto-discovers active local Prefect server & occupied ports.
     - Prints live Web UI link if server is active.
     - Seamlessly falls back to Ephemeral Engine Mode if no server is running.
+    - Supports recurring schedule deployment via --cron option.
     """
+
+    def __init__(self, server_url: str | None = None, work_pool: str | None = None):
+        self.server_url = server_url
+        self.work_pool = work_pool
 
     async def execute(
         self,
-        task_prompt: str,
-        profile_path: Path,
-        options: AutopassExecutionOptions,
-        run_id: str,
-        headless: bool = False,
-        cdp_port: int = 9222,
+        pitch: Pitch,
+        worker_fn: Callable[[], Any],
     ) -> Any:
         workspace = get_workspace_path()
-        run_dir = workspace / "autopass" / "runs" / run_id
+        pitch_name = (
+            pitch._resolve_playbook_name()
+            if hasattr(pitch, "_resolve_playbook_name")
+            else getattr(pitch, "name", "autopass")
+        )
+
+        run_dir = getattr(pitch, "run_dir", None) or (
+            workspace / pitch_name / "runs" / pitch.run_id
+        )
+        run_id = pitch.run_id
+        cron_schedule = getattr(pitch, "cron", None)
 
         def get_active_task_prefix() -> str:
             with contextlib.suppress(Exception):
@@ -229,7 +239,7 @@ class SmartPrefectTaskOrchestrator(TaskOrchestrator):
                     return f"[{task_name}]"
                 if hasattr(ctx, "flow_run") and ctx.flow_run:
                     return f"[{ctx.flow_run.name}]"
-            return "[Autopass Flow]"
+            return f"[{pitch_name.capitalize()} Flow]"
 
         from prefect.settings import (
             PREFECT_API_URL,
@@ -240,8 +250,32 @@ class SmartPrefectTaskOrchestrator(TaskOrchestrator):
         from pirlo.infrastructure.services.log_streamer import capture_run_logs
 
         with capture_run_logs(run_dir, get_prefix_fn=get_active_task_prefix):
-            # 1. Discover active Prefect server URL
-            active_api_url = discover_prefect_server_url()
+            # 1. Discover or resolve active Prefect server URL
+            active_api_url = self.server_url or discover_prefect_server_url()
+
+            if cron_schedule:
+                if not active_api_url:
+                    raise RuntimeError(
+                        "⚠️ Prefect Server is required for --cron schedules. "
+                        "Please start a local server with 'prefect server start' or configure PREFECT_API_URL."
+                    )
+                from prefect.client.schemas.schedules import CronSchedule
+
+                web_ui_base = active_api_url.rstrip("/").replace("/api", "")
+                print(f"⏰ Scheduling Prefect Flow with cron: '{cron_schedule}'")
+                print(f"🌐 Prefect Server Detected: {web_ui_base}")
+
+                schedule = CronSchedule(cron=cron_schedule, timezone="UTC")
+                deployment = await pirlo_generic_flow.to_deployment(  # type: ignore[misc]
+                    name=f"pirlo-scheduled-{run_id}",
+                    schedule=schedule,  # type: ignore[arg-type]
+                    work_pool_name=self.work_pool,
+                )
+
+                print(
+                    f"✅ Created scheduled Prefect deployment: pirlo-scheduled-{run_id}"
+                )
+                return deployment
 
             override_settings: dict[Any, Any]
             if active_api_url:
@@ -257,14 +291,11 @@ class SmartPrefectTaskOrchestrator(TaskOrchestrator):
 
             # 2. Execute Prefect flow under temporary settings
             with temporary_settings(override_settings):
-                result = await pirlo_autopass_flow(
-                    task_prompt=task_prompt,
-                    profile_path=profile_path,
-                    headless=headless,
-                    cdp_port=cdp_port,
-                    options=options,
-                    run_id=run_id,
+                result = await pirlo_generic_flow(
                     workspace=workspace,
+                    pitch_name=pitch_name,
+                    run_id=run_id,
+                    worker_fn=worker_fn,
                 )
 
         print(

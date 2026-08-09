@@ -1,10 +1,11 @@
 from abc import ABC, abstractmethod
-from pathlib import Path
+from collections.abc import Callable
 from typing import Any
 
 from pydantic import BaseModel, Field
 
 from pirlo.core.models.link import LlmLink
+from pirlo.core.ports.pitch import Pitch
 
 
 class AutopassExecutionOptions(BaseModel):
@@ -22,6 +23,10 @@ class AutopassExecutionOptions(BaseModel):
     generate_gif: bool = Field(
         default=False, description="Generate execution GIF artifact"
     )
+    cron: str | None = Field(
+        default=None,
+        description="Optional cron schedule expression (e.g. '0 9 * * *')",
+    )
 
 
 class TaskOrchestrator(ABC):
@@ -30,15 +35,10 @@ class TaskOrchestrator(ABC):
     @abstractmethod
     async def execute(
         self,
-        task_prompt: str,
-        profile_path: Path,
-        options: AutopassExecutionOptions,
-        run_id: str,
-        headless: bool = False,
-        cdp_port: int = 9222,
+        pitch: Pitch,
+        worker_fn: Callable[[], Any],
     ) -> Any:
         """
         Executes an orchestrated workflow.
-        Generates and pre-registers run_id in pirlo.db (status = STARTED),
-        delegates to SelfHealingRunner, and updates DB on completion.
+        Wraps pitch worker_fn in orchestration context (status tracking, logging, cron schedules).
         """

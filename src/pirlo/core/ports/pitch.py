@@ -52,9 +52,14 @@ class LinkParameter(Parameter):
 class Pitch(ABC):
     """Abstract Port representing the presentation canvas."""
 
+    name: str = "playbook"
+    run_id: str = "run"
+    cron: str | None = None
+
     def __init__(self):
         self._parsed_options: dict[str, Any] = {}
         self.task_id: str | None = None
+        self.run_dir: Any = None
 
     @abstractmethod
     async def play(self):

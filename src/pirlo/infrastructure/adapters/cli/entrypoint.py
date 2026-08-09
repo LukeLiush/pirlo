@@ -123,8 +123,15 @@ def main():
             sys.exit(1)
         sys.exit(0)
 
-    if command in playbooks:
-        entrypoint = playbooks[command]
+    # Check for pirlo <orchestrator> <playbook> syntax (e.g. pirlo prefect autopass)
+    target_playbook = command
+    orchestrator_arg = None
+    if len(sys.argv) >= 3 and sys.argv[2] in playbooks:
+        orchestrator_arg = sys.argv[1]
+        target_playbook = sys.argv[2]
+
+    if target_playbook in playbooks:
+        entrypoint = playbooks[target_playbook]
         try:
             module_name, class_name = entrypoint.split(":")
             # Ensure src/ and current directory are in sys.path so the local playbook package can be resolved
@@ -138,15 +145,22 @@ def main():
             module = importlib.import_module(module_name)
             session_cls = getattr(module, class_name)
 
-            # Reconstruct sys.argv for the subcommand
-            # e.g., ['pirlo', 'login', '--profile', 'x'] -> ['pirlo login', '--profile', 'x']
-            sys.argv = [f"pirlo {command}"] + sys.argv[2:]
+            # Reconstruct sys.argv for the playbook subcommand
+            if orchestrator_arg:
+                # e.g., ['pirlo', 'prefect', 'autopass', '--task', 'x'] -> ['pirlo autopass', '--orchestrator', 'prefect', '--task', 'x']
+                sys.argv = [
+                    f"pirlo {target_playbook}",
+                    "--orchestrator",
+                    orchestrator_arg,
+                ] + sys.argv[3:]
+            else:
+                sys.argv = [f"pirlo {target_playbook}"] + sys.argv[2:]
 
             # Call the TerminalPitch cli runner
             session_cls.cli()
         except Exception as e:  # noqa: BLE001
             print(
-                f"Error: Failed to load playbook '{command}' ({entrypoint}): {e}",
+                f"Error: Failed to load playbook '{target_playbook}' ({entrypoint}): {e}",
                 file=sys.stderr,
             )
             import traceback
