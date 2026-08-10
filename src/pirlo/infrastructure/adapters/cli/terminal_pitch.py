@@ -16,6 +16,7 @@ from rich.table import Table
 
 from pirlo.core.models.run_result import RunResult
 from pirlo.core.ports.pitch import LinkParameter, Parameter, Pitch
+from pirlo.core.services.run_id_generator import generate_run_name
 
 
 def extract_raw_arguments_excluding_command(
@@ -155,7 +156,6 @@ class TerminalPitch(Pitch, ABC):
     @property
     def run_name(self) -> str:
         """Computes deterministic run_name on demand purely from domain options."""
-        from pirlo.core.services.run_id_generator import generate_run_name
 
         return generate_run_name(
             self._resolve_playbook_name(), self._build_param_dict()
