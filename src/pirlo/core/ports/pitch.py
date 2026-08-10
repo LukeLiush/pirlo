@@ -68,6 +68,7 @@ class Pitch(ABC):
     @abstractmethod
     def run_id(self) -> str:
         """Unique execution instance ID."""
+
     @property
     @abstractmethod
     def domain_options(self) -> dict[str, Any]:
