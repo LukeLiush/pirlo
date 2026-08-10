@@ -108,23 +108,39 @@ def main():
 
     command = sys.argv[1]
 
-    # Quick dispatch for build-in non-playbook subcommands (e.g. link, run)
-    if command in ("link", "run"):
+    # Quick dispatch for built-in non-playbook subcommands (e.g. link, profile, run)
+    if command in ("link", "profile", "run"):
         if command == "link":
-            from pirlo.infrastructure.adapters.cli.link_cli import handle_link_command
+            from pirlo.infrastructure.adapters.cli.link_commands import (
+                link_main,
+            )
 
             try:
-                handle_link_command(sys.argv[2:])
+                link_main()
+            except Exception as e:  # noqa: BLE001
+                print(f"Error: {e}", file=sys.stderr)
+                sys.exit(1)
+            sys.exit(0)
+
+        if command == "profile":
+            from pirlo.infrastructure.adapters.cli.profile_commands import (
+                profile_main,
+            )
+
+            try:
+                profile_main()
             except Exception as e:  # noqa: BLE001
                 print(f"Error: {e}", file=sys.stderr)
                 sys.exit(1)
             sys.exit(0)
 
         if command == "run":
-            from pirlo.infrastructure.adapters.cli.run_cli import handle_run_command
+            from pirlo.infrastructure.adapters.cli.run_commands import (
+                run_main,
+            )
 
             try:
-                handle_run_command(sys.argv[2:])
+                run_main()
             except Exception as e:  # noqa: BLE001
                 print(f"Error: {e}", file=sys.stderr)
                 sys.exit(1)
