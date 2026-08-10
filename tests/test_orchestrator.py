@@ -1,9 +1,11 @@
 import sqlite3
+from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from pirlo.core.models.run import RunStatus
+from pirlo.core.models.run_result import RunResult
 from pirlo.infrastructure.adapters.cli.terminal_pitch import TerminalPitch
 from pirlo.infrastructure.adapters.db.sqlite_run_history_repository import (
     SqliteRunHistoryRepository,
@@ -21,8 +23,8 @@ class DummyAutopassPitch(TerminalPitch):
     def _resolve_playbook_name(self) -> str:
         return "autopass"
 
-    async def play(self):
-        pass
+    async def on_play(self) -> RunResult[Any]:
+        return RunResult(run_id=self.run_id)
 
 
 @pytest.mark.anyio
@@ -69,3 +71,20 @@ async def test_smart_prefect_orchestrator_execution(tmp_path, monkeypatch):
     assert "Running in Prefect Ephemeral Mode" in log_content
 
     conn.close()
+
+
+def test_parse_cli_options_direct_contract():
+    options = SmartPrefectTaskOrchestrator.parse_cli_options(
+        playbook_name="autopass",
+        orchestrator_flags=[
+            "--server-url",
+            "http://localhost:4200/api",
+            "--work-pool",
+            "my-pool",
+        ],
+    )
+
+    assert options == {
+        "server_url": "http://localhost:4200/api",
+        "work_pool": "my-pool",
+    }

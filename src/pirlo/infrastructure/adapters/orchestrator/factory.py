@@ -18,6 +18,12 @@ class OrchestratorFactory:
     }
 
     @classmethod
+    def list_orchestrators(cls) -> dict[str, type[TaskOrchestrator]]:
+        """Returns dict of all registered orchestrator adapter classes."""
+        cls._discover_plugins()
+        return dict(cls._registry)
+
+    @classmethod
     def register(cls, name: str, orchestrator_cls: type[TaskOrchestrator]) -> None:
         """Allows external plugins to register orchestrators dynamically."""
         cls._registry[name.lower()] = orchestrator_cls

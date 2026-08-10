@@ -3,7 +3,9 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Any
 
+from pirlo.core.models.run_result import RunResult
 from pirlo.core.ports.pitch import Parameter
 from pirlo.infrastructure.adapters.cli.terminal_pitch import TerminalPitch
 
@@ -21,9 +23,8 @@ class DummyResolutionSession(TerminalPitch):
         str, default="default-multi", env_name=["TEST_KEY_A", "TEST_KEY_B"]
     )
 
-    async def play(self):
-        # No-op for test validation
-        pass
+    async def on_play(self) -> RunResult[Any]:
+        return RunResult(run_id=self.run_id)
 
 
 class TestParameterResolution(unittest.TestCase):

@@ -12,7 +12,7 @@ from pirlo.core.config import get_workspace_path
 from pirlo.core.models.browser_config import BrowserConfig
 from pirlo.core.models.run import Run, RunStatus
 from pirlo.core.ports.orchestrator import AutopassExecutionOptions, TaskOrchestrator
-from pirlo.core.ports.pitch import Pitch
+from pirlo.core.ports.pitch import Parameter, Pitch
 from pirlo.core.services.run_id_generator import generate_task_id
 from pirlo.infrastructure.adapters.browser.browser_agent_factory import (
     DefaultBrowserAgentFactory,
@@ -202,8 +202,23 @@ class SmartPrefectTaskOrchestrator(TaskOrchestrator):
     - Auto-discovers active local Prefect server & occupied ports.
     - Prints live Web UI link if server is active.
     - Seamlessly falls back to Ephemeral Engine Mode if no server is running.
-    - Supports recurring schedule deployment via --cron option.
+    - Supports recurring schedule deployment via --schedule option.
     """
+
+    name = "prefect"
+
+    server_url = Parameter(
+        str,
+        default=None,
+        help="Prefect Server API endpoint URL (e.g. http://localhost:4200/api)",
+        env_name="SERVER_URL",
+    )
+    work_pool = Parameter(
+        str,
+        default=None,
+        help="Prefect work pool name for scheduled deployments",
+        env_name="WORK_POOL",
+    )
 
     def __init__(self, server_url: str | None = None, work_pool: str | None = None):
         self.server_url = server_url

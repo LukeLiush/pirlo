@@ -14,7 +14,40 @@ from rich.panel import Panel
 from rich.status import Status
 from rich.table import Table
 
+from pirlo.core.models.run_result import RunResult
 from pirlo.core.ports.pitch import LinkParameter, Parameter, Pitch
+
+
+def extract_raw_arguments_excluding_command(
+    sys_argv: list[str], playbook_name: str
+) -> list[str]:
+    """
+    Strips binary and playbook command names from sys.argv.
+
+    Examples:
+      ['pirlo', 'autopass', '--task', 'x'] -> ['--task', 'x']
+      ['pirlo autopass', '--task', 'x']    -> ['--task', 'x']
+      ['pirlo', 'autopass', '--', 'prefect', '-h'] -> ['--', 'prefect', '-h']
+    """
+    raw_args = sys_argv[1:]
+    if raw_args and raw_args[0] == playbook_name:
+        raw_args = raw_args[1:]
+    return raw_args
+
+
+def ensure_canonical_orchestrator_delimiter(
+    raw_arguments: list[str], default_orchestrator_name: str = "prefect"
+) -> list[str]:
+    """
+    Ensures '-- <default_orchestrator_name>' is attached to raw CLI arguments if '--' is omitted.
+
+    Examples:
+      ['--task', 'Search'] -> ['--task', 'Search', '--', 'prefect']
+      ['--task', 'Search', '--', 'prefect'] -> unchanged
+    """
+    if "--" not in raw_arguments:
+        return raw_arguments + ["--", default_orchestrator_name]
+    return raw_arguments
 
 
 def convert_value(val: Any, type_func: Callable) -> Any:
@@ -38,8 +71,6 @@ def convert_value(val: Any, type_func: Callable) -> Any:
                         f"Warning: Failed to decode list parameter as JSON: {e}\n"
                     )
             # Fall back to comma-separated split
-            if not val.strip():
-                return []
             return [convert_value(item.strip(), item_type) for item in val.split(",")]
         elif isinstance(val, list):
             return [convert_value(item, item_type) for item in val]
@@ -60,9 +91,14 @@ def convert_value(val: Any, type_func: Callable) -> Any:
         return dict(val) if val else {}
 
     if type_func == bool:
+        if isinstance(val, bool):
+            return val
         if isinstance(val, str):
             return val.lower() in ("true", "1", "yes", "on")
         return bool(val)
+
+    if type_func == Path:
+        return Path(val).expanduser()
 
     try:
         return type_func(val)
@@ -88,41 +124,26 @@ class TerminalPitch(Pitch, ABC):
         super().__init__()
         self.console = Console()
         self._run_id: str | None = None
+        self.run_dir: Any = None
+        self._orchestrator_name: str = "prefect"
+        self._orchestrator_options: dict[str, Any] = {}
 
     @property
-    def run_id(self) -> str:
-        """Framework-managed execution run ID, lazily generated if not set."""
-        if self._run_id is None:
-            playbook_name = self._resolve_playbook_name()
-            param_dict = self._build_param_dict()
-            if not self.task_id:
-                from pirlo.core.services.run_id_generator import generate_task_id
-
-                self.task_id = generate_task_id(playbook_name, param_dict)
-            from pirlo.core.services.run_id_generator import generate_run_id
-
-            self._run_id = generate_run_id(self.task_id)
-        return self._run_id
-
-    @run_id.setter
-    def run_id(self, value: str | None) -> None:
-        self._run_id = value
-
-    def _resolve_playbook_name(self) -> str:
-        if sys.argv and len(sys.argv) > 1 and sys.argv[0].startswith("pirlo "):
-            return sys.argv[0].split(" ")[1]
-        name = self.__class__.__name__.lower()
-        if name.endswith("session"):
-            return name[:-7]
-        if name.endswith("pitch"):
-            return name[:-5]
-        return name
+    def domain_options(self) -> dict[str, Any]:
+        """Dynamically collects all domain Parameter values directly from instance attributes."""
+        options: dict[str, Any] = {}
+        for attr_name in dir(self.__class__):
+            attr_val = getattr(self.__class__, attr_name)
+            if isinstance(attr_val, Parameter):
+                options[attr_name] = getattr(self, attr_name)
+        return options
 
     def _build_param_dict(self) -> dict[str, Any]:
+        """Serializes domain options into JSON-encodable dictionary for hashing & persistence."""
         from pirlo.core.models.link import LlmLink
 
         param_dict = {}
-        for k, v in self._parsed_options.items():
+        for k, v in self.domain_options.items():
             if isinstance(v, Path):
                 param_dict[k] = str(v)
             elif isinstance(v, LlmLink):
@@ -131,53 +152,195 @@ class TerminalPitch(Pitch, ABC):
                 param_dict[k] = v
         return param_dict
 
+    @property
+    def run_name(self) -> str:
+        """Computes deterministic run_name on demand purely from domain options."""
+        from pirlo.core.services.run_id_generator import generate_run_name
+
+        return generate_run_name(
+            self._resolve_playbook_name(), self._build_param_dict()
+        )
+
+    @property
+    def task_id(self) -> str:
+        """Alias for run_name for backward compatibility."""
+        return self.run_name
+
+    @property
+    def run_id(self) -> str:
+        """Framework-managed execution run ID, lazily generated from run_name if not set."""
+        if self._run_id is None:
+            from pirlo.core.services.run_id_generator import generate_run_id
+
+            self._run_id = generate_run_id(self.run_name)
+        return self._run_id
+
+    @run_id.setter
+    def run_id(self, value: str | None) -> None:
+        self._run_id = value
+
+    def _resolve_playbook_name(self) -> str:
+        """Resolves the playbook name (e.g. 'AutopassSession' -> 'autopass')."""
+        if sys.argv and len(sys.argv) > 1 and sys.argv[0].startswith("pirlo "):
+            return sys.argv[0].split(" ")[1]
+        name = self.__class__.__name__.lower()
+        for suffix in ("session", "pitch", "playbook"):
+            if name.endswith(suffix):
+                return name[: -len(suffix)]
+        return name
+
+    async def on_play(self) -> RunResult[Any]:
+        """
+        Abstract extension hook implemented by playbook subclasses.
+        Contains the playbook's core business logic (e.g. self-healing runner, login workflow).
+        """
+        raise NotImplementedError(
+            f"Playbook class '{self.__class__.__name__}' must implement the on_play() method "
+            "to define its core task logic."
+        )
+
+    async def play(self) -> RunResult[Any]:
+        """
+        Framework template method:
+        1. Resolves requested orchestrator backend (default: 'prefect').
+        2. Merges CLI parameter overrides (server_url, work_pool).
+        3. Delegates execution of self.on_play() to orchestrator.execute().
+        4. Normalizes and returns a structured RunResult.
+        """
+        from pirlo.core.models.run import RunStatus
+        from pirlo.core.models.run_result import RunResult
+        from pirlo.infrastructure.adapters.orchestrator.factory import (
+            OrchestratorFactory,
+        )
+
+        orchestrator_name = getattr(self, "_orchestrator_name", "prefect")
+        orchestrator_options = getattr(self, "_orchestrator_options", {})
+        orchestrator = OrchestratorFactory.create(
+            name=orchestrator_name,
+            **orchestrator_options,
+        )
+
+        # Delegate execution of self.on_play hook to orchestrator
+        result = await orchestrator.execute(
+            self,
+            worker_fn=self.on_play,
+        )
+
+        if isinstance(result, RunResult):
+            return result
+
+        return RunResult(
+            run_id=self.run_id,
+            status=RunStatus.COMPLETED,
+            data=result,
+        )
+
+    @classmethod
+    def _add_argument_to_parser(
+        cls, parser: argparse.ArgumentParser, attr_name: str, attr_val: Parameter
+    ) -> None:
+        flag = f"--{attr_name.replace('_', '-')}"
+        if flag in parser._option_string_actions:
+            return
+
+        kwargs: dict[str, Any] = {
+            "help": attr_val.help,
+            "default": argparse.SUPPRESS,
+        }
+
+        type_func = attr_val.type_func
+        is_list = False
+        origin = getattr(type_func, "__origin__", type_func)
+
+        if origin is list:
+            is_list = True
+            type_args = getattr(type_func, "__args__", ())
+            type_func = type_args[0] if type_args else str
+
+        if type_func == bool:
+            kwargs["action"] = "store_true"
+        else:
+            kwargs["type"] = type_func
+            if is_list:
+                kwargs["nargs"] = "*"
+
+        if attr_val.short:
+            parser.add_argument(attr_val.short, flag, **kwargs)
+        else:
+            parser.add_argument(flag, **kwargs)
+
     @classmethod
     def cli(cls):
-        """Parses CLI parameters and plays the pitch."""
-        instance = cls()
-        parser = argparse.ArgumentParser(description=cls.__doc__)
-        parameters: list[Parameter] = []
+        """Parses CLI parameters using POSIX '--' delimiter and plays the pitch."""
+        from pirlo.infrastructure.adapters.orchestrator.factory import (
+            OrchestratorFactory,
+        )
 
-        # Extract declared Parameters
+        instance = cls()
+        playbook_name = instance._resolve_playbook_name()
+
+        # 1. Attach default '-- prefect' if '--' is omitted, then split cleanly
+        raw_arguments = extract_raw_arguments_excluding_command(sys.argv, playbook_name)
+        canonical_arguments = ensure_canonical_orchestrator_delimiter(
+            raw_arguments, default_orchestrator_name="prefect"
+        )
+        split_index = canonical_arguments.index("--")
+        playbook_raw_arguments = canonical_arguments[:split_index]
+        orchestrator_raw_arguments = canonical_arguments[split_index + 1 :]
+
+        # 2. Build Playbook Parser (Parses playbook & schedule parameters)
+        registered_orchestrators = OrchestratorFactory.list_orchestrators()
+        available_orchestration_engines = ", ".join(
+            sorted(registered_orchestrators.keys())
+        )
+        epilog_text = (
+            "Orchestration Engines:\n"
+            "  Use '-- <orchestrator> [options]' to specify an orchestrator engine backend.\n"
+            f"  Available engines: {available_orchestration_engines}\n\n"
+            "  Examples:\n"
+            f'    pirlo {playbook_name} --task "Search" -- prefect -h\n'
+            f'    pirlo {playbook_name} --task "Search" -- prefect --server-url http://localhost:4200/api\n'
+        )
+
+        playbook_parser = argparse.ArgumentParser(
+            prog=f"pirlo {playbook_name}",
+            description=cls.__doc__,
+            epilog=epilog_text,
+            formatter_class=argparse.RawDescriptionHelpFormatter,
+        )
+
+        parameters: list[Parameter] = []
         for attr_name in dir(cls):
             attr_val = getattr(cls, attr_name)
             if isinstance(attr_val, Parameter):
                 parameters.append(attr_val)
-                flag = f"--{attr_name.replace('_', '-')}"
-                kwargs = {
-                    "help": attr_val.help,
-                    "default": argparse.SUPPRESS,
-                }
+                cls._add_argument_to_parser(playbook_parser, attr_name, attr_val)
 
-                # Check if the type is a list or list-like generic alias (e.g. list[str])
-                type_func = attr_val.type_func
-                is_list = False
-                origin = getattr(type_func, "__origin__", type_func)
+        parsed_playbook_args = playbook_parser.parse_args(playbook_raw_arguments)
 
-                if origin is list:
-                    is_list = True
-                    type_args = getattr(type_func, "__args__", ())
-                    type_func = type_args[0] if type_args else str
+        # 3. Parse Orchestrator Args (Engine name + Orchestrator flags)
+        orchestrator_name = orchestrator_raw_arguments[0]
+        orchestrator_flags = orchestrator_raw_arguments[1:]
 
-                if type_func == bool:
-                    kwargs["action"] = "store_true"
-                else:
-                    kwargs["type"] = type_func
-                    if is_list:
-                        kwargs["nargs"] = "*"
+        if orchestrator_name not in registered_orchestrators:
+            instance.red_card(
+                f"Unknown orchestrator engine '{orchestrator_name}'",
+                detail=f"Available orchestrators: {available_orchestration_engines}",
+            )
+            sys.exit(1)
 
-                if attr_val.short:
-                    parser.add_argument(attr_val.short, flag, **kwargs)
-                else:
-                    parser.add_argument(flag, **kwargs)
+        orchestrator_class = registered_orchestrators[orchestrator_name]
+        orchestrator_options = orchestrator_class.parse_cli_options(
+            playbook_name=playbook_name,
+            orchestrator_flags=orchestrator_flags,
+        )
 
-        parsed_args = parser.parse_args()
+        # 4. Bind parsed playbook options following precedence: CLI > Env > pirlo.toml > Default
         link_repo = None
-
         for param in parameters:
-            # 1. CLI argument (highest priority)
-            if hasattr(parsed_args, param.name):
-                val = getattr(parsed_args, param.name)
+            # 1. CLI argument
+            if hasattr(parsed_playbook_args, param.name):
+                val = getattr(parsed_playbook_args, param.name)
                 val = convert_value(val, param.type_func)
             # 2. Environment Variable
             elif getattr(param, "env_name", None):
@@ -222,20 +385,20 @@ class TerminalPitch(Pitch, ABC):
                 else:
                     val = None
 
-            instance._parsed_options[param.name] = val
+            setattr(instance, param.name, val)
+
+        instance._orchestrator_name = orchestrator_name
+        instance._orchestrator_options = orchestrator_options
 
         # Auto-persist per-run parameter snapshot under runs/<run_id>/params.json
         from pirlo.core.config import get_workspace_path
-        from pirlo.core.services.run_id_generator import generate_task_id
 
-        playbook_name = instance._resolve_playbook_name()
         param_dict = instance._build_param_dict()
-        instance.task_id = generate_task_id(playbook_name, param_dict)
-
         pirlo_workspace = get_workspace_path()
         run_dir = pirlo_workspace / playbook_name / "runs" / instance.run_id
         instance.run_dir = run_dir
         run_params_path = run_dir / "params.json"
+
         try:
             run_dir.mkdir(parents=True, exist_ok=True)
             with open(run_params_path, "w", encoding="utf-8") as f:
@@ -247,9 +410,17 @@ class TerminalPitch(Pitch, ABC):
             )
 
         if inspect.iscoroutinefunction(instance.play):
-            asyncio.run(instance.play())
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                loop = None
+
+            if loop and loop.is_running():
+                return loop.create_task(instance.play())
+            else:
+                return asyncio.run(instance.play())
         else:
-            instance.play()
+            return instance.play()
 
     # --- Concrete Port Implementations ---
 

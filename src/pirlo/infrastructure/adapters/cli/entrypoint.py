@@ -26,7 +26,37 @@ def load_playbooks() -> dict[str, str]:
     return playbooks
 
 
+def normalize_cli_arguments(
+    raw_arguments: list[str], registered_playbooks: dict[str, str]
+) -> list[str]:
+    """
+    Normalizes CLI arguments to canonical playbook-first syntax.
+    Translates legacy prefix 'pirlo prefect autopass --task x'
+    into canonical 'pirlo autopass --task x -- prefect'.
+    """
+    if len(raw_arguments) >= 3:
+        first_argument = raw_arguments[1]
+        second_argument = raw_arguments[2]
+
+        if (
+            first_argument not in registered_playbooks
+            and second_argument in registered_playbooks
+        ):
+            orchestrator_engine = first_argument
+            target_playbook = second_argument
+            remaining_arguments = raw_arguments[3:]
+
+            return (
+                [f"pirlo {target_playbook}"]
+                + remaining_arguments
+                + ["--", orchestrator_engine]
+            )
+
+    return raw_arguments
+
+
 def main():
+
     playbooks = load_playbooks()
 
     if len(sys.argv) < 2 or sys.argv[1] in ("-h", "--help"):
@@ -78,57 +108,34 @@ def main():
 
     command = sys.argv[1]
 
-    if command == "link":
-        try:
-            from pirlo.infrastructure.adapters.cli.link_commands import (
-                link_main,
-            )
+    # Quick dispatch for build-in non-playbook subcommands (e.g. link, run)
+    if command in ("link", "run"):
+        if command == "link":
+            from pirlo.infrastructure.adapters.cli.link_cli import handle_link_command
 
-            link_main()
-        except Exception as e:  # noqa: BLE001
-            print(f"Error: Link management failed: {e}", file=sys.stderr)
-            import traceback
+            try:
+                handle_link_command(sys.argv[2:])
+            except Exception as e:  # noqa: BLE001
+                print(f"Error: {e}", file=sys.stderr)
+                sys.exit(1)
+            sys.exit(0)
 
-            traceback.print_exc()
-            sys.exit(1)
-        sys.exit(0)
+        if command == "run":
+            from pirlo.infrastructure.adapters.cli.run_cli import handle_run_command
 
-    if command == "profile":
-        try:
-            from pirlo.infrastructure.adapters.cli.profile_commands import (
-                profile_main,
-            )
+            try:
+                handle_run_command(sys.argv[2:])
+            except Exception as e:  # noqa: BLE001
+                print(f"Error: {e}", file=sys.stderr)
+                sys.exit(1)
+            sys.exit(0)
 
-            profile_main()
-        except Exception as e:  # noqa: BLE001
-            print(f"Error: Profile management failed: {e}", file=sys.stderr)
-            import traceback
+    # Normalize CLI arguments (e.g. legacy prefix 'pirlo prefect autopass' -> 'pirlo autopass --task x -- prefect')
+    sys.argv = normalize_cli_arguments(sys.argv, playbooks)
 
-            traceback.print_exc()
-            sys.exit(1)
-        sys.exit(0)
-
-    if command == "run":
-        try:
-            from pirlo.infrastructure.adapters.cli.run_commands import (
-                run_main,
-            )
-
-            run_main()
-        except Exception as e:  # noqa: BLE001
-            print(f"Error: Run history management failed: {e}", file=sys.stderr)
-            import traceback
-
-            traceback.print_exc()
-            sys.exit(1)
-        sys.exit(0)
-
-    # Check for pirlo <orchestrator> <playbook> syntax (e.g. pirlo prefect autopass)
-    target_playbook = command
-    orchestrator_arg = None
-    if len(sys.argv) >= 3 and sys.argv[2] in playbooks:
-        orchestrator_arg = sys.argv[1]
-        target_playbook = sys.argv[2]
+    target_playbook = sys.argv[0].split(" ")[-1] if " " in sys.argv[0] else sys.argv[1]
+    if " " in sys.argv[0]:
+        target_playbook = sys.argv[0].split(" ")[1]
 
     if target_playbook in playbooks:
         entrypoint = playbooks[target_playbook]
@@ -145,19 +152,9 @@ def main():
             module = importlib.import_module(module_name)
             session_cls = getattr(module, class_name)
 
-            # Reconstruct sys.argv for the playbook subcommand
-            if orchestrator_arg:
-                # e.g., ['pirlo', 'prefect', 'autopass', '--task', 'x'] -> ['pirlo autopass', '--orchestrator', 'prefect', '--task', 'x']
-                sys.argv = [
-                    f"pirlo {target_playbook}",
-                    "--orchestrator",
-                    orchestrator_arg,
-                ] + sys.argv[3:]
-            else:
-                sys.argv = [f"pirlo {target_playbook}"] + sys.argv[2:]
-
             # Call the TerminalPitch cli runner
             session_cls.cli()
+
         except Exception as e:  # noqa: BLE001
             print(
                 f"Error: Failed to load playbook '{target_playbook}' ({entrypoint}): {e}",

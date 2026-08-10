@@ -19,8 +19,8 @@ FUN_WORDS = [
 ]
 
 
-def generate_task_id(playbook: str, parameters: dict[str, Any]) -> str:
-    """Generates a stable, deterministic Task ID based ONLY on playbook and parameters."""
+def generate_run_name(playbook: str, parameters: dict[str, Any]) -> str:
+    """Generates a stable, deterministic Run Name based ONLY on playbook and domain parameters."""
     payload = {
         "playbook": playbook,
         "parameters": parameters,
@@ -34,7 +34,10 @@ def generate_task_id(playbook: str, parameters: dict[str, Any]) -> str:
     return f"{word}-{short_id}"
 
 
-def generate_run_id(task_id: str) -> str:
-    """Generates a unique execution Run ID for a task by appending a UTC timestamp with microsecond resolution."""
+generate_task_id = generate_run_name
+
+
+def generate_run_id(run_name: str) -> str:
+    """Generates a unique execution Run ID for a run by appending a UTC timestamp with microsecond resolution."""
     timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S_%f")
-    return f"{task_id}-{timestamp}"
+    return f"{run_name}-{timestamp}"

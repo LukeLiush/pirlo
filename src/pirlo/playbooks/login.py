@@ -1,8 +1,11 @@
 import asyncio
 from pathlib import Path
+from typing import Any
 
 from cloakbrowser import launch_persistent_context_async
 
+from pirlo.core.models.run import RunStatus
+from pirlo.core.models.run_result import RunResult
 from pirlo.core.ports.pitch import Parameter
 from pirlo.core.services.profile_manager import ProfileManager
 from pirlo.infrastructure.adapters.cli.terminal_pitch import TerminalPitch
@@ -34,7 +37,7 @@ class LoginSession(TerminalPitch):
         help="Path to a text file containing a list of target URLs (one per line)",
     )
 
-    async def play(self):
+    async def on_play(self) -> RunResult[Any]:
         # 1. Header (Banner)
         self.header(
             "Pirlo Login Manager",
@@ -49,26 +52,37 @@ class LoginSession(TerminalPitch):
                         line.strip() for line in f.read().splitlines() if line.strip()
                     )
             else:
+                instruction = f"The specified file '{self.urls_file}' does not exist."
                 self.yellow_card(
                     "URLs file not found",
-                    detail=f"The specified file '{self.urls_file}' does not exist.",
+                    detail=instruction,
+                )
+                return RunResult(
+                    run_id=self.run_id,
+                    status=RunStatus.FAILED,
+                    error=instruction,
                 )
 
         # Filter out empty strings
         target_urls = [url.strip() for url in target_urls if url.strip()]
 
         if not target_urls:
+            no_urls_msg = (
+                "Please provide at least one target URL. You can:\n"
+                "  1. Pass URLs directly using [bold]--urls[/bold] (e.g., --urls https://github.com)\n"
+                "  2. Pass a text file with URLs using [bold]--urls-file[/bold] (e.g., --urls-file urls.txt)\n\n"
+                "Example:\n"
+                "  [cyan]pirlo login --profile work --urls https://github.com https://google.com[/cyan]"
+            )
             self.yellow_card(
                 "No URLs to open",
-                detail=(
-                    "Please provide at least one target URL. You can:\n"
-                    "  1. Pass URLs directly using [bold]--urls[/bold] (e.g., --urls https://github.com)\n"
-                    "  2. Pass a text file with URLs using [bold]--urls-file[/bold] (e.g., --urls-file urls.txt)\n\n"
-                    "Example:\n"
-                    "  [cyan]pirlo login --profile work --urls https://github.com https://google.com[/cyan]"
-                ),
+                detail=no_urls_msg,
             )
-            return
+            return RunResult(
+                run_id=self.run_id,
+                status=RunStatus.FAILED,
+                error=no_urls_msg,
+            )
 
         # 2. Status (Loading spinner)
         profile_path = ProfileManager.resolve_profile_path(self.profile)
@@ -124,6 +138,11 @@ class LoginSession(TerminalPitch):
                         f"Profile Name: {metadata.name}\n"
                         f"Expires At: {metadata.expires_at} (TTL: {self.ttl_days} days)"
                     ),
+                )
+                return RunResult(
+                    run_id=self.run_id,
+                    status=RunStatus.COMPLETED,
+                    data={"profile": self.profile, "urls": target_urls},
                 )
             finally:
                 await ctx.close()

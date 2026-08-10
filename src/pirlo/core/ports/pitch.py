@@ -27,7 +27,11 @@ class Parameter:
     def __get__(self, instance, owner):
         if instance is None:
             return self
-        return instance._parsed_options.get(self.name, self.default)
+        return instance.__dict__.get(self.name, self.default)
+
+    def __set__(self, instance, value):
+        if instance is not None and self.name is not None:
+            instance.__dict__[self.name] = value
 
 
 class LinkParameter(Parameter):
@@ -49,21 +53,39 @@ class LinkParameter(Parameter):
         )
 
 
+from pirlo.core.models.run_result import RunResult
+
+
 class Pitch(ABC):
-    """Abstract Port representing the presentation canvas."""
+    """Pure Abstract Port representing the presentation canvas & lifecycle contract."""
 
-    name: str = "playbook"
-    run_id: str = "run"
-    schedule: str | None = None
+    @property
+    @abstractmethod
+    def run_name(self) -> str:
+        """Deterministic run workload name."""
 
-    def __init__(self):
-        self._parsed_options: dict[str, Any] = {}
-        self.task_id: str | None = None
-        self.run_dir: Any = None
+    @property
+    @abstractmethod
+    def run_id(self) -> str:
+        """Unique execution instance ID."""
+
+    @run_id.setter
+    @abstractmethod
+    def run_id(self, value: str | None) -> None:
+        """Sets the unique execution instance ID."""
+
+    @property
+    @abstractmethod
+    def domain_options(self) -> dict[str, Any]:
+        """Dictionary of domain playbook parameters."""
 
     @abstractmethod
-    async def play(self):
-        """Method to be implemented by playable scripts."""
+    async def on_play(self) -> RunResult[Any]:
+        """Core playbook execution logic implemented by subclasses."""
+
+    @abstractmethod
+    async def play(self) -> RunResult[Any]:
+        """Framework template method managing execution lifecycle."""
 
     @abstractmethod
     def header(self, title: str, subtitle: str | None = None):
@@ -87,7 +109,7 @@ class Pitch(ABC):
 
     @abstractmethod
     def red_card(self, message: str, detail: str | None = None):
-        """Draw error panel (Sent off!)."""
+        """Draw error panel (Red Card!)."""
 
     @abstractmethod
     def yellow_card(self, message: str, detail: str | None = None):

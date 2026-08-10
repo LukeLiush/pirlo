@@ -1,3 +1,4 @@
+from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -79,14 +80,15 @@ def test_factory_unknown_orchestrator_raises_error():
         OrchestratorFactory.create("nonexistent")
 
 
+from pirlo.core.models.run_result import RunResult
 from pirlo.infrastructure.adapters.cli.terminal_pitch import TerminalPitch
 
 
 class DummyPitch(TerminalPitch):
     """Dummy Pitch for orchestrator cron testing."""
 
-    async def play(self):
-        pass
+    async def on_play(self) -> RunResult[Any]:
+        return RunResult(run_id=self.run_id)
 
 
 @pytest.mark.anyio

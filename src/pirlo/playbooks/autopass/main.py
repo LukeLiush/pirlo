@@ -1,6 +1,8 @@
 from pathlib import Path
 
 from pirlo.core.instructions import AutopassInstructions
+from pirlo.core.models.run import RunStatus
+from pirlo.core.models.run_result import AutopassRunOutput, RunResult
 from pirlo.core.ports.orchestrator import AutopassExecutionOptions
 from pirlo.core.ports.pitch import LinkParameter, Parameter
 from pirlo.core.services.profile_manager import ProfileManager
@@ -65,26 +67,7 @@ class AutopassSession(TerminalPitch):
         int, default=10, help="Retry delay in seconds", env_name="RETRY_DELAY"
     )
 
-    orchestrator = Parameter(
-        str,
-        default="prefect",
-        help="Orchestrator backend engine name (default: 'prefect')",
-        env_name="ORCHESTRATOR",
-    )
-    server_url = Parameter(
-        str,
-        default=None,
-        help="Orchestrator server API URL override",
-        env_name="SERVER_URL",
-    )
-    work_pool = Parameter(
-        str,
-        default=None,
-        help="Orchestrator work pool override",
-        env_name="WORK_POOL",
-    )
-
-    async def play(self):
+    async def on_play(self) -> RunResult[AutopassRunOutput]:
         self.header(
             "Autopass Workflow Pitch",
             subtitle="Autonomous Browser Automation",
@@ -104,7 +87,11 @@ class AutopassSession(TerminalPitch):
                 profile=self.profile, existing_info=profiles_info
             )
             self.yellow_card(instruction)
-            return
+            return RunResult(
+                run_id=self.run_id,
+                status=RunStatus.FAILED,
+                error=str(instruction),
+            )
 
         if ProfileManager.is_expired(self.profile):
             meta = ProfileManager.load_profile_metadata(self.profile)
@@ -118,21 +105,34 @@ class AutopassSession(TerminalPitch):
                 profile=self.profile, expires_at=exp_date, authenticated_urls=urls_str
             )
             self.yellow_card(instruction)
-            return
+            return RunResult(
+                run_id=self.run_id,
+                status=RunStatus.FAILED,
+                error=str(instruction),
+            )
 
         profile_path: Path = ProfileManager.resolve_profile_path(self.profile)
 
         if self.task is None:
             self.yellow_card(AutopassInstructions.TASK_REQUIRED)
-            return
+            return RunResult(
+                run_id=self.run_id,
+                status=RunStatus.FAILED,
+                error=str(AutopassInstructions.TASK_REQUIRED),
+            )
 
         if self.playmaker is None or self.analyst is None:
-            self.yellow_card(
+            err_msg = (
                 "Error: Playmaker and Analyst links are required.\n"
                 "Please specify --playmaker and --analyst.\n"
                 "Run 'pirlo link list' to see available links, or 'pirlo link create' to register a new one."
             )
-            return
+            self.yellow_card(err_msg)
+            return RunResult(
+                run_id=self.run_id,
+                status=RunStatus.FAILED,
+                error=err_msg,
+            )
 
         # self.playmaker and self.analyst are resolved LlmLink domain objects
         pm_base_url = self.playmaker.base_url or "N/A"
@@ -174,25 +174,24 @@ class AutopassSession(TerminalPitch):
             cron=self.schedule,
         )
 
-        from pirlo.infrastructure.adapters.orchestrator.factory import (
-            OrchestratorFactory,
+        raw_output = await run_self_healing_worker_task(
+            task_prompt=self.task,
+            profile_path=profile_path,
+            headless=self.headless,
+            cdp_port=CDP_PORT,
+            options=options,
+            run_dir=self.run_dir,
         )
 
-        orchestrator = OrchestratorFactory.create(
-            name=getattr(self, "orchestrator", "prefect"),
-            server_url=getattr(self, "server_url", None),
-            work_pool=getattr(self, "work_pool", None),
+        payload = AutopassRunOutput(
+            task_prompt=self.task,
+            final_message=str(raw_output),
         )
-        await orchestrator.execute(
-            self,
-            worker_fn=lambda: run_self_healing_worker_task(
-                task_prompt=self.task,
-                profile_path=profile_path,
-                headless=self.headless,
-                cdp_port=CDP_PORT,
-                options=options,
-                run_dir=self.run_dir,
-            ),
+
+        return RunResult(
+            run_id=self.run_id,
+            status=RunStatus.COMPLETED,
+            data=payload,
         )
 
 

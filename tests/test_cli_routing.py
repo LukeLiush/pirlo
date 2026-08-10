@@ -25,7 +25,8 @@ def test_cli_orchestrator_playbook_routing():
 
         mock_session_cli.assert_called_once()
         assert sys.argv[0] == "pirlo autopass"
-        assert sys.argv[1] == "--orchestrator"
-        assert sys.argv[2] == "prefect"
-        assert sys.argv[3] == "--task"
-        assert sys.argv[4] == "Search Google"
+        assert sys.argv[1] == "--task"
+        assert sys.argv[2] == "Search Google"
+        assert sys.argv[3] == "--help"
+        assert sys.argv[4] == "--"
+        assert sys.argv[5] == "prefect"
