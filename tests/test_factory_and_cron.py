@@ -95,8 +95,7 @@ class DummyPitch(TerminalPitch):
 async def test_cron_schedule_requires_active_server(tmp_path, monkeypatch):
     monkeypatch.setenv("PIRLO_WORKSPACE", str(tmp_path))
 
-    pitch = DummyPitch()
-    pitch.run_id = "cron-test-1"
+    pitch = DummyPitch(run_id="cron-test-1")
     pitch.schedule = "daily"
 
     orchestrator = SmartPrefectTaskOrchestrator(server_url=None)
@@ -120,8 +119,7 @@ async def test_cron_schedule_creates_deployment_when_server_active(
 ):
     monkeypatch.setenv("PIRLO_WORKSPACE", str(tmp_path))
 
-    pitch = DummyPitch()
-    pitch.run_id = "cron-test-2"
+    pitch = DummyPitch(run_id="cron-test-2")
     pitch.schedule = "daily"
 
     orchestrator = SmartPrefectTaskOrchestrator(

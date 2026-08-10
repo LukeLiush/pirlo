@@ -120,10 +120,10 @@ class TerminalPitch(Pitch, ABC):
         short="-s",
     )
 
-    def __init__(self):
+    def __init__(self, run_id: str | None = None):
         super().__init__()
         self.console = Console()
-        self._run_id: str | None = None
+        self._run_id: str | None = run_id
         self.run_dir: Any = None
         self._orchestrator_name: str = "prefect"
         self._orchestrator_options: dict[str, Any] = {}
@@ -174,10 +174,6 @@ class TerminalPitch(Pitch, ABC):
 
             self._run_id = generate_run_id(self.run_name)
         return self._run_id
-
-    @run_id.setter
-    def run_id(self, value: str | None) -> None:
-        self._run_id = value
 
     def _resolve_playbook_name(self) -> str:
         """Resolves the playbook name (e.g. 'AutopassSession' -> 'autopass')."""

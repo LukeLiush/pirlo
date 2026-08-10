@@ -31,8 +31,7 @@ class DummyAutopassPitch(TerminalPitch):
 async def test_smart_prefect_orchestrator_execution(tmp_path, monkeypatch):
     monkeypatch.setenv("PIRLO_WORKSPACE", str(tmp_path))
 
-    pitch = DummyAutopassPitch()
-    pitch.run_id = "test-run-12345"
+    pitch = DummyAutopassPitch(run_id="test-run-12345")
 
     orchestrator = SmartPrefectTaskOrchestrator()
 
