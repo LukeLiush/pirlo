@@ -11,22 +11,18 @@ from rich.text import Text
 
 
 class StdioTee:
-    """Tees stdout/stderr output: sends raw ANSI to terminal, uses Rich and ftfy for log_file."""
+    """Tees stdout/stderr output: sends raw ANSI to terminal, uses line-buffering and Rich for log_file."""
 
     def __init__(self, original_stream, log_file, get_prefix_fn=None):
         self.original_stream = original_stream
         self.log_file = log_file
         self.get_prefix_fn = get_prefix_fn
+        self._buffer = ""
         self._at_line_start = True
         self._last_logged_status: str | None = None
 
-    def write(self, data):
-        self.original_stream.write(data)
-        if not data:
-            return
-
-        # Delegate ANSI escape code parsing to Rich + repair text/orphan codes with ftfy
-        plain_text = Text.from_ansi(data).plain.replace("\r", "")
+    def _process_line(self, raw_data: str) -> None:
+        plain_text = Text.from_ansi(raw_data).plain.replace("\r", "")
         clean_data = ftfy.fix_text(plain_text)
         lines = clean_data.splitlines()
 
@@ -52,8 +48,26 @@ class StdioTee:
                 self.log_file.write(formatted_prefix + line_content + "\n")
                 self.log_file.flush()
 
+    def write(self, data):
+        self.original_stream.write(data)
+        if not data:
+            return
+
+        self._buffer += data
+        if "\n" not in self._buffer:
+            return
+
+        lines = self._buffer.split("\n")
+        self._buffer = lines.pop()
+
+        for line in lines:
+            self._process_line(line)
+
     def flush(self):
         self.original_stream.flush()
+        if self._buffer:
+            self._process_line(self._buffer)
+            self._buffer = ""
         if self.log_file:
             self.log_file.flush()
 
