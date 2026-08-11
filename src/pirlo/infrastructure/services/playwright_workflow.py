@@ -49,6 +49,21 @@ class PlaywrightReplayRunner(WorkflowRunner):
         # Load from repository boundary
         workflow: Workflow = self.repository.load(workflow_id)
 
+        if run_id and hasattr(self.repository, "directory"):
+            run_dir = self.repository.directory / run_id
+            try:
+                run_dir.mkdir(parents=True, exist_ok=True)
+                snapshot_path = run_dir / f"{workflow_id}_workflow.json"
+                snapshot_path.write_text(
+                    workflow.model_dump_json(indent=2), encoding="utf-8"
+                )
+            except Exception as e:  # noqa: BLE001
+                logger.warning(
+                    "Failed to snapshot workflow to run directory %s: %s",
+                    run_dir,
+                    e,
+                )
+
         async def on_step_update(step_num: int, action: Action) -> None:
             if run_id and self.run_history_repository:
                 self.run_history_repository.save_step(

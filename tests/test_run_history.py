@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from datetime import UTC, datetime
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from pirlo.core.models.run import Run, RunStatus
 from pirlo.core.services.run_id_generator import generate_run_id, generate_task_id
@@ -324,16 +324,23 @@ class TestRunHistoryAndMVC(unittest.TestCase):
 
     def test_workflow_runner_cache_key_and_step_history(self):
         import asyncio
+
         from pirlo.core.models.actions import DoneAction, NavigateAction
         from pirlo.core.models.workflow import Workflow
         from pirlo.infrastructure.repository import JsonFileWorkflowRepository
-        from pirlo.infrastructure.services.self_healing_workflow import SelfHealingRunner
+        from pirlo.infrastructure.services.self_healing_workflow import (
+            SelfHealingRunner,
+        )
 
         cache_dir = Path(tempfile.mkdtemp())
         try:
             repo = JsonFileWorkflowRepository(directory=cache_dir)
             mock_replay = MagicMock()
-            mock_replay.run = MagicMock(side_effect=lambda task_prompt, cache_key, run_id: asyncio.sleep(0, result="replay result"))
+            mock_replay.run = MagicMock(
+                side_effect=lambda task_prompt, cache_key, run_id: asyncio.sleep(
+                    0, result="replay result"
+                )
+            )
             mock_fallback = MagicMock()
 
             # Pre-save workflow cache using cache_key (run_name)
@@ -342,7 +349,10 @@ class TestRunHistoryAndMVC(unittest.TestCase):
             workflow = Workflow(
                 workflow_id=run_name,
                 description="test task",
-                actions=[NavigateAction(url="https://google.com"), DoneAction(text="done")],
+                actions=[
+                    NavigateAction(url="https://google.com"),
+                    DoneAction(text="done"),
+                ],
             )
             repo.save(workflow)
 
@@ -357,6 +367,107 @@ class TestRunHistoryAndMVC(unittest.TestCase):
             )
             self.assertEqual(result, "replay result")
             self.assertTrue(repo.exists(run_name))
+        finally:
+            shutil.rmtree(cache_dir)
+
+    def test_run_show_displays_workflow_location(self):
+        import io
+        from contextlib import redirect_stdout
+
+        from pirlo.infrastructure.adapters.cli.run_commands import run_show
+
+        run_id = "test-show-run-1"
+        run = Run(
+            run_id=run_id,
+            task_id="task-show-1",
+            playbook="autopass",
+            status=RunStatus.COMPLETED,
+            parameter_file_location="autopass/runs/params.json",
+            log_file_location="autopass/runs/test.log",
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
+        )
+        self.repository.save(run)
+
+        # Create target workflow json and an unrelated workflow json in runs dir
+        runs_dir = self.test_dir / "autopass" / "runs"
+        runs_dir.mkdir(parents=True, exist_ok=True)
+        target_wf = runs_dir / "task-show-1_workflow.json"
+        target_wf.write_text('{"workflow_id": "task-show-1", "actions": []}')
+
+        other_wf = runs_dir / "unrelated_task_workflow.json"
+        other_wf.write_text('{"workflow_id": "unrelated_task", "actions": []}')
+
+        with patch(
+            "pirlo.infrastructure.adapters.cli.run_commands.get_repository"
+        ) as mock_get_repo:
+            mock_get_repo.return_value = (self.repository, self.test_dir)
+            f = io.StringIO()
+            with redirect_stdout(f):
+                run_show(run_id)
+            output = f.getvalue()
+
+        self.assertIn("Artifacts & Recorded Logs", output)
+        self.assertIn("task-show-1_workflow.json", output)
+        self.assertNotIn("unrelated_task_workflow.json", output)
+        self.assertNotIn("Workflow Snapshot Location:", output)
+
+    def test_playwright_replay_runner_snapshots_workflow_to_run_dir(self):
+        import asyncio
+
+        from pirlo.core.models.actions import DoneAction, NavigateAction
+        from pirlo.core.models.browser_config import BrowserConfig
+        from pirlo.core.models.workflow import Workflow
+        from pirlo.infrastructure.repository import JsonFileWorkflowRepository
+        from pirlo.infrastructure.services.playwright_workflow import (
+            PlaywrightReplayRunner,
+        )
+
+        cache_dir = Path(tempfile.mkdtemp())
+        try:
+            repo = JsonFileWorkflowRepository(directory=cache_dir)
+            cache_key = "test_cache_key"
+            run_id = "test_cache_key-20260811_123456_000000"
+            wf = Workflow(
+                workflow_id=cache_key,
+                description="test task",
+                actions=[
+                    NavigateAction(url="https://example.com"),
+                    DoneAction(text="done"),
+                ],
+            )
+            repo.save(wf)
+
+            runner = PlaywrightReplayRunner(
+                repository=repo,
+                llm=None,
+                browser_config=BrowserConfig(cdp_url=None),
+            )
+
+            with patch(
+                "pirlo.infrastructure.services.playwright_workflow.async_playwright"
+            ) as mock_pw:
+                mock_p = MagicMock()
+                mock_browser = AsyncMock()
+                mock_context = AsyncMock()
+                mock_page = AsyncMock()
+                mock_browser.new_context.return_value = mock_context
+                mock_context.new_page.return_value = mock_page
+                mock_p.chromium.launch = AsyncMock(return_value=mock_browser)
+                mock_pw.return_value.__aenter__.return_value = mock_p
+
+                with patch(
+                    "pirlo.infrastructure.adapters.browser.playwright_adapter.PlaywrightAdapter.execute_workflow",
+                    new_callable=AsyncMock,
+                ):
+                    asyncio.run(
+                        runner.run(
+                            task_prompt="test", cache_key=cache_key, run_id=run_id
+                        )
+                    )
+
+            snapshot_file = cache_dir / run_id / f"{cache_key}_workflow.json"
+            self.assertTrue(snapshot_file.exists())
         finally:
             shutil.rmtree(cache_dir)
 

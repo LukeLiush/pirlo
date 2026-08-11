@@ -190,8 +190,10 @@ async def pirlo_generic_flow(
     pitch_name: str,
     run_id: str,
     worker_fn: Callable[[], Any],
+    task_id: str | None = None,
 ) -> Any:
-    task_id = generate_task_id(pitch_name, {"run_id": run_id})
+    if not task_id:
+        task_id = generate_task_id(pitch_name, {"run_id": run_id})
 
     @task(name=f"Worker: {pitch_name} ({run_id})")
     async def prefect_worker():
@@ -322,12 +324,16 @@ class SmartPrefectTaskOrchestrator(TaskOrchestrator):
                 }
 
             # 2. Execute Prefect flow under temporary settings
+            task_id = getattr(pitch, "task_id", None) or getattr(
+                pitch, "run_name", None
+            )
             with temporary_settings(override_settings):
                 result = await pirlo_generic_flow(
                     workspace=workspace,
                     pitch_name=pitch_name,
                     run_id=run_id,
                     worker_fn=worker_fn,
+                    task_id=task_id,
                 )
 
         print(

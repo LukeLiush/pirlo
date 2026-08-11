@@ -244,15 +244,44 @@ def run_show(run_id: str):
                 print(f"  (Failed to read log file: {e})")
 
     # Artifact Discovery in run directory
-    run_dir = pirlo_workspace / run.playbook / "runs" / run.run_id
-    print(f"\nArtifacts & Recorded Logs ({run_dir}):")
+    playbook_runs_dir = pirlo_workspace / run.playbook / "runs"
+    run_dir = playbook_runs_dir / run.run_id
+
+    artifacts: list[Path] = []
     if run_dir.exists():
-        artifacts = list(run_dir.glob("*"))
-        if artifacts:
-            for art in sorted(artifacts):
-                print(f"  • {art.name:<20}: file://{art.resolve()}")
-        else:
-            print("  (No artifact files generated)")
+        artifacts.extend(run_dir.glob("*"))
+
+    # Fallback for historical runs prior to per-run workflow snapshotting
+    has_workflow_artifact = any(
+        art.name.endswith(".json") and "workflow" in art.name for art in artifacts
+    )
+    if not has_workflow_artifact and playbook_runs_dir.exists():
+        candidate_names: set[str] = set()
+        if run.task_id:
+            candidate_names.add(run.task_id)
+        if "-" in run.run_id:
+            parts = run.run_id.split("-")
+            if len(parts) >= 3 and "_" in parts[-1] and "_" in parts[-2]:
+                candidate_names.add("-".join(parts[:-2]))
+            elif len(parts) >= 2 and "_" in parts[-1]:
+                candidate_names.add("-".join(parts[:-1]))
+
+        for json_file in playbook_runs_dir.glob("*.json"):
+            if any(name in json_file.name for name in candidate_names if name):
+                artifacts.append(json_file)
+
+    seen_paths = set()
+    unique_artifacts = []
+    for art in artifacts:
+        resolved = art.resolve()
+        if resolved not in seen_paths:
+            seen_paths.add(resolved)
+            unique_artifacts.append(art)
+
+    print(f"\nArtifacts & Recorded Logs ({run_dir}):")
+    if unique_artifacts:
+        for art in sorted(unique_artifacts, key=lambda p: p.name):
+            print(f"  • {art.name:<25}: file://{art.resolve()}")
     else:
-        print("  (Run directory not created)")
+        print("  (No artifact files generated)")
     print()

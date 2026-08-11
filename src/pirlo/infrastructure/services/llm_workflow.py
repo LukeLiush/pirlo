@@ -135,13 +135,35 @@ class LlmWorkflowRunner(WorkflowRunner):
             # Save workflow representation to cache repo
             self.repository.save(workflow)
 
+            if run_id and hasattr(self.repository, "directory"):
+                run_dir = self.repository.directory / run_id
+                try:
+                    run_dir.mkdir(parents=True, exist_ok=True)
+                    snapshot_path = run_dir / f"{workflow_id}_workflow.json"
+                    snapshot_path.write_text(
+                        workflow.model_dump_json(indent=2), encoding="utf-8"
+                    )
+                except Exception as e:  # noqa: BLE001
+                    logger.warning(
+                        "Failed to snapshot workflow to run directory %s: %s",
+                        run_dir,
+                        e,
+                    )
+
             if run_id and self.run_history_repository:
-                for action in workflow.actions:
+                for idx, action in enumerate(workflow.actions):
+                    step_num = (
+                        action.step_number
+                        if action.step_number is not None
+                        else (idx + 1)
+                    )
                     self.run_history_repository.save_step(
                         run_id=run_id,
-                        step_number=action.step_number,
+                        step_number=step_num,
                         action_type=action.action_type,
-                        status=action.status.value if hasattr(action.status, "value") else str(action.status),
+                        status=action.status.value
+                        if hasattr(action.status, "value")
+                        else str(action.status),
                         goal=action.goal,
                     )
 
