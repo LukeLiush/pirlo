@@ -64,6 +64,17 @@ class StdioTee:
         return self.original_stream.fileno()
 
 
+ANSI_PATTERN = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]|\b\[\d+m")
+
+
+class AnsiStrippingFormatter(logging.Formatter):
+    """Logging Formatter that strips raw ANSI escape codes from log records before saving to file."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        formatted_message = super().format(record)
+        return ANSI_PATTERN.sub("", formatted_message)
+
+
 @contextmanager
 def capture_run_logs(run_dir: Path, get_prefix_fn=None):
     """Context manager capturing all stdout/stderr and logging module calls into run_dir/run.log without duplicating terminal output."""
@@ -84,7 +95,7 @@ def capture_run_logs(run_dir: Path, get_prefix_fn=None):
         # 2. Attach FileHandler directly to root_logger
         # (All child loggers including prefect propagate up to root_logger)
         file_handler = logging.FileHandler(log_path, encoding="utf-8")
-        formatter = logging.Formatter(
+        formatter = AnsiStrippingFormatter(
             "[%(asctime)s UTC] %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
         )
         formatter.converter = time.gmtime
