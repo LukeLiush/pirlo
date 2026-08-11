@@ -8,7 +8,7 @@ class WorkflowRunner(ABC):
     async def run(
         self,
         task_prompt: str,
-        workflow_id: str | None = None,
+        cache_key: str | None = None,
         run_id: str | None = None,
     ) -> str:
-        """Executes the workflow given the task prompt, workflow ID, and run ID."""
+        """Executes the workflow given the task prompt, cache key, and run ID."""

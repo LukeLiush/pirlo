@@ -1,5 +1,8 @@
+import os
 from pathlib import Path
 from typing import Any
+
+os.environ.setdefault("ANONYMIZED_TELEMETRY", "false")
 
 from browser_use import Agent, Browser, Controller
 from browser_use.agent.prompts import SystemPrompt

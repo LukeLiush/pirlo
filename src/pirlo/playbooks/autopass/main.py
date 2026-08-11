@@ -181,6 +181,8 @@ class AutopassSession(TerminalPitch):
             cdp_port=CDP_PORT,
             options=options,
             run_dir=self.run_dir,
+            run_name=self.run_name,
+            run_id=self.run_id,
         )
 
         payload = AutopassRunOutput(

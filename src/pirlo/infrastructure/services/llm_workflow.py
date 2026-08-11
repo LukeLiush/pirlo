@@ -90,11 +90,10 @@ class LlmWorkflowRunner(WorkflowRunner):
     async def run(
         self,
         task_prompt: str,
-        workflow_id: str | None = None,
+        cache_key: str | None = None,
         run_id: str | None = None,
     ) -> str:
-        if not workflow_id:
-            workflow_id = generate_deterministic_id(task_prompt)
+        workflow_id = cache_key or generate_deterministic_id(task_prompt)
 
         # Launch browser-use agent
         browser: Browser = Browser(
@@ -137,15 +136,14 @@ class LlmWorkflowRunner(WorkflowRunner):
             self.repository.save(workflow)
 
             if run_id and self.run_history_repository:
-                self.run_history_repository.save_step(
-                    run_id=run_id,
-                    step_number=1,
-                    action_type="llm_execution",
-                    status="completed",
-                    goal=task_prompt,
-                    started_at=started_dt,
-                    finished_at=datetime.now(UTC),
-                )
+                for action in workflow.actions:
+                    self.run_history_repository.save_step(
+                        run_id=run_id,
+                        step_number=action.step_number,
+                        action_type=action.action_type,
+                        status=action.status.value if hasattr(action.status, "value") else str(action.status),
+                        goal=action.goal,
+                    )
 
             return history.final_result() or "Workflow finished."
         except Exception:

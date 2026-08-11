@@ -27,20 +27,20 @@ class SelfHealingRunner(WorkflowRunner):
     async def run(
         self,
         task_prompt: str,
-        workflow_id: str | None = None,
+        cache_key: str | None = None,
         run_id: str | None = None,
     ) -> str:
-        if not workflow_id:
-            workflow_id = generate_deterministic_id(task_prompt)
+        if not cache_key:
+            cache_key = generate_deterministic_id(task_prompt)
 
         # 1. Attempt cached deterministic replay if present
-        if self.repository.exists(workflow_id):
+        if self.repository.exists(cache_key):
             logger.info(
-                f"Cached workflow '{workflow_id}' found. Initiating deterministic replay..."
+                f"Cached workflow '{cache_key}' found. Initiating deterministic replay..."
             )
             try:
                 result: str = await self.replay_runner.run(
-                    task_prompt=task_prompt, workflow_id=workflow_id, run_id=run_id
+                    task_prompt=task_prompt, cache_key=cache_key, run_id=run_id
                 )
                 logger.info("Deterministic replay completed successfully.")
                 return result
@@ -56,12 +56,12 @@ class SelfHealingRunner(WorkflowRunner):
                 )
         else:
             logger.info(
-                f"No cached workflow found for '{workflow_id}'. Initiating fallback browser-use agent..."
+                f"No cached workflow found for '{cache_key}'. Initiating fallback browser-use agent..."
             )
 
         # 2. Execute fallback runner (runs browser-use agent and updates the repository cache)
         return await self.fallback_runner.run(
-            task_prompt=task_prompt, workflow_id=workflow_id, run_id=run_id
+            task_prompt=task_prompt, cache_key=cache_key, run_id=run_id
         )
 
     async def _reset_browser_session(self) -> None:

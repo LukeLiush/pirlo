@@ -41,11 +41,10 @@ class PlaywrightReplayRunner(WorkflowRunner):
     async def run(
         self,
         task_prompt: str,
-        workflow_id: str | None = None,
+        cache_key: str | None = None,
         run_id: str | None = None,
     ) -> str:
-        if not workflow_id:
-            workflow_id = generate_deterministic_id(task_prompt)
+        workflow_id = cache_key or generate_deterministic_id(task_prompt)
 
         # Load from repository boundary
         workflow: Workflow = self.repository.load(workflow_id)

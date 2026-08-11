@@ -96,12 +96,19 @@ async def run_self_healing_worker_task(
     cdp_port: int,
     options: AutopassExecutionOptions,
     run_dir: Path,
+    run_name: str | None = None,
+    run_id: str | None = None,
 ) -> str:
     """Directly executes SelfHealingRunner inside a Prefect task."""
     cdp_url = f"http://localhost:{cdp_port}"
-    runs_dir = get_workspace_path() / "autopass" / "runs"
+    workspace = get_workspace_path()
+    runs_dir = workspace / "autopass" / "runs"
     repository = JsonFileWorkflowRepository(directory=runs_dir)
     browser_config = BrowserConfig(cdp_url=cdp_url)
+
+    db_path = workspace / "pirlo.db"
+    conn = sqlite3.connect(str(db_path), timeout=30.0, check_same_thread=False)
+    history_repo = SqliteRunHistoryRepository(conn)
 
     transform_llm = LlmFactory.create_langchain_llm(
         link=options.analyst, temperature=0.0, timeout=120.0
@@ -114,6 +121,7 @@ async def run_self_healing_worker_task(
         repository=repository,
         llm=transform_llm,
         browser_config=browser_config,
+        run_history_repository=history_repo,
     )
 
     gif_setting = run_dir / "agent_history.gif" if options.generate_gif else False
@@ -129,6 +137,7 @@ async def run_self_healing_worker_task(
         agent_factory=agent_factory,
         repository=repository,
         browser_config=browser_config,
+        run_history_repository=history_repo,
     )
 
     self_healing_runner = SelfHealingRunner(
@@ -146,13 +155,18 @@ async def run_self_healing_worker_task(
         workflow_runner=self_healing_runner,
     )
 
-    return await use_case.run(
-        task_prompt=task_prompt,
-        profile_path=profile_path,
-        headless=headless,
-        cdp_port=cdp_port,
-        listener=PrefectProgressListener(),
-    )
+    try:
+        return await use_case.run(
+            task_prompt=task_prompt,
+            profile_path=profile_path,
+            headless=headless,
+            cdp_port=cdp_port,
+            listener=PrefectProgressListener(),
+            run_name=run_name,
+            run_id=run_id,
+        )
+    finally:
+        conn.close()
 
 
 @task(name="Finalize Run Status in pirlo.db")

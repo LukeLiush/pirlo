@@ -322,6 +322,44 @@ class TestRunHistoryAndMVC(unittest.TestCase):
         self.assertIn((2, "running"), called_steps)
         self.assertIn((2, "completed"), called_steps)
 
+    def test_workflow_runner_cache_key_and_step_history(self):
+        import asyncio
+        from pirlo.core.models.actions import DoneAction, NavigateAction
+        from pirlo.core.models.workflow import Workflow
+        from pirlo.infrastructure.repository import JsonFileWorkflowRepository
+        from pirlo.infrastructure.services.self_healing_workflow import SelfHealingRunner
+
+        cache_dir = Path(tempfile.mkdtemp())
+        try:
+            repo = JsonFileWorkflowRepository(directory=cache_dir)
+            mock_replay = MagicMock()
+            mock_replay.run = MagicMock(side_effect=lambda task_prompt, cache_key, run_id: asyncio.sleep(0, result="replay result"))
+            mock_fallback = MagicMock()
+
+            # Pre-save workflow cache using cache_key (run_name)
+            run_name = "regista-12345678"
+            run_id = "regista-12345678-20260811_123456_000000"
+            workflow = Workflow(
+                workflow_id=run_name,
+                description="test task",
+                actions=[NavigateAction(url="https://google.com"), DoneAction(text="done")],
+            )
+            repo.save(workflow)
+
+            runner = SelfHealingRunner(
+                replay_runner=mock_replay,
+                fallback_runner=mock_fallback,
+                repository=repo,
+            )
+
+            result = asyncio.run(
+                runner.run(task_prompt="test prompt", cache_key=run_name, run_id=run_id)
+            )
+            self.assertEqual(result, "replay result")
+            self.assertTrue(repo.exists(run_name))
+        finally:
+            shutil.rmtree(cache_dir)
+
 
 if __name__ == "__main__":
     unittest.main()

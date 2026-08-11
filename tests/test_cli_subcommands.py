@@ -22,7 +22,8 @@ class MockSubcommandSession(TerminalPitch):
 
 
 @pytest.mark.anyio
-async def test_subcommand_default_orchestrator():
+async def test_subcommand_default_orchestrator(monkeypatch, tmp_path):
+    monkeypatch.setenv("PIRLO_WORKSPACE", str(tmp_path))
     with (
         patch.object(sys, "argv", ["pirlo mock", "--task", "Search Google"]),
         patch(
@@ -45,7 +46,8 @@ async def test_subcommand_default_orchestrator():
 
 
 @pytest.mark.anyio
-async def test_subcommand_orchestrator_override():
+async def test_subcommand_orchestrator_override(monkeypatch, tmp_path):
+    monkeypatch.setenv("PIRLO_WORKSPACE", str(tmp_path))
     with (
         patch.object(
             sys,

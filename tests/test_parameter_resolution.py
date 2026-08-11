@@ -35,6 +35,7 @@ class TestParameterResolution(unittest.TestCase):
         # Back up env and argv
         self.original_env = dict(os.environ)
         self.original_argv = list(sys.argv)
+        os.environ["PIRLO_WORKSPACE"] = self.temp_dir.name
 
     def tearDown(self):
         # Restore env and argv

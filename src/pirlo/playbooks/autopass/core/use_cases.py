@@ -29,6 +29,8 @@ class RunAutopassUseCase:
         headless: bool,
         cdp_port: int,
         listener: ProgressListener,
+        run_name: str | None = None,
+        run_id: str | None = None,
     ) -> Any:
         # 1. Launch the browser context
         with listener.status_context("Launching browser session..."):
@@ -41,7 +43,11 @@ class RunAutopassUseCase:
 
             # 3. Execute the autonomous workflow
             with listener.status_context("Executing autonomous autopass play..."):
-                result = await self.workflow_runner.run(task_prompt=task_prompt)
+                result = await self.workflow_runner.run(
+                    task_prompt=task_prompt,
+                    cache_key=run_name,
+                    run_id=run_id,
+                )
 
             listener.show_goal(
                 "Play completed successfully!", detail=f"Result: {result}"
