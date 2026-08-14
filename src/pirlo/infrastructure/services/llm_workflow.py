@@ -10,15 +10,14 @@ from browser_use.agent.views import AgentHistoryList
 
 from pirlo.core.models.browser_config import BrowserConfig
 from pirlo.core.models.workflow import Workflow, WorkflowMetadata
-from pirlo.core.ports.run_history import RunHistoryRepository
-from pirlo.core.repository.workflow import WorkflowRepository
+from pirlo.core.repository.run_history_repository import RunHistoryRepository
+from pirlo.core.repository.workflow_repository import WorkflowRepository
 from pirlo.core.services.workflow_runner import WorkflowRunner
 from pirlo.infrastructure.adapters.browser.browser_agent_factory import (
     BrowserAgentFactory,
 )
 from pirlo.infrastructure.services.workflow_service import (
     convert_history_to_workflow,
-    generate_deterministic_id,
 )
 
 logger = logging.getLogger(__name__)
@@ -33,11 +32,11 @@ class LlmWorkflowRunner(WorkflowRunner):
     run_history_repository: RunHistoryRepository | None
 
     def __init__(
-        self,
-        agent_factory: BrowserAgentFactory,
-        repository: WorkflowRepository,
-        browser_config: BrowserConfig,
-        run_history_repository: RunHistoryRepository | None = None,
+            self,
+            agent_factory: BrowserAgentFactory,
+            repository: WorkflowRepository,
+            browser_config: BrowserConfig,
+            run_history_repository: RunHistoryRepository | None = None,
     ) -> None:
         self.agent_factory = agent_factory
         self.repository = repository
@@ -45,7 +44,7 @@ class LlmWorkflowRunner(WorkflowRunner):
         self.run_history_repository = run_history_repository
 
     def _build_metadata(
-        self, agent: Agent, task_prompt: str, elapsed: float
+            self, agent: Agent, task_prompt: str, elapsed: float
     ) -> WorkflowMetadata:
         """Extracts runtime metadata dynamically from the agent and execution context."""
         # Extract creator Info
@@ -88,12 +87,12 @@ class LlmWorkflowRunner(WorkflowRunner):
         )
 
     async def run(
-        self,
-        task_prompt: str,
-        cache_key: str | None = None,
-        run_id: str | None = None,
+            self,
+            task_prompt: str,
+            cache_key: str | None = None,
+            run_id: str | None = None,
     ) -> str:
-        workflow_id = cache_key or generate_deterministic_id(task_prompt)
+        workflow_id = cache_key
 
         # Launch browser-use agent
         browser: Browser = Browser(

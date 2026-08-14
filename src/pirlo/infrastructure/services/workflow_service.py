@@ -1,4 +1,3 @@
-import hashlib
 import logging
 from datetime import UTC, datetime
 from typing import Any
@@ -49,54 +48,6 @@ from pirlo.core.models.actions import (
 )
 from pirlo.core.models.workflow import Workflow, WorkflowMetadata
 
-ADJECTIVES: list[str] = [
-    "speedy",
-    "clever",
-    "vibrant",
-    "mighty",
-    "jolly",
-    "sneaky",
-    "sleepy",
-    "brave",
-    "silent",
-    "gentle",
-    "funky",
-    "happy",
-    "cosmic",
-    "witty",
-    "bold",
-]
-NOUNS: list[str] = [
-    "panda",
-    "koala",
-    "otter",
-    "badger",
-    "falcon",
-    "fox",
-    "owl",
-    "dolphin",
-    "squirrel",
-    "rabbit",
-    "panther",
-    "cheetah",
-    "sloth",
-    "penguin",
-    "lemur",
-]
-
-
-def generate_deterministic_id(prompt: str) -> str:
-    """Generates a human-readable, deterministic workflow ID based on the task prompt hash."""
-    sha = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
-
-    # Select index values based on hash chunks
-    adj_idx = int(sha[0:4], 16) % len(ADJECTIVES)
-    noun_idx = int(sha[4:8], 16) % len(NOUNS)
-    short_hash = sha[-5:]
-
-    return f"{ADJECTIVES[adj_idx]}-{NOUNS[noun_idx]}-{short_hash}"
-
-
 logger = logging.getLogger("workflow_replay.runner")
 
 
@@ -136,10 +87,10 @@ def get_inner_action(action_model: BaseModel) -> BaseModel:
 
 
 def convert_history_to_workflow(
-    history_list: AgentHistoryList,
-    workflow_id: str,
-    description: str,
-    metadata: WorkflowMetadata | None = None,
+        history_list: AgentHistoryList,
+        workflow_id: str,
+        description: str,
+        metadata: WorkflowMetadata | None = None,
 ) -> Workflow:
     """Converts the browser-use AgentHistoryList into a domain-pure Workflow representation."""
     domain_actions: list[Action] = []
@@ -165,8 +116,8 @@ def convert_history_to_workflow(
             element_info = None
             el_context: ElementContext | None = None
             if (
-                action_idx < len(interacted_elements)
-                and interacted_elements[action_idx]
+                    action_idx < len(interacted_elements)
+                    and interacted_elements[action_idx]
             ):
                 element_info = interacted_elements[action_idx]
 
@@ -174,10 +125,10 @@ def convert_history_to_workflow(
                 attrs = element_info.attributes or {}
                 tag = element_info.node_name or "unknown"
                 text_val = (
-                    attrs.get("text")
-                    or attrs.get("value")
-                    or element_info.ax_name
-                    or tag
+                        attrs.get("text")
+                        or attrs.get("value")
+                        or element_info.ax_name
+                        or tag
                 )
                 el_context = ElementContext(
                     xpath=element_info.x_path,

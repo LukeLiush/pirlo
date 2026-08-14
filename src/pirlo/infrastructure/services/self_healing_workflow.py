@@ -1,8 +1,7 @@
 import logging
 
-from pirlo.core.repository.workflow import WorkflowRepository
+from pirlo.core.repository.workflow_repository import WorkflowRepository
 from pirlo.core.services.workflow_runner import WorkflowRunner
-from pirlo.infrastructure.services.workflow_service import generate_deterministic_id
 
 logger = logging.getLogger(__name__)
 
@@ -13,28 +12,29 @@ class SelfHealingRunner(WorkflowRunner):
     replay_runner: WorkflowRunner
     fallback_runner: WorkflowRunner
     repository: WorkflowRepository
+    cdp_url: str
 
     def __init__(
-        self,
-        replay_runner: WorkflowRunner,
-        fallback_runner: WorkflowRunner,
-        repository: WorkflowRepository,
+            self,
+            replay_runner: WorkflowRunner,
+            fallback_runner: WorkflowRunner,
+            repository: WorkflowRepository,
+            cdp_url: str = "http://localhost:9222",
     ) -> None:
         self.replay_runner = replay_runner
         self.fallback_runner = fallback_runner
         self.repository = repository
+        self.cdp_url = cdp_url
 
     async def run(
-        self,
-        task_prompt: str,
-        cache_key: str | None = None,
-        run_id: str | None = None,
+            self,
+            task_prompt: str,
+            cache_key: str | None = None,
+            run_id: str | None = None,
     ) -> str:
-        if not cache_key:
-            cache_key = generate_deterministic_id(task_prompt)
 
         # 1. Attempt cached deterministic replay if present
-        if self.repository.exists(cache_key):
+        if cache_key and self.repository.exists(cache_key):
             logger.info(
                 f"Cached workflow '{cache_key}' found. Initiating deterministic replay..."
             )
@@ -50,7 +50,7 @@ class SelfHealingRunner(WorkflowRunner):
                     "Resetting browser context for fresh fallback...",
                     exc_info=True,
                 )
-                await self._reset_browser_session()
+                await self._reset_browser_session(self.cdp_url)
                 logger.info(
                     "Triggering fallback browser-use agent to self-heal workflow cache..."
                 )
@@ -64,14 +64,16 @@ class SelfHealingRunner(WorkflowRunner):
             task_prompt=task_prompt, cache_key=cache_key, run_id=run_id
         )
 
-    async def _reset_browser_session(self) -> None:
+    @staticmethod
+    async def _reset_browser_session(cdp_url: str = "http://localhost:9222") -> None:
         """Navigates active CDP browser session to about:blank to ensure fresh start."""
         try:
             import httpx
 
             async with httpx.AsyncClient() as client:
                 await client.get(
-                    "http://localhost:9222/json/new?about:blank", timeout=2.0
+                    f"{cdp_url}/json/new?about:blank", timeout=2.0
                 )
         except Exception as e:  # noqa: BLE001
-            logger.warning(f"Could not reset CDP browser tab: {e}")
+            logger.warning(f"Could not reset CDP browser tab at {cdp_url}: {e}")
+

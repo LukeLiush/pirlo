@@ -9,11 +9,10 @@ from playwright.async_api import async_playwright
 from pirlo.core.models.actions import Action, DoneAction
 from pirlo.core.models.browser_config import BrowserConfig
 from pirlo.core.models.workflow import Workflow
-from pirlo.core.ports.run_history import RunHistoryRepository
-from pirlo.core.repository.workflow import WorkflowRepository
+from pirlo.core.repository.run_history_repository import RunHistoryRepository
+from pirlo.core.repository.workflow_repository import WorkflowRepository
 from pirlo.core.services.workflow_runner import WorkflowRunner
 from pirlo.infrastructure.adapters.browser.playwright_adapter import PlaywrightAdapter
-from pirlo.infrastructure.services.workflow_service import generate_deterministic_id
 
 logger = logging.getLogger(__name__)
 
@@ -27,11 +26,11 @@ class PlaywrightReplayRunner(WorkflowRunner):
     run_history_repository: RunHistoryRepository | None
 
     def __init__(
-        self,
-        repository: WorkflowRepository,
-        llm: BaseChatModel | None,
-        browser_config: BrowserConfig,
-        run_history_repository: RunHistoryRepository | None = None,
+            self,
+            repository: WorkflowRepository,
+            llm: BaseChatModel | None,
+            browser_config: BrowserConfig,
+            run_history_repository: RunHistoryRepository | None = None,
     ) -> None:
         self.repository = repository
         self.llm = llm
@@ -39,12 +38,12 @@ class PlaywrightReplayRunner(WorkflowRunner):
         self.run_history_repository = run_history_repository
 
     async def run(
-        self,
-        task_prompt: str,
-        cache_key: str | None = None,
-        run_id: str | None = None,
+            self,
+            task_prompt: str,
+            cache_key: str | None = None,
+            run_id: str | None = None,
     ) -> str:
-        workflow_id = cache_key or generate_deterministic_id(task_prompt)
+        workflow_id = cache_key
 
         # Load from repository boundary
         workflow: Workflow = self.repository.load(workflow_id)

@@ -3,8 +3,9 @@ import getpass
 import sys
 from pathlib import Path
 
-from pirlo.core.models.link import SUPPORTED_PROVIDERS, LlmLink
 from pirlo.core.services.link_tester import LinkTester
+
+from pirlo.core.models.link import SUPPORTED_PROVIDERS, LlmLink
 from pirlo.infrastructure.adapters.storage.json_link_repository import (
     JsonLinkRepository,
 )
@@ -102,7 +103,7 @@ def run_list(repo: JsonLinkRepository, supported_providers: dict):
 
 
 def run_create(repo: JsonLinkRepository, args, supported_providers: dict):
-    name = args.name
+    name = args._name
     provider = args.provider
     model = args.model
     api_key = args.api_key

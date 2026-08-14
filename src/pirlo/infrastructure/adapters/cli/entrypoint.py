@@ -9,6 +9,15 @@ def load_playbooks() -> dict[str, str]:
     playbooks: dict[str, str] = {}
     pyproject_path = Path.cwd() / "pyproject.toml"
     if not pyproject_path.exists():
+        current = Path(__file__).resolve().parent
+        for _ in range(6):
+            candidate = current / "pyproject.toml"
+            if candidate.exists():
+                pyproject_path = candidate
+                break
+            current = current.parent
+
+    if not pyproject_path.exists():
         return playbooks
 
     try:
@@ -26,38 +35,15 @@ def load_playbooks() -> dict[str, str]:
     return playbooks
 
 
-def normalize_cli_arguments(
-    raw_arguments: list[str], registered_playbooks: dict[str, str]
-) -> list[str]:
-    """
-    Normalizes CLI arguments to canonical playbook-first syntax.
-    Translates legacy prefix 'pirlo prefect autopass --task x'
-    into canonical 'pirlo autopass --task x -- prefect'.
-    """
-    if len(raw_arguments) >= 3:
-        first_argument = raw_arguments[1]
-        second_argument = raw_arguments[2]
-
-        if (
-            first_argument not in registered_playbooks
-            and second_argument in registered_playbooks
-        ):
-            orchestrator_engine = first_argument
-            target_playbook = second_argument
-            remaining_arguments = raw_arguments[3:]
-
-            return (
-                [f"pirlo {target_playbook}"]
-                + remaining_arguments
-                + ["--", orchestrator_engine]
-            )
-
-    return raw_arguments
-
-
 def main():
+    src_dir = str(Path(__file__).resolve().parents[4])
+    cwd_dir = str(Path(__file__).resolve().parents[5])
+    if src_dir not in sys.path:
+        sys.path.insert(0, src_dir)
+    if cwd_dir not in sys.path:
+        sys.path.insert(0, cwd_dir)
 
-    playbooks = load_playbooks()
+    playbooks: dict[str, str] = load_playbooks()
 
     if len(sys.argv) < 2 or sys.argv[1] in ("-h", "--help"):
         print("Usage: pirlo <command> [<args>]")
@@ -67,7 +53,7 @@ def main():
         print("  run           - Manage execution run history (list, show)")
         if playbooks:
             # To show a nice description, we can dynamically load the classes and show their docstrings!
-            for cmd, entrypoint in sorted(playbooks.items()):
+            for command, entrypoint in sorted(playbooks.items()):
                 description = ""
                 try:
                     module_name, class_name = entrypoint.split(":")
@@ -92,11 +78,11 @@ def main():
                 except Exception:  # noqa: BLE001
                     import traceback
 
-                    sys.stderr.write(f"Error loading playbook command '{cmd}':\n")
+                    sys.stderr.write(f"Error loading playbook command '{command}':\n")
                     traceback.print_exc()
 
                 desc_str = f" - {description}" if description else ""
-                print(f"  {cmd:<13}{desc_str}")
+                print(f"  {command:<13}{desc_str}")
         else:
             print(
                 "\nNo playbooks registered. Register them in pyproject.toml under [tool.pirlo.playbooks]"
@@ -109,6 +95,7 @@ def main():
     command = sys.argv[1]
 
     # Quick dispatch for built-in non-playbook subcommands (e.g. link, profile, run)
+    # TODO, i need to turn it into config.
     if command in ("link", "profile", "run"):
         if command == "link":
             from pirlo.infrastructure.adapters.cli.link_commands import (
@@ -146,9 +133,6 @@ def main():
                 sys.exit(1)
             sys.exit(0)
 
-    # Normalize CLI arguments (e.g. legacy prefix 'pirlo prefect autopass' -> 'pirlo autopass --task x -- prefect')
-    sys.argv = normalize_cli_arguments(sys.argv, playbooks)
-
     target_playbook = sys.argv[0].split(" ")[-1] if " " in sys.argv[0] else sys.argv[1]
     if " " in sys.argv[0]:
         target_playbook = sys.argv[0].split(" ")[1]
@@ -169,7 +153,7 @@ def main():
             session_cls = getattr(module, class_name)
 
             # Call the TerminalPitch cli runner
-            session_cls.cli()
+            session_cls.cli(playbook_name=target_playbook)
 
         except Exception as e:  # noqa: BLE001
             print(

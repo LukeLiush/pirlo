@@ -134,9 +134,9 @@ def run_list(limit: int = 10, status: str | None = None, playbook: str | None = 
         duration_str = format_duration(run.started_at, run.finished_at)
         status_markup = format_status_markup(run.status)
 
-        task_display = run.task_id
-        if len(task_display) > 35:
-            task_display = task_display[:32] + "..."
+        run_name = run.run_name
+        if len(run_name) > 35:
+            run_name = run_name[:32] + "..."
 
         table.add_row(
             run.run_id,
@@ -144,7 +144,7 @@ def run_list(limit: int = 10, status: str | None = None, playbook: str | None = 
             status_markup,
             started_str,
             duration_str,
-            task_display,
+            run_name,
         )
 
     console.print(table)
@@ -162,7 +162,7 @@ def run_show(run_id: str):
     print(f" Run Inspection: {run.run_id}")
     print("=" * 70)
     print(f"  • Playbook:         {run.playbook}")
-    print(f"  • Task ID:          {run.task_id}")
+    print(f"  • RUN Name:          {run.run_name}")
     print(f"  • Run Type:         {run.run_type.value}")
     print(f"  • Status:           {run.status.value.upper()}")
     print(f"  • Created At:       {run.created_at.strftime('%Y-%m-%d %H:%M:%S UTC')}")
@@ -257,8 +257,8 @@ def run_show(run_id: str):
     )
     if not has_workflow_artifact and playbook_runs_dir.exists():
         candidate_names: set[str] = set()
-        if run.task_id:
-            candidate_names.add(run.task_id)
+        if run.run_name:
+            candidate_names.add(run.run_name)
         if "-" in run.run_id:
             parts = run.run_id.split("-")
             if len(parts) >= 3 and "_" in parts[-1] and "_" in parts[-2]:
