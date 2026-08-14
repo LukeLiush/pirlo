@@ -34,7 +34,7 @@ class AutopassInstructions:
     PROFILE_EXPIRED = Instruction(
         message="Browser profile '{profile}' session has expired",
         detail=(
-            "The browser profile session '{profile}' has expired (expired on {expires_at}).\n"
+            "The browser profile session '{profile}' has expired (expired on {expires_at}, {days_expired} ago).\n"
             "To regenerate and refresh this session, please re-authenticate:\n"
             "  pirlo login --profile {profile} --urls {authenticated_urls}"
         ),

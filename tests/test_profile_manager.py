@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from datetime import UTC, datetime, timedelta
 
-from pirlo.core.services.profile_manager import ProfileManager
+from pirlo.infrastructure.services.profile_manager import ProfileManager
 
 
 class TestProfileManager(unittest.TestCase):
@@ -52,6 +52,7 @@ class TestProfileManager(unittest.TestCase):
             json.dump(data, f)
 
         self.assertTrue(ProfileManager.is_expired("expired_prof"))
+        self.assertIn("1 day", ProfileManager.get_days_expired("expired_prof"))
 
     def test_list_and_delete_profiles(self):
         ProfileManager.save_profile_metadata("prof1", urls=["https://a.com"])

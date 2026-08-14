@@ -11,14 +11,17 @@ class LlmFactory:
 
     @staticmethod
     def create_langchain_llm(
-        link: LlmLink,
+        link: LlmLink | None,
         temperature: float = 0.0,
         max_tokens: int | None = None,
         max_retries: int = 3,
         timeout: float = 30.0,
         seed: int | None = None,
         extra_headers: dict | None = None,
-    ) -> LangChainBaseChatModel:
+    ) -> LangChainBaseChatModel | None:
+        if not link:
+            return None
+
         provider = link.provider.lower()
 
         base_url = link.base_url

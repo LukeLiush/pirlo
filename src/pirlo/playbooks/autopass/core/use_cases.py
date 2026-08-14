@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 from typing import Any
 
@@ -7,6 +8,13 @@ from pirlo.playbooks.autopass.core.ports import (
     CdpChecker,
     ProgressListener,
 )
+
+
+def slugify(text: str) -> str:
+    """Converts a task prompt into a safe, normalized string identifier for cache keys."""
+    text = text.lower().strip()
+    text = re.sub(r"[^\w\s-]", "", text)
+    return re.sub(r"[\s_-]+", "_", text)[:50]
 
 
 class RunAutopassUseCase:
@@ -41,11 +49,15 @@ class RunAutopassUseCase:
             with listener.status_context("Waiting for browser CDP listener port..."):
                 await self.cdp_checker.wait_until_ready()
 
-            # 3. Execute the autonomous workflow
+            # 3. Formulate cache key: run_name + slugify(task_prompt)
+            slug_prompt = slugify(task_prompt)
+            cache_key = f"{run_name}_{slug_prompt}" if run_name else slug_prompt
+
+            # 4. Execute the autonomous workflow
             with listener.status_context("Executing autonomous autopass play..."):
                 result = await self.workflow_runner.run(
                     task_prompt=task_prompt,
-                    cache_key=run_name,
+                    cache_key=cache_key,
                     run_id=run_id,
                 )
 
@@ -57,6 +69,7 @@ class RunAutopassUseCase:
             listener.show_red_card("Play failed with error!", detail=str(e))
             raise
         finally:
-            # 4. Clean up browser context
+            # 5. Clean up browser context
             with listener.status_context("Closing browser..."):
                 await self.browser_manager.close()
+
