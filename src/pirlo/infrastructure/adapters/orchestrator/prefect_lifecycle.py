@@ -1,0 +1,153 @@
+# pirlo/infrastructure/adapters/orchestrator/prefect_lifecycle.py
+from __future__ import annotations
+
+import asyncio
+import inspect
+import json
+import sqlite3
+from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
+
+from prefect import flow, task
+
+from pirlo.core.models.plan import DecomposerPlan
+from pirlo.core.models.run import Run, RunStatus
+from pirlo.infrastructure.adapters.db.sqlite_run_history_repository import (
+    SqliteRunHistoryRepository,
+)
+
+
+def _connect(workspace: Path) -> sqlite3.Connection:
+    return sqlite3.connect(
+        str(workspace / "pirlo.db"), timeout=30.0, check_same_thread=False
+    )
+
+
+@task(name="Pre-Register Run in pirlo.db")
+async def preregister_run_task(
+        workspace: Path, playbook: str, run_name: str, run_id: str
+) -> Run:
+    conn = _connect(workspace)
+    try:
+        repo = SqliteRunHistoryRepository(conn)
+        now = datetime.now(UTC)
+        run = Run(
+            run_id=run_id,
+            run_name=run_name,
+            playbook=playbook,
+            status=RunStatus.STARTED,
+            parameter_file_location=f"{playbook}/runs/{run_id}/params.json",
+            log_file_location=f"{playbook}/runs/{run_id}/run.log",
+            created_at=now,
+            updated_at=now,
+            started_at=now,
+        )
+        repo.save(run)
+        return run
+    finally:
+        conn.close()
+
+
+@task(name="Finalize Run Status in pirlo.db")
+async def finalize_run_task(workspace: Path, run_id: str, status: RunStatus) -> None:
+    conn = _connect(workspace)
+    try:
+        repo = SqliteRunHistoryRepository(conn)
+        run = repo.get_by_id(run_id)
+        if run:
+            run.status = status
+            run.finished_at = datetime.now(UTC)
+            run.updated_at = datetime.now(UTC)
+            repo.save(run)
+    finally:
+        conn.close()
+
+
+@task(name="Aggregate Subtask Results")
+async def aggregate_subtask_results_task(
+        original_prompt: str,
+        aggregation_instruction: str,
+        subtask_results: list[dict[str, Any]],
+        llm: Any,
+) -> str:
+    """Synthesizes multi-source subtask results into a final Markdown report."""
+    prompt = f"""\
+You are Pirlo's Result Synthesis Engine. Synthesize the collected multi-source web data to directly answer the user's request.
+
+### 🎯 Original User Request:
+{original_prompt}
+
+### 📋 Synthesis Guidelines:
+{aggregation_instruction}
+
+### 📊 Collected Multi-Source Data:
+{json.dumps(subtask_results, indent=2, ensure_ascii=False)}
+
+Synthesize the data into a clean, domain-tailored Markdown report (tables, bullet points, source attributions).
+"""
+    if hasattr(llm, "ainvoke"):
+        response = await llm.ainvoke(prompt)
+        return str(getattr(response, "content", response))
+    if callable(llm):
+        res = llm(prompt)
+        if inspect.isawaitable(res):
+            res = await res
+        return str(res)
+    return f"Aggregator unable to process prompt: {prompt}"
+
+
+@flow(name="Pirlo Decomposed Multi-Target Flow")
+async def pirlo_decomposed_flow(
+        plan: DecomposerPlan,
+        worker_fn: Callable[..., Awaitable[str]],
+        llm: Any,
+        workspace: Path | None = None,
+        playbook: str | None = None,
+        run_name: str | None = None,
+        run_id: str | None = None,
+) -> str:
+    """Dispatches all subtasks concurrently, then merges results via the aggregator.
+
+    Prefect settings (server vs. ephemeral) are applied by the caller
+    (the orchestrator) before this flow runs, so it does not manage them here.
+    """
+    if workspace and playbook and run_id:
+        await preregister_run_task(workspace, playbook, run_name or run_id, run_id)
+
+    try:
+        # 1. Dispatch subtasks concurrently
+        subtask_futures = [
+            worker_fn(task_prompt=spec.task_prompt, site=spec.target_site)
+            for spec in plan.subtasks
+        ]
+        subtask_results = await asyncio.gather(*subtask_futures, return_exceptions=True)
+
+        # 2. Format results for the aggregator
+        formatted_results: list[dict[str, Any]] = []
+        for spec, res in zip(plan.subtasks, subtask_results):
+            if isinstance(res, Exception):
+                formatted_results.append(
+                    {"site": spec.target_site, "status": "FAILED", "error": str(res)}
+                )
+            else:
+                formatted_results.append(
+                    {"site": spec.target_site, "status": "COMPLETED", "data": str(res)}
+                )
+
+        # 3. Aggregate
+        result = await aggregate_subtask_results_task(
+            original_prompt=plan.original_prompt,
+            aggregation_instruction=plan.aggregation_prompt,
+            subtask_results=formatted_results,
+            llm=llm,
+        )
+        if workspace and playbook and run_id:
+            await finalize_run_task(workspace, run_id, RunStatus.COMPLETED)
+        return result
+    except Exception:
+        if workspace and playbook and run_id:
+            await finalize_run_task(workspace, run_id, RunStatus.FAILED)
+        raise
+

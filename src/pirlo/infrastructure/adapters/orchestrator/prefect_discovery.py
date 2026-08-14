@@ -1,9 +1,10 @@
 import contextlib
 import json
 import os
-from pathlib import Path
 
 import httpx
+
+from pirlo.core.config import get_workspace_path
 
 
 def check_health(api_url: str) -> bool:
@@ -28,7 +29,7 @@ def discover_prefect_server_url() -> str | None:
         return env_url
 
     # 2. Inspect active Prefect profile config (~/.prefect/profiles.json)
-    profile_path = Path("~/.prefect/profiles.json").expanduser()
+    profile_path = (get_workspace_path() / "profiles.json").expanduser()
     if profile_path.exists():
         with contextlib.suppress(Exception):
             with open(profile_path, "r", encoding="utf-8") as f:

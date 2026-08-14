@@ -1,0 +1,94 @@
+import hashlib
+import logging
+
+from duckduckgo_search import DDGS
+from prefect import task
+from pydantic_ai import Agent, RunContext
+
+from pirlo.core.models.plan import DecomposerPlan
+from pirlo.core.ports.decomposer import DecomposerPort
+
+logger = logging.getLogger(__name__)
+
+DECOMPOSER_SYSTEM_PROMPT = """\
+You are Pirlo's Task Decomposer Engine, an expert at breaking down multi-source web requests into independent subtasks.
+
+### Core Instructions:
+1. Identify target platforms/websites referenced in the user request.
+2. If exact entrypoint URLs are unknown, use the `search_web` tool to find the official entry URL first.
+3. Generate self-contained, atomic subtask prompts. Each subtask prompt MUST include:
+   - Target entrypoint URL
+   - Specific search, lookup, or navigation action
+   - Explicit target data to extract
+4. Keep subtask prompts standardized to maximize cache hit rates across subtasks.
+5. Provide clear aggregation instructions for synthesizing the final output.
+"""
+
+
+def get_decomposer_agent(
+    model_name: str = "google-gla:gemini-1.5-flash",
+    api_key: str | None = None,
+) -> Agent[None, DecomposerPlan]:
+    """Create and return a PydanticAI Agent with tools and system prompt."""
+    import os
+
+    if api_key:
+        os.environ["GOOGLE_API_KEY"] = api_key
+        os.environ["GEMINI_API_KEY"] = api_key
+    elif "GEMINI_API_KEY" in os.environ and "GOOGLE_API_KEY" not in os.environ:
+        os.environ["GOOGLE_API_KEY"] = os.environ["GEMINI_API_KEY"]
+
+    agent: Agent[None, DecomposerPlan] = Agent(
+        model=model_name,
+        result_type=DecomposerPlan,
+        system_prompt=DECOMPOSER_SYSTEM_PROMPT,
+    )
+
+    @agent.tool
+    async def search_web(ctx: RunContext[None], query: str) -> str:
+        """Search DuckDuckGo to resolve official homepage or entrypoint URLs for a platform."""
+        logger.info(f"Decomposer Search Tool querying DuckDuckGo: '{query}'")
+        try:
+            with DDGS() as ddgs:
+                results = list(ddgs.text(query, max_results=3))
+                return str(results)
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"DuckDuckGo search failed: {e}")
+            return f"Search error: {e}"
+
+    return agent
+
+
+@task(name="Run PydanticAI Decomposer Task")
+async def run_decomposer_pydantic_ai_task(
+    user_prompt: str,
+    model_name: str = "google-gla:gemini-1.5-flash",
+    api_key: str | None = None,
+) -> DecomposerPlan:
+    """Prefect Task wrapper executing PydanticAI Agent with full Prefect tracking & logging."""
+    plan_id = hashlib.sha256(user_prompt.encode()).hexdigest()[:16]
+    agent = get_decomposer_agent(model_name, api_key=api_key)
+
+    result = await agent.run(f"Decompose this multi-source request: {user_prompt}")
+
+    plan: DecomposerPlan = result.data
+    plan.plan_id = plan_id
+    plan.original_prompt = user_prompt
+    return plan
+
+
+class PydanticAiDecomposer(DecomposerPort):
+    """Decomposer Adapter delegating to Prefect-wrapped PydanticAI Agent."""
+
+    def __init__(
+        self,
+        model_name: str = "google-gla:gemini-1.5-flash",
+        api_key: str | None = None,
+    ) -> None:
+        self.model_name = model_name
+        self.api_key = api_key
+
+    async def decompose(self, user_prompt: str) -> DecomposerPlan:
+        return await run_decomposer_pydantic_ai_task(
+            user_prompt, model_name=self.model_name, api_key=self.api_key
+        )
