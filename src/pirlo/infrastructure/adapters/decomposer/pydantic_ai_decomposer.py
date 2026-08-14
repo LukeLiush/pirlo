@@ -38,9 +38,10 @@ def get_decomposer_agent(
     elif "GEMINI_API_KEY" in os.environ and "GOOGLE_API_KEY" not in os.environ:
         os.environ["GOOGLE_API_KEY"] = os.environ["GEMINI_API_KEY"]
 
+    model = model_name or "google-gla:gemini-1.5-flash"
     agent: Agent[None, DecomposerPlan] = Agent(
-        model=model_name,
-        result_type=DecomposerPlan,
+        model=model,
+        output_type=DecomposerPlan,
         system_prompt=DECOMPOSER_SYSTEM_PROMPT,
     )
 

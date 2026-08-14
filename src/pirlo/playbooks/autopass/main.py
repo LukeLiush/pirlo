@@ -193,19 +193,24 @@ class AutopassSession(TerminalPitch):
                 ["Task", self.task],
                 [
                     "Playmaker Link (Provider)",
-                    f"{self.playmaker._name} ({self.playmaker.provider})",
+                    f"{self.playmaker} ({self.playmaker.provider})",
                 ],
                 ["Playmaker Model", self.playmaker.model],
                 ["Playmaker Base URL", pm_base_url or "N/A"],
                 [
                     "Analyst Link (Provider)",
-                    f"{self.analyst._name} ({self.analyst.provider})",
+                    f"{self.analyst} ({self.analyst.provider})",
                 ],
                 ["Analyst Model", self.analyst.model],
                 ["Analyst Base URL", an_base_url or "N/A"],
                 ["Vision Enabled", str(self.use_vision)],
                 ["Max Failures / Delay", f"{self.max_failures} / {self.retry_delay}s"],
-                ["Orchestrator Backend", getattr(self, "orchestrator", "prefect")],
+                [
+                    "Orchestrator Backend",
+                    getattr(self.orchestrator, "name", str(self.orchestrator))
+                    if self.orchestrator
+                    else "prefect",
+                ],
                 ["Schedule", self.schedule or "None (Immediate)"],
             ],
         )
@@ -265,7 +270,7 @@ class AutopassSession(TerminalPitch):
             )
 
         schedule_value: str | None = self._prepared_run.parameters.get(
-            self.schedule.name, None
+            "schedule", None
         )
         raw_output = await self.orchestrator.execute(
             self.task, self._prepared_run, run_use_case, schedule_value

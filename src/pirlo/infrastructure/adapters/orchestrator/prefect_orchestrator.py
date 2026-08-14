@@ -112,16 +112,45 @@ class SmartPrefectTaskOrchestrator(TaskOrchestrator):
         )
 
     def _build_decomposer(self) -> PydanticAiDecomposer:
-        # NOTE: api_key intentionally read from env, not a Parameter — secrets
-        # should not live in pirlo.toml / CLI flags. Adjust env var as needed.
+        api_key = (
+            os.environ.get("PIRLO_DECOMPOSER_API_KEY")
+            or os.environ.get("GEMINI_API_KEY")
+            or os.environ.get("GOOGLE_API_KEY")
+        )
+        if not api_key:
+            from pirlo.infrastructure.adapters.storage.json_link_repository import (
+                JsonLinkRepository,
+            )
+            from pathlib import Path
+            repo = JsonLinkRepository(Path("~/.pirlo-pitch/links.json").expanduser())
+            link = None
+            if self.decomposer_link:
+                link = repo.get_by_name(getattr(self.decomposer_link, "_name", str(self.decomposer_link)))
+            if not link:
+                links = repo.list_all()
+                if links:
+                    link = links[0]
+            if link and link.api_key:
+                api_key = link.api_key
+
         return PydanticAiDecomposer(
-            model_name=self.decomposer_model,
-            api_key=os.environ.get("PIRLO_DECOMPOSER_API_KEY"),
+            model_name=self.decomposer_model or "google-gla:gemini-2.5-flash",
+            api_key=api_key,
         )
 
     def _build_aggregator_llm(self) -> Any:
+        link = self.decomposer_link
+        if not link:
+            from pirlo.infrastructure.adapters.storage.json_link_repository import (
+                JsonLinkRepository,
+            )
+            from pathlib import Path
+            repo = JsonLinkRepository(Path("~/.pirlo-pitch/links.json").expanduser())
+            links = repo.list_all()
+            if links:
+                link = links[0]
         return LlmFactory.create_langchain_llm(
-            link=self.decomposer_link, temperature=0.0, timeout=120.0
+            link=link, temperature=0.0, timeout=120.0
         )
 
     # ---- scheduled deployment ------------------------------------------

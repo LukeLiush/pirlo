@@ -4,9 +4,9 @@ from typing import Any
 
 from cloakbrowser import launch_persistent_context_async
 
+from pirlo.core.models.parameters import Parameter
 from pirlo.core.models.run import RunStatus
 from pirlo.core.models.run_result import RunResult
-from pirlo.core.ports.pitch import Parameter
 from pirlo.infrastructure.adapters.cli.terminal_pitch import TerminalPitch
 from pirlo.infrastructure.services.profile_manager import ProfileManager
 
