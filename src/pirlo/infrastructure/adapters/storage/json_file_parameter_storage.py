@@ -2,10 +2,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from pirlo.core.ports.parameter_storage import ParameterStorage
-
-
-class JsonFileParameterStorage(ParameterStorage):
+class JsonFileParameterStorage:
     def __init__(self, workspace: Path):
         self.workspace = Path(workspace)
 

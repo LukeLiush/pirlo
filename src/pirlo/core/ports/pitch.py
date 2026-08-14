@@ -1,78 +1,16 @@
-from abc import ABC, abstractmethod
-from collections.abc import Callable
+from abc import abstractmethod
 from typing import Any
 
-
-class Parameter:
-    """Descriptor class for defining CLI parameters on a Pitch."""
-
-    def __init__(
-        self,
-        type_func: Callable,
-        default: Any = None,
-        help: str | None = None,
-        short: str | None = None,
-        env_name: str | list[str] | None = None,
-    ):
-        self.type_func = type_func
-        self.default = default
-        self.help = help
-        self.short = short
-        self.env_name = env_name
-        self.name = None
-
-    def __set_name__(self, owner, name):
-        self.name = name
-
-    def __get__(self, instance, owner):
-        if instance is None:
-            return self
-        return instance.__dict__.get(self.name, self.default)
-
-    def __set__(self, instance, value):
-        if instance is not None and self.name is not None:
-            instance.__dict__[self.name] = value
-
-
-class LinkParameter(Parameter):
-    """Descriptor class for defining CLI parameters that resolve to an LlmLink object."""
-
-    def __init__(
-        self,
-        default: Any = None,
-        help: str | None = None,
-        short: str | None = None,
-        env_name: str | list[str] | None = None,
-    ):
-        super().__init__(
-            type_func=str,
-            default=default,
-            help=help,
-            short=short,
-            env_name=env_name,
-        )
-
-
+from pirlo.core.models.parameters import Parameterizable
 from pirlo.core.models.run_result import RunResult
 
 
-class Pitch(ABC):
+class Pitch(Parameterizable):
     """Pure Abstract Port representing the presentation canvas & lifecycle contract."""
 
-    @property
     @abstractmethod
-    def run_name(self) -> str:
-        """Deterministic run workload name."""
-
-    @property
-    @abstractmethod
-    def run_id(self) -> str:
-        """Unique execution instance ID."""
-
-    @property
-    @abstractmethod
-    def domain_options(self) -> dict[str, Any]:
-        """Dictionary of domain playbook parameters."""
+    async def prepared_run(self):
+        """Return the prepared run instance."""
 
     @abstractmethod
     async def on_play(self) -> RunResult[Any]:

@@ -1,3 +1,3 @@
-from pirlo.core.repository.workflow import WorkflowRepository
+from pirlo.core.repository.workflow_repository import WorkflowRepository
 
 __all__ = ["WorkflowRepository"]

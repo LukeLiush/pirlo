@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Any
 
 from pirlo.core.models.run import Run, RunStatus, RunType
-from pirlo.core.ports.run_history import RunHistoryRepository
+from pirlo.core.repository.run_history_repository import RunHistoryRepository
 
 
 class SqliteRunHistoryRepository(RunHistoryRepository):
@@ -18,17 +18,17 @@ class SqliteRunHistoryRepository(RunHistoryRepository):
             # Enable foreign key support
             self.conn.execute("PRAGMA foreign_keys = ON")
 
-            # Check if task_id column exists to handle schema upgrade
+            # Check if run_name column exists to handle schema upgrade
             cursor = self.conn.execute("PRAGMA table_info(run_history)")
             columns = [row["name"] for row in cursor.fetchall()]
-            if columns and "task_id" not in columns:
+            if columns and "run_name" not in columns:
                 self.conn.execute("DROP TABLE run_history")
                 columns = []
 
             self.conn.execute("""
                 CREATE TABLE IF NOT EXISTS run_history (
                     run_id TEXT PRIMARY KEY,
-                    task_id TEXT NOT NULL,
+                    run_name TEXT NOT NULL,
                     playbook TEXT NOT NULL,
                     run_type TEXT NOT NULL DEFAULT 'llm',
                     status TEXT NOT NULL,
@@ -74,10 +74,10 @@ class SqliteRunHistoryRepository(RunHistoryRepository):
             self.conn.execute(
                 """
                 INSERT INTO run_history (
-                    run_id, task_id, playbook, run_type, status, parameter_file_location, log_file_location, created_at, updated_at, started_at, finished_at
+                    run_id, run_name, playbook, run_type, status, parameter_file_location, log_file_location, created_at, updated_at, started_at, finished_at
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(run_id) DO UPDATE SET
-                    task_id=excluded.task_id,
+                    run_name=excluded.run_name,
                     run_type=excluded.run_type,
                     status=excluded.status,
                     parameter_file_location=excluded.parameter_file_location,
@@ -88,7 +88,7 @@ class SqliteRunHistoryRepository(RunHistoryRepository):
             """,
                 (
                     run.run_id,
-                    run.task_id,
+                    run.run_name,
                     run.playbook,
                     run.run_type.value,
                     run.status.value,
@@ -109,7 +109,7 @@ class SqliteRunHistoryRepository(RunHistoryRepository):
             return None
         return Run(
             run_id=row["run_id"],
-            task_id=row["task_id"],
+            run_name=row["run_name"],
             playbook=row["playbook"],
             run_type=RunType(row["run_type"]),
             status=RunStatus(row["status"]),
@@ -150,7 +150,7 @@ class SqliteRunHistoryRepository(RunHistoryRepository):
         return [
             Run(
                 run_id=row["run_id"],
-                task_id=row["task_id"],
+                run_name=row["run_name"],
                 playbook=row["playbook"],
                 run_type=RunType(row["run_type"]),
                 status=RunStatus(row["status"]),

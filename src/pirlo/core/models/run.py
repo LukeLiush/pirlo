@@ -3,7 +3,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class RunStatus(str, Enum):
@@ -25,7 +25,7 @@ class RunCreateDTO(BaseModel):
 
 class Run(BaseModel):
     run_id: str
-    task_id: str
+    run_name: str
     playbook: str
     run_type: RunType = RunType.LLM
     status: RunStatus
@@ -43,3 +43,26 @@ class Run(BaseModel):
     def get_parameter_location(self, workspace: Path) -> Path:
         """Resolves the absolute parameter file location path."""
         return workspace / self.parameter_file_location
+
+
+class PreparedRun(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    playbook_name: str
+    run_name: str
+    run_id: str
+    workspace: Path
+    parameters: dict[str, Any]
+
+    @property
+    def run_dir(self) -> Path:
+        return self.workspace / self.playbook_name / "runs" / self.run_id
+
+    @property
+    def parameter_file_path(self) -> Path:
+        return self.run_dir / "params.json"
+
+    @property
+    def log_file_path(self) -> Path:
+        return self.run_dir / "run.log"
+
+

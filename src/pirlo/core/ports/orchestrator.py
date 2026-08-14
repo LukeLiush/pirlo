@@ -1,12 +1,18 @@
+from __future__ import annotations
+
 import argparse
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from collections.abc import Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, Field
 
 from pirlo.core.models.link import LlmLink
-from pirlo.core.ports.pitch import Parameter, Pitch
+from pirlo.core.models.parameters import Parameter, Parameterizable
+
+if TYPE_CHECKING:
+    from pirlo.core.models.run import PreparedRun
+
 
 
 class AutopassExecutionOptions(BaseModel):
@@ -30,14 +36,10 @@ class AutopassExecutionOptions(BaseModel):
     )
 
 
-class TaskOrchestrator(ABC):
-    """Abstract Port defining the orchestration contract for Pirlo tasks."""
-
-    name: str = "orchestrator"
-
+class TaskOrchestrator(Parameterizable):
     @classmethod
     def _add_parameter_to_parser(
-        cls, parser: argparse.ArgumentParser, attr_name: str, attr_val: Parameter
+            cls, parser: argparse.ArgumentParser, attr_name: str, attr_val: Parameter
     ) -> None:
         flag = f"--{attr_name.replace('_', '-')}"
         if flag in parser._option_string_actions:
@@ -71,9 +73,9 @@ class TaskOrchestrator(ABC):
 
     @classmethod
     def parse_cli_options(
-        cls,
-        playbook_name: str,
-        orchestrator_flags: list[str],
+            cls,
+            playbook_name: str,
+            orchestrator_flags: list[str],
     ) -> dict[str, Any]:
         """
         Parses CLI flags for this orchestrator backend.
@@ -93,20 +95,26 @@ class TaskOrchestrator(ABC):
             if isinstance(attr_val, Parameter):
                 cls._add_parameter_to_parser(parser, attr_name, attr_val)
 
-        parsed_arguments = parser.parse_args(orchestrator_flags)
+        flags = list(orchestrator_flags)
+        if flags and flags[0].lower() == cls.name.lower():
+            flags = flags[1:]
+
+        parsed_arguments = parser.parse_args(flags)
 
         return {
             attr_name: getattr(parsed_arguments, attr_name)
             for attr_name in dir(cls)
             if isinstance(getattr(cls, attr_name), Parameter)
-            and hasattr(parsed_arguments, attr_name)
+               and hasattr(parsed_arguments, attr_name)
         }
 
     @abstractmethod
     async def execute(
-        self,
-        pitch: Pitch,
-        worker_fn: Callable[[], Any],
+            self,
+            task: str,
+            prepared_run: PreparedRun,
+            worker_fn: Callable[[], Any],
+            schedule: str | None = None,
     ) -> Any:
         """
         Executes an orchestrated workflow.

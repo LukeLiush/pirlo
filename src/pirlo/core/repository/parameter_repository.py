@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 
-class ParameterStorage(ABC):
+class ParameterRepository(ABC):
     """Abstract port for storing and loading playbook run parameters."""
 
     @abstractmethod
