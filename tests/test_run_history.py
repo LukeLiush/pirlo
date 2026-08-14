@@ -6,8 +6,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from pirlo.infrastructure.services.run_id_generator import IdentityFactory
+
 from pirlo.core.models.run import Run, RunStatus
-from pirlo.core.services.run_id_generator import generate_run_id, generate_task_id
 from pirlo.infrastructure.adapters.db.sqlite_run_history_repository import (
     SqliteRunHistoryRepository,
 )
@@ -36,22 +37,23 @@ class TestRunHistoryAndMVC(unittest.TestCase):
         playbook = "dummy"
         params = {"foo": "bar", "count": 10}
 
-        # Task IDs are identical because inputs are identical
-        task_id1 = generate_task_id(playbook, params)
-        task_id2 = generate_task_id(playbook, params)
-        self.assertEqual(task_id1, task_id2)
+        factory1 = IdentityFactory(playbook, params)
+        factory2 = IdentityFactory(playbook, params)
 
-        # Sequential runs generate unique execution run IDs
-        run_id1 = generate_run_id(task_id1)
-        run_id2 = generate_run_id(task_id2)
+        run_name1 = factory1.generate_run_name()
+        run_name2 = factory2.generate_run_name()
+        self.assertEqual(run_name1, run_name2)
 
+        run_id1 = factory1.generate_run_id()
+        run_id2 = factory2.generate_run_id()
         self.assertNotEqual(run_id1, run_id2)
-        self.assertTrue(run_id1.startswith(task_id1))
+        self.assertTrue(run_id1.startswith(run_name1))
+
 
     def test_sqlite_repository_save_and_retrieve(self):
         run = Run(
             run_id="test-run-12345678",
-            task_id="test-task-abcdefgh",
+            run_name="test-task-abcdefgh",
             playbook="login",
             status=RunStatus.NOT_STARTED,
             parameter_file_location="login/logs/test-run-12345678_params.json",
@@ -67,7 +69,7 @@ class TestRunHistoryAndMVC(unittest.TestCase):
         fetched = self.repository.get_by_id(run.run_id)
         self.assertIsNotNone(fetched)
         self.assertEqual(fetched.run_id, run.run_id)
-        self.assertEqual(fetched.task_id, run.task_id)
+        self.assertEqual(fetched.run_name, run.run_name)
         self.assertEqual(fetched.playbook, run.playbook)
         self.assertEqual(fetched.status, RunStatus.NOT_STARTED)
         self.assertIsNone(fetched.started_at)
@@ -103,7 +105,7 @@ class TestRunHistoryAndMVC(unittest.TestCase):
         for i in range(12):
             run = Run(
                 run_id=f"run-{i}-abcdefgh",
-                task_id="test-task-xyz",
+                run_name="test-task-xyz",
                 playbook="login" if i % 2 == 0 else "dummy",
                 status=RunStatus.COMPLETED,
                 parameter_file_location=f"dummy/logs/run-{i}_params.json",
@@ -132,7 +134,7 @@ class TestRunHistoryAndMVC(unittest.TestCase):
         for i in range(3):
             run = Run(
                 run_id=f"completed-{i}",
-                task_id="task-1",
+                run_name="task-1",
                 playbook="autopass",
                 status=RunStatus.COMPLETED,
                 parameter_file_location=f"p_{i}.json",
@@ -144,7 +146,7 @@ class TestRunHistoryAndMVC(unittest.TestCase):
 
         failed_run = Run(
             run_id="failed-1",
-            task_id="task-2",
+            run_name="task-2",
             playbook="autopass",
             status=RunStatus.FAILED,
             parameter_file_location="p_failed.json",
@@ -184,7 +186,7 @@ class TestRunHistoryAndMVC(unittest.TestCase):
         # 1. Create a run with REPLAY type
         run = Run(
             run_id="replay-run-123",
-            task_id="replay-task-123",
+            run_name="replay-task-123",
             playbook="login",
             run_type=RunType.REPLAY,
             status=RunStatus.NOT_STARTED,
@@ -379,7 +381,7 @@ class TestRunHistoryAndMVC(unittest.TestCase):
         run_id = "test-show-run-1"
         run = Run(
             run_id=run_id,
-            task_id="task-show-1",
+            run_name="task-show-1",
             playbook="autopass",
             status=RunStatus.COMPLETED,
             parameter_file_location="autopass/runs/params.json",

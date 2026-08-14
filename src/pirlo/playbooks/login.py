@@ -7,8 +7,8 @@ from cloakbrowser import launch_persistent_context_async
 from pirlo.core.models.run import RunStatus
 from pirlo.core.models.run_result import RunResult
 from pirlo.core.ports.pitch import Parameter
-from pirlo.core.services.profile_manager import ProfileManager
 from pirlo.infrastructure.adapters.cli.terminal_pitch import TerminalPitch
+from pirlo.infrastructure.services.profile_manager import ProfileManager
 
 
 class LoginSession(TerminalPitch):
@@ -58,7 +58,7 @@ class LoginSession(TerminalPitch):
                     detail=instruction,
                 )
                 return RunResult(
-                    run_id=self.run_id,
+                    run_id=self._prepared_run.run_id,
                     status=RunStatus.FAILED,
                     error=instruction,
                 )
@@ -79,7 +79,7 @@ class LoginSession(TerminalPitch):
                 detail=no_urls_msg,
             )
             return RunResult(
-                run_id=self.run_id,
+                run_id=self._prepared_run.run_id,
                 status=RunStatus.FAILED,
                 error=no_urls_msg,
             )
@@ -140,7 +140,7 @@ class LoginSession(TerminalPitch):
                     ),
                 )
                 return RunResult(
-                    run_id=self.run_id,
+                    run_id=self._prepared_run.run_id,
                     status=RunStatus.COMPLETED,
                     data={"profile": self.profile, "urls": target_urls},
                 )
@@ -149,4 +149,5 @@ class LoginSession(TerminalPitch):
 
 
 if __name__ == "__main__":
-    LoginSession.cli()
+    LoginSession.cli("login")
+

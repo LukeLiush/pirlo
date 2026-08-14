@@ -10,9 +10,12 @@ from pirlo.infrastructure.adapters.orchestrator.prefect_orchestrator import (
 )
 
 
+from pirlo.core.models.parameters import Parameter
+
+
 class CustomMockOrchestrator(TaskOrchestrator):
-    def __init__(self, custom_setting: str = "default"):
-        self.custom_setting = custom_setting
+    name: str = "custom"
+    custom_setting = Parameter(str, default="default")
 
     async def execute(self, *args, **kwargs):
         return f"executed with {self.custom_setting}"
@@ -80,6 +83,7 @@ def test_factory_unknown_orchestrator_raises_error():
         OrchestratorFactory.create("nonexistent")
 
 
+from pirlo.core.models.run import PreparedRun
 from pirlo.core.models.run_result import RunResult
 from pirlo.infrastructure.adapters.cli.terminal_pitch import TerminalPitch
 
@@ -88,28 +92,38 @@ class DummyPitch(TerminalPitch):
     """Dummy Pitch for orchestrator cron testing."""
 
     async def on_play(self) -> RunResult[Any]:
-        return RunResult(run_id=self.run_id)
+        return RunResult(run_id=self._prepared_run.run_id)
 
 
 @pytest.mark.anyio
 async def test_cron_schedule_requires_active_server(tmp_path, monkeypatch):
     monkeypatch.setenv("PIRLO_WORKSPACE", str(tmp_path))
 
-    pitch = DummyPitch(run_id="cron-test-1")
-    pitch.schedule = "daily"
+    run_dir = tmp_path / "autopass" / "runs" / "cron-test-1"
+    run_dir.mkdir(parents=True, exist_ok=True)
 
-    orchestrator = SmartPrefectTaskOrchestrator(server_url=None)
+    orchestrator = SmartPrefectTaskOrchestrator()
+    orchestrator.server_url = None
+    prepared_run = PreparedRun(
+        playbook_name="autopass",
+        run_name="cron-test-1",
+        run_id="cron-test-1",
+        workspace=tmp_path,
+        parameters={},
+    )
 
     with (
         patch(
-            "pirlo.infrastructure.adapters.orchestrator.prefect_orchestrator.discover_prefect_server_url",
+            "pirlo.infrastructure.adapters.orchestrator.prefect_settings.discover_prefect_server_url",
             return_value=None,
         ),
         pytest.raises(RuntimeError, match="Prefect Server is required for --schedule"),
     ):
         await orchestrator.execute(
-            pitch,
+            task="Do work",
+            prepared_run=prepared_run,
             worker_fn=lambda: AsyncMock(return_value="ok")(),
+            schedule="0 9 * * *",
         )
 
 
@@ -119,22 +133,31 @@ async def test_cron_schedule_creates_deployment_when_server_active(
 ):
     monkeypatch.setenv("PIRLO_WORKSPACE", str(tmp_path))
 
-    pitch = DummyPitch(run_id="cron-test-2")
-    pitch.schedule = "daily"
+    run_dir = tmp_path / "autopass" / "runs" / "cron-test-2"
+    run_dir.mkdir(parents=True, exist_ok=True)
 
-    orchestrator = SmartPrefectTaskOrchestrator(
-        server_url="http://localhost:4200/api", work_pool="test-pool"
+    orchestrator = SmartPrefectTaskOrchestrator()
+    orchestrator.server_url = "http://localhost:4200/api"
+    orchestrator.work_pool = "test-pool"
+    prepared_run = PreparedRun(
+        playbook_name="autopass",
+        run_name="cron-test-2",
+        run_id="cron-test-2",
+        workspace=tmp_path,
+        parameters={},
     )
 
     mock_to_deployment = AsyncMock(return_value="mock-deployment-obj")
 
     with patch(
-        "pirlo.infrastructure.adapters.orchestrator.prefect_orchestrator.pirlo_generic_flow.to_deployment",
+        "pirlo.infrastructure.adapters.orchestrator.prefect_orchestrator.pirlo_decomposed_flow.to_deployment",
         mock_to_deployment,
     ):
         result = await orchestrator.execute(
-            pitch,
+            task="Do work",
+            prepared_run=prepared_run,
             worker_fn=lambda: AsyncMock(return_value="ok")(),
+            schedule="0 9 * * *",
         )
 
         assert result == "mock-deployment-obj"
@@ -143,3 +166,4 @@ async def test_cron_schedule_creates_deployment_when_server_active(
         assert call_kwargs["name"] == "pirlo-scheduled-cron-test-2"
         assert call_kwargs["work_pool_name"] == "test-pool"
         assert call_kwargs["schedule"].cron == "0 9 * * *"
+

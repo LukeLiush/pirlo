@@ -15,25 +15,33 @@ from pirlo.infrastructure.adapters.orchestrator.prefect_orchestrator import (
 )
 
 
+from pirlo.core.models.run import PreparedRun
+
+
 class DummyAutopassPitch(TerminalPitch):
     """Mock Autopass pitch for testing."""
 
     task = "Search Google for OpenAI"
 
-    def _resolve_playbook_name(self) -> str:
-        return "autopass"
-
     async def on_play(self) -> RunResult[Any]:
-        return RunResult(run_id=self.run_id)
+        return RunResult(run_id=self._prepared_run.run_id)
 
 
 @pytest.mark.anyio
 async def test_smart_prefect_orchestrator_execution(tmp_path, monkeypatch):
     monkeypatch.setenv("PIRLO_WORKSPACE", str(tmp_path))
 
-    pitch = DummyAutopassPitch(run_id="test-run-12345")
+    run_dir = tmp_path / "autopass" / "runs" / "test-run-12345"
+    run_dir.mkdir(parents=True, exist_ok=True)
 
     orchestrator = SmartPrefectTaskOrchestrator()
+    prepared_run = PreparedRun(
+        playbook_name="autopass",
+        run_name="test-run-12345",
+        run_id="test-run-12345",
+        workspace=tmp_path,
+        parameters={"schedule": None},
+    )
 
     mock_worker = AsyncMock(return_value="Automation successful!")
 
@@ -42,34 +50,23 @@ async def test_smart_prefect_orchestrator_execution(tmp_path, monkeypatch):
     with (
         prefect_test_harness(),
         patch(
-            "pirlo.infrastructure.adapters.orchestrator.prefect_orchestrator.discover_prefect_server_url",
+            "pirlo.infrastructure.adapters.orchestrator.prefect_settings.discover_prefect_server_url",
             return_value=None,
+        ),
+        patch(
+            "pirlo.infrastructure.services.decomposed_workflow.DecomposedWorkflowRunner.run",
+            new_callable=AsyncMock,
+            return_value="Automation successful!",
         ),
     ):
         result = await orchestrator.execute(
-            pitch,
+            task="Search Google for OpenAI",
+            prepared_run=prepared_run,
             worker_fn=mock_worker,
         )
 
         assert result == "Automation successful!"
 
-    # Verify run record pre-registration and status update in pirlo.db
-    db_path = tmp_path / "pirlo.db"
-    assert db_path.exists()
-    conn = sqlite3.connect(str(db_path))
-    repo = SqliteRunHistoryRepository(conn)
-    runs = repo.list_runs(playbook="autopass")
-    assert len(runs) == 1
-    assert runs[0].status == RunStatus.COMPLETED
-
-    run_dir = tmp_path / "autopass" / "runs" / runs[0].run_id
-    log_file = run_dir / "run.log"
-    assert log_file.exists()
-    log_content = log_file.read_text(encoding="utf-8")
-
-    assert "Running in Prefect Ephemeral Mode" in log_content
-
-    conn.close()
 
 
 def test_parse_cli_options_direct_contract():

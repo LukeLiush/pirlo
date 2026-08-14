@@ -1,3 +1,4 @@
+import inspect
 import os
 import sys
 import tempfile
@@ -5,8 +6,10 @@ import unittest
 from pathlib import Path
 from typing import Any
 
+import pytest
+
+from pirlo.core.models.parameters import Parameter
 from pirlo.core.models.run_result import RunResult
-from pirlo.core.ports.pitch import Parameter
 from pirlo.infrastructure.adapters.cli.terminal_pitch import TerminalPitch
 
 
@@ -24,7 +27,7 @@ class DummyResolutionSession(TerminalPitch):
     )
 
     async def on_play(self) -> RunResult[Any]:
-        return RunResult(run_id=self.run_id)
+        return RunResult(run_id=self._prepared_run.run_id)
 
 
 class TestParameterResolution(unittest.TestCase):
@@ -44,28 +47,20 @@ class TestParameterResolution(unittest.TestCase):
         sys.argv = self.original_argv
         self.temp_dir.cleanup()
 
-    def test_default_values_fallback(self):
+    @pytest.mark.anyio
+    async def test_default_values_fallback(self):
         """Verify that default values are used when no other sources are provided."""
-        # Setup sys.argv with no arguments for parameters
-        sys.argv = ["pirlo dummy_resolution"]
+        sys.argv = ["pirlo", "dummy_resolution"]
 
-        # Instantiate and parse
-        session = DummyResolutionSession()
-        # Mock play to run without full lifecycle database side effects
-        session.play = lambda: None
-        DummyResolutionSession.cli()
-
-        # Retrieve parsed options from the class execution
-        # Wait, DummyResolutionSession.cli() instantiates inside cli().
-        # Let's inspect sys.modules / local variables by stubbing or intercepting play.
-        # An elegant way to assert is to stub play() to save the instance.
         captured_instance = []
 
         async def mock_play_save(self_instance):
             captured_instance.append(self_instance)
 
         DummyResolutionSession.play = mock_play_save
-        DummyResolutionSession.cli()
+        res = DummyResolutionSession.cli("dummy_resolution")
+        if inspect.isawaitable(res):
+            await res
 
         self.assertEqual(len(captured_instance), 1)
         inst = captured_instance[0]
@@ -78,7 +73,8 @@ class TestParameterResolution(unittest.TestCase):
         self.assertEqual(inst.path_val, None)
         self.assertEqual(inst.multi_env, "default-multi")
 
-    def test_env_variables_resolution(self):
+    @pytest.mark.anyio
+    async def test_env_variables_resolution(self):
         """Verify that parameters load from environment variables."""
         os.environ["TEST_TASK"] = "env-task"
         os.environ["TEST_COUNT"] = "42"
@@ -86,16 +82,18 @@ class TestParameterResolution(unittest.TestCase):
         os.environ["TEST_ITEMS"] = "a,b,c"
         os.environ["TEST_DETAILS"] = '{"foo": "bar"}'
         os.environ["TEST_PATH"] = "/var/log"
-        os.environ["TEST_KEY_B"] = "value-b"  # testing list env_name fallback
+        os.environ["TEST_KEY_B"] = "value-b"
 
-        sys.argv = ["pirlo dummy_resolution"]
+        sys.argv = ["pirlo", "dummy_resolution"]
         captured_instance = []
 
         async def mock_play(self_instance):
             captured_instance.append(self_instance)
 
         DummyResolutionSession.play = mock_play
-        DummyResolutionSession.cli()
+        res = DummyResolutionSession.cli("dummy_resolution")
+        if inspect.isawaitable(res):
+            await res
 
         inst = captured_instance[0]
         self.assertEqual(inst.task, "env-task")
@@ -104,17 +102,17 @@ class TestParameterResolution(unittest.TestCase):
         self.assertEqual(inst.items, ["a", "b", "c"])
         self.assertEqual(inst.details, {"foo": "bar"})
         self.assertEqual(inst.path_val, Path("/var/log"))
-        # Should pick B because A is not in env
         self.assertEqual(inst.multi_env, "value-b")
 
-    def test_cli_overrides_env_and_default(self):
+    @pytest.mark.anyio
+    async def test_cli_overrides_env_and_default(self):
         """Verify that CLI arguments override env variables and defaults."""
         os.environ["TEST_TASK"] = "env-task"
         os.environ["TEST_COUNT"] = "42"
 
-        # CLI overrides
         sys.argv = [
-            "pirlo dummy_resolution",
+            "pirlo",
+            "dummy_resolution",
             "--task",
             "cli-task",
             "--count",
@@ -131,7 +129,9 @@ class TestParameterResolution(unittest.TestCase):
             captured_instance.append(self_instance)
 
         DummyResolutionSession.play = mock_play
-        DummyResolutionSession.cli()
+        res = DummyResolutionSession.cli("dummy_resolution")
+        if inspect.isawaitable(res):
+            await res
 
         inst = captured_instance[0]
         self.assertEqual(inst.task, "cli-task")
