@@ -136,7 +136,8 @@ class AutopassSession(TerminalPitch):
         if ProfileManager.is_expired(self.profile):
             meta = ProfileManager.load_profile_metadata(self.profile)
             exp_date = meta.expires_at if meta else "N/A"
-            days_expired = ProfileManager.get_days_expired(self.profile)
+            ttl_days = meta.ttl_days if meta else 7
+            days_passed = ProfileManager.get_days_since_created(self.profile)
             urls_str = (
                 " ".join(meta.authenticated_urls)
                 if (meta and meta.authenticated_urls)
@@ -144,8 +145,9 @@ class AutopassSession(TerminalPitch):
             )
             instruction = AutopassInstructions.PROFILE_EXPIRED.format(
                 profile=self.profile,
+                days_passed=days_passed,
+                ttl_days=ttl_days,
                 expires_at=exp_date,
-                days_expired=days_expired,
                 authenticated_urls=urls_str,
             )
             self.yellow_card(instruction)

@@ -141,30 +141,21 @@ class ProfileManager:
             return False
 
     @classmethod
-    def get_days_expired(cls, profile_input: str = "default") -> str:
+    def get_days_since_created(cls, profile_input: str = "default") -> int:
         metadata = cls.load_profile_metadata(profile_input)
-        if not metadata or not metadata.expires_at:
-            return "0 days"
+        if not metadata:
+            return 0
+        start_str = metadata.updated_at or metadata.created_at
+        if not start_str:
+            return 0
 
         try:
-            expires_dt = datetime.fromisoformat(metadata.expires_at)
+            start_dt = datetime.fromisoformat(start_str)
             now = datetime.now(UTC)
-            if now < expires_dt:
-                return "0 days"
-
-            delta = now - expires_dt
-            days = delta.days
-            if days == 0:
-                hours = int(delta.total_seconds() // 3600)
-                if hours > 0:
-                    return f"0 days ({hours}h)"
-                return "<1 day"
-            elif days == 1:
-                return "1 day"
-            else:
-                return f"{days} days"
+            delta = now - start_dt
+            return max(0, delta.days)
         except Exception:  # noqa: BLE001
-            return "0 days"
+            return 0
 
     @classmethod
     def list_profiles(cls) -> list[ProfileMetadata]:
