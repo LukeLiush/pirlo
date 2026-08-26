@@ -2,9 +2,11 @@ import logging
 import re
 import sys
 import time
+from collections.abc import Callable
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import ftfy
 from rich.text import Text
@@ -13,12 +15,17 @@ from rich.text import Text
 class StdioTee:
     """Tees stdout/stderr output: sends raw ANSI to terminal, uses line-buffering and Rich for log_file."""
 
-    def __init__(self, original_stream, log_file, get_prefix_fn=None):
-        self.original_stream = original_stream
-        self.log_file = log_file
-        self.get_prefix_fn = get_prefix_fn
-        self._buffer = ""
-        self._at_line_start = True
+    def __init__(
+        self,
+        original_stream: Any,
+        log_file: Any,
+        get_prefix_fn: Callable[[], str] | None = None,
+    ) -> None:
+        self.original_stream: Any = original_stream
+        self.log_file: Any = log_file
+        self.get_prefix_fn: Callable[[], str] | None = get_prefix_fn
+        self._buffer: str = ""
+        self._at_line_start: bool = True
         self._last_logged_status: str | None = None
 
     def _process_line(self, raw_data: str) -> None:

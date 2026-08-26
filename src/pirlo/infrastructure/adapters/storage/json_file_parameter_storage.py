@@ -4,8 +4,8 @@ from typing import Any
 
 
 class JsonFileParameterStorage:
-    def __init__(self, workspace: Path):
-        self.workspace = Path(workspace)
+    def __init__(self, workspace: Path) -> None:
+        self.workspace: Path = Path(workspace)
 
     def save_parameters(self, location: str, parameters: dict[str, Any]) -> None:
         abs_path = self.workspace / location

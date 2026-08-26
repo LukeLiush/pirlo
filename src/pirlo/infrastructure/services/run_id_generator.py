@@ -20,10 +20,10 @@ FUN_WORDS = [
 
 
 class IdentityFactory:
-    def __init__(self, name: str, parameters: dict[str, Any]):
-        self._fun_words = FUN_WORDS
-        self.name = (name,)
-        self.parameters = parameters
+    def __init__(self, name: str, parameters: dict[str, Any]) -> None:
+        self._fun_words: list[str] = FUN_WORDS
+        self.name: str = name
+        self.parameters: dict[str, Any] = parameters
 
     def generate_run_name(self) -> str:
         """Generates a stable, deterministic Run Name based ONLY on playbook and domain parameters."""

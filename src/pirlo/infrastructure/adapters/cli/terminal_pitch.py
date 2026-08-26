@@ -229,7 +229,9 @@ class TerminalPitch(Pitch, ABC):
 
         # Step A: Prepare pure data run spec
         argument_parser_builder: ArgumentParserBuilder = ArgumentParserBuilder(cls)
-        playbook_parser = argument_parser_builder.build_parser(playbook_name)
+        playbook_parser: argparse.ArgumentParser = argument_parser_builder.build_parser(
+            playbook_name
+        )
 
         parameter_resolver: ParameterResolver = ParameterResolver.create(
             playbook_parser=playbook_parser,

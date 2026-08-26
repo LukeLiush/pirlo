@@ -7,13 +7,13 @@ from pirlo.core.repository.run_history_repository import RunHistoryRepository
 
 
 class SqliteRunHistoryRepository(RunHistoryRepository):
-    def __init__(self, conn: sqlite3.Connection):
+    def __init__(self, conn: sqlite3.Connection) -> None:
         """Accepts an injected Connection object. Can be in-memory or file-backed."""
-        self.conn = conn
+        self.conn: sqlite3.Connection = conn
         self.conn.row_factory = sqlite3.Row
         self._init_db()
 
-    def _init_db(self):
+    def _init_db(self) -> None:
         with self.conn:
             # Enable foreign key support
             self.conn.execute("PRAGMA foreign_keys = ON")

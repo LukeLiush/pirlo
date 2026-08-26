@@ -10,8 +10,8 @@ logger = logging.getLogger("autopass.cdp")
 class HttpCdpConnectionChecker(CdpChecker):
     """Adapter implementing CdpChecker via HTTP requests to the CDP version endpoint."""
 
-    def __init__(self, cdp_url: str):
-        self.cdp_url = cdp_url
+    def __init__(self, cdp_url: str) -> None:
+        self.cdp_url: str = cdp_url
 
     async def wait_until_ready(self, timeout: float = 30.0) -> None:
         logger.info("Waiting for CDP endpoint at %s ...", self.cdp_url)

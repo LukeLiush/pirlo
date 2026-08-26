@@ -10,8 +10,8 @@ logger = logging.getLogger(__name__)
 class ResilientPageWaiter:
     """Encapsulates page load synchronization and text settling strategies for Playwright."""
 
-    def __init__(self, page: Page):
-        self.page = page
+    def __init__(self, page: Page) -> None:
+        self.page: Page = page
 
     async def wait_for_load(self, timeout_ms: int = 5000) -> None:
         """Resiliently waits for the page DOM to be parsed."""

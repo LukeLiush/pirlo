@@ -1,15 +1,16 @@
 import json
 from pathlib import Path
+from typing import Any
 
 from pirlo.core.models.link import LlmLink
 from pirlo.core.ports.link_repository import LinkRepository
 
 
 class JsonLinkRepository(LinkRepository):
-    def __init__(self, filepath: Path):
-        self.filepath = Path(filepath)
+    def __init__(self, filepath: Path) -> None:
+        self.filepath: Path = Path(filepath)
 
-    def _load_data(self) -> dict:
+    def _load_data(self) -> dict[str, Any]:
         if not self.filepath.exists():
             return {}
         try:

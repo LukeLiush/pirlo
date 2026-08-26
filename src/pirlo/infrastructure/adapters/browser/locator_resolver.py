@@ -10,9 +10,9 @@ logger = logging.getLogger(__name__)
 class ResilientLocatorResolver:
     """Encapsulates multi-selector resolution strategies with fail-fast timeouts and fallbacks."""
 
-    def __init__(self, page: Page, timeout_ms: int = 3000):
-        self.page = page
-        self.timeout_ms = timeout_ms
+    def __init__(self, page: Page, timeout_ms: int = 3000) -> None:
+        self.page: Page = page
+        self.timeout_ms: int = timeout_ms
 
     @staticmethod
     async def _resolve_editable_child(locator: Locator) -> Locator:

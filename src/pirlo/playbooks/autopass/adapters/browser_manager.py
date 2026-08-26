@@ -9,8 +9,8 @@ from pirlo.playbooks.autopass.core.ports import BrowserManager
 class CloakBrowserManager(BrowserManager):
     """Adapter implementing BrowserManager using CloakBrowser."""
 
-    def __init__(self):
-        self._ctx = None
+    def __init__(self) -> None:
+        self._ctx: Any = None
 
     async def launch(self, profile_path: Path, headless: bool, cdp_port: int) -> Any:
         self._ctx = await launch_persistent_context_async(
