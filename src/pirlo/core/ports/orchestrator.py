@@ -14,7 +14,6 @@ if TYPE_CHECKING:
     from pirlo.core.models.run import PreparedRun
 
 
-
 class AutopassExecutionOptions(BaseModel):
     """Explicitly typed execution options for Autopass sessions."""
 
@@ -37,9 +36,11 @@ class AutopassExecutionOptions(BaseModel):
 
 
 class TaskOrchestrator(Parameterizable):
+    name: str = "base"
+
     @classmethod
     def _add_parameter_to_parser(
-            cls, parser: argparse.ArgumentParser, attr_name: str, attr_val: Parameter
+        cls, parser: argparse.ArgumentParser, attr_name: str, attr_val: Parameter
     ) -> None:
         flag = f"--{attr_name.replace('_', '-')}"
         if flag in parser._option_string_actions:
@@ -73,9 +74,9 @@ class TaskOrchestrator(Parameterizable):
 
     @classmethod
     def parse_cli_options(
-            cls,
-            playbook_name: str,
-            orchestrator_flags: list[str],
+        cls,
+        playbook_name: str,
+        orchestrator_flags: list[str],
     ) -> dict[str, Any]:
         """
         Parses CLI flags for this orchestrator backend.
@@ -105,16 +106,16 @@ class TaskOrchestrator(Parameterizable):
             attr_name: getattr(parsed_arguments, attr_name)
             for attr_name in dir(cls)
             if isinstance(getattr(cls, attr_name), Parameter)
-               and hasattr(parsed_arguments, attr_name)
+            and hasattr(parsed_arguments, attr_name)
         }
 
     @abstractmethod
     async def execute(
-            self,
-            task: str,
-            prepared_run: PreparedRun,
-            worker_fn: Callable[[], Any],
-            schedule: str | None = None,
+        self,
+        task: str,
+        prepared_run: PreparedRun,
+        worker_fn: Callable[[], Any],
+        schedule: str | None = None,
     ) -> Any:
         """
         Executes an orchestrated workflow.

@@ -26,11 +26,11 @@ class PlaywrightReplayRunner(WorkflowRunner):
     run_history_repository: RunHistoryRepository | None
 
     def __init__(
-            self,
-            repository: WorkflowRepository,
-            llm: BaseChatModel | None,
-            browser_config: BrowserConfig,
-            run_history_repository: RunHistoryRepository | None = None,
+        self,
+        repository: WorkflowRepository,
+        llm: BaseChatModel | None,
+        browser_config: BrowserConfig,
+        run_history_repository: RunHistoryRepository | None = None,
     ) -> None:
         self.repository = repository
         self.llm = llm
@@ -38,14 +38,16 @@ class PlaywrightReplayRunner(WorkflowRunner):
         self.run_history_repository = run_history_repository
 
     async def run(
-            self,
-            task_prompt: str,
-            cache_key: str | None = None,
-            run_id: str | None = None,
+        self,
+        task_prompt: str,
+        cache_key: str | None = None,
+        run_id: str | None = None,
     ) -> str:
         workflow_id = cache_key
 
         # Load from repository boundary
+        if not workflow_id:
+            raise ValueError("cache_key (workflow_id) is required for replay.")
         workflow: Workflow = self.repository.load(workflow_id)
 
         if run_id and hasattr(self.repository, "directory"):

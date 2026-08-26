@@ -25,7 +25,7 @@ class PrefectServerSettings:
     api_url: str | None
 
     @classmethod
-    def resolve(cls, configured_url: str | None) -> "PrefectServerSettings":
+    def resolve(cls, configured_url: str | None) -> PrefectServerSettings:
         api_url = configured_url or discover_prefect_server_url()
         if api_url and not api_url.rstrip("/").endswith("/api"):
             api_url = api_url.rstrip("/") + "/api"

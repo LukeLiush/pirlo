@@ -27,7 +27,7 @@ class DummyResolutionSession(TerminalPitch):
     )
 
     async def on_play(self) -> RunResult[Any]:
-        return RunResult(run_id=self._prepared_run.run_id)
+        return RunResult(run_id=(await self.prepared_run()).run_id)
 
 
 class TestParameterResolution(unittest.TestCase):

@@ -6,8 +6,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from pirlo.infrastructure.services.run_id_generator import IdentityFactory
-
 from pirlo.core.models.run import Run, RunStatus
 from pirlo.infrastructure.adapters.db.sqlite_run_history_repository import (
     SqliteRunHistoryRepository,
@@ -15,6 +13,7 @@ from pirlo.infrastructure.adapters.db.sqlite_run_history_repository import (
 from pirlo.infrastructure.adapters.storage.json_file_parameter_storage import (
     JsonFileParameterStorage,
 )
+from pirlo.infrastructure.services.run_id_generator import IdentityFactory
 
 
 class TestRunHistoryAndMVC(unittest.TestCase):
@@ -48,7 +47,6 @@ class TestRunHistoryAndMVC(unittest.TestCase):
         run_id2 = factory2.generate_run_id()
         self.assertNotEqual(run_id1, run_id2)
         self.assertTrue(run_id1.startswith(run_name1))
-
 
     def test_sqlite_repository_save_and_retrieve(self):
         run = Run(

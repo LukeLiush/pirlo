@@ -64,5 +64,3 @@ class PreparedRun(BaseModel):
     @property
     def log_file_path(self) -> Path:
         return self.run_dir / "run.log"
-
-

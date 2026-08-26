@@ -12,10 +12,12 @@ Responsibilities are split across small, single-purpose collaborators:
 
 from __future__ import annotations
 
-from copy import deepcopy
+from typing import Any, TypeVar
 
 from pirlo.core.models.parameters import Parameterizable
 from pirlo.infrastructure.services.parameter_provider import ParameterProvider
+
+T = TypeVar("T", bound=Parameterizable)
 
 
 class MissingLinkError(Exception):
@@ -45,9 +47,16 @@ class ParameterBinder:
     def __init__(self, provider: ParameterProvider) -> None:
         self._provider = provider
 
-    def bind(self, instance: Parameterizable) -> Parameterizable:
-        #bound = deepcopy(instance)
+    def bind(self, instance: T) -> T:
+        # bound = deepcopy(instance)
         bound = instance
         for name, value in self._provider.provide(type(instance)).items():
             setattr(bound, name, value)
         return bound
+
+    @staticmethod
+    def bind_values(instance: T, values: dict[str, Any]) -> T:
+        """Applies a dictionary of already-resolved values onto an instance."""
+        for name, value in values.items():
+            setattr(instance, name, value)
+        return instance

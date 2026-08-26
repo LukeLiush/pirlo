@@ -15,11 +15,11 @@ class SelfHealingRunner(WorkflowRunner):
     cdp_url: str
 
     def __init__(
-            self,
-            replay_runner: WorkflowRunner,
-            fallback_runner: WorkflowRunner,
-            repository: WorkflowRepository,
-            cdp_url: str = "http://localhost:9222",
+        self,
+        replay_runner: WorkflowRunner,
+        fallback_runner: WorkflowRunner,
+        repository: WorkflowRepository,
+        cdp_url: str = "http://localhost:9222",
     ) -> None:
         self.replay_runner = replay_runner
         self.fallback_runner = fallback_runner
@@ -27,10 +27,10 @@ class SelfHealingRunner(WorkflowRunner):
         self.cdp_url = cdp_url
 
     async def run(
-            self,
-            task_prompt: str,
-            cache_key: str | None = None,
-            run_id: str | None = None,
+        self,
+        task_prompt: str,
+        cache_key: str | None = None,
+        run_id: str | None = None,
     ) -> str:
 
         # 1. Attempt cached deterministic replay if present
@@ -71,9 +71,6 @@ class SelfHealingRunner(WorkflowRunner):
             import httpx
 
             async with httpx.AsyncClient() as client:
-                await client.get(
-                    f"{cdp_url}/json/new?about:blank", timeout=2.0
-                )
+                await client.get(f"{cdp_url}/json/new?about:blank", timeout=2.0)
         except Exception as e:  # noqa: BLE001
             logger.warning(f"Could not reset CDP browser tab at {cdp_url}: {e}")
-

@@ -1,7 +1,8 @@
 import sys
+from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Generator
+from typing import Any
 
 from pirlo.core.config import get_workspace_path
 from pirlo.core.instructions import AutopassInstructions
@@ -23,7 +24,11 @@ from pirlo.infrastructure.services.self_healing_workflow import SelfHealingRunne
 from pirlo.playbooks.autopass.adapters.browser_manager import CloakBrowserManager
 from pirlo.playbooks.autopass.adapters.cdp_checker import HttpCdpConnectionChecker
 from pirlo.playbooks.autopass.adapters.llm_factory import LlmFactory
-from pirlo.playbooks.autopass.core.ports import BrowserManager, CdpChecker, ProgressListener
+from pirlo.playbooks.autopass.core.ports import (
+    BrowserManager,
+    CdpChecker,
+    ProgressListener,
+)
 from pirlo.playbooks.autopass.core.use_cases import RunAutopassUseCase
 
 CDP_PORT = 9222
@@ -128,7 +133,7 @@ class AutopassSession(TerminalPitch):
             )
             self.yellow_card(instruction)
             return RunResult(
-                run_id=self._prepared_run.run_id,
+                run_id=(await self.prepared_run()).run_id,
                 status=RunStatus.FAILED,
                 error=str(instruction),
             )
@@ -152,7 +157,7 @@ class AutopassSession(TerminalPitch):
             )
             self.yellow_card(instruction)
             return RunResult(
-                run_id=self._prepared_run.run_id,
+                run_id=(await self.prepared_run()).run_id,
                 status=RunStatus.FAILED,
                 error=str(instruction),
             )
@@ -162,7 +167,7 @@ class AutopassSession(TerminalPitch):
         if self.task is None:
             self.yellow_card(AutopassInstructions.TASK_REQUIRED)
             return RunResult(
-                run_id=self._prepared_run.run_id,
+                run_id=(await self.prepared_run()).run_id,
                 status=RunStatus.FAILED,
                 error=str(AutopassInstructions.TASK_REQUIRED),
             )
@@ -175,7 +180,7 @@ class AutopassSession(TerminalPitch):
             )
             self.yellow_card(err_msg)
             return RunResult(
-                run_id=self._prepared_run.run_id,
+                run_id=(await self.prepared_run()).run_id,
                 status=RunStatus.FAILED,
                 error=err_msg,
             )
@@ -259,21 +264,21 @@ class AutopassSession(TerminalPitch):
         )
 
         async def run_use_case() -> str:
+            prepared = await self.prepared_run()
             return await run_autopass_use_case.run(
                 task_prompt=self.task,
                 profile_path=profile_path,
                 headless=self.headless,
                 cdp_port=CDP_PORT,
                 listener=QuickProgressListener(),
-                run_name=self._prepared_run.run_name,
-                run_id=self._prepared_run.run_id,
+                run_name=prepared.run_name,
+                run_id=prepared.run_id,
             )
 
-        schedule_value: str | None = self._prepared_run.parameters.get(
-            "schedule", None
-        )
+        prepared = await self.prepared_run()
+        schedule_value: str | None = prepared.parameters.get("schedule", None)
         raw_output = await self.orchestrator.execute(
-            self.task, self._prepared_run, run_use_case, schedule_value
+            self.task, prepared, run_use_case, schedule_value
         )
 
         autopass_output: AutopassRunOutput = AutopassRunOutput(
@@ -282,7 +287,7 @@ class AutopassSession(TerminalPitch):
         )
 
         return RunResult(
-            run_id=self._prepared_run.run_id,
+            run_id=prepared.run_id,
             status=RunStatus.COMPLETED,
             data=autopass_output,
         )
@@ -290,4 +295,3 @@ class AutopassSession(TerminalPitch):
 
 if __name__ == "__main__":
     AutopassSession.cli("autopass")
-

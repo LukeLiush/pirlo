@@ -3,14 +3,12 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from pirlo.core.models.parameters import Parameter
 from pirlo.core.ports.orchestrator import TaskOrchestrator
 from pirlo.infrastructure.adapters.orchestrator.factory import OrchestratorFactory
 from pirlo.infrastructure.adapters.orchestrator.prefect_orchestrator import (
     SmartPrefectTaskOrchestrator,
 )
-
-
-from pirlo.core.models.parameters import Parameter
 
 
 class CustomMockOrchestrator(TaskOrchestrator):
@@ -92,7 +90,7 @@ class DummyPitch(TerminalPitch):
     """Dummy Pitch for orchestrator cron testing."""
 
     async def on_play(self) -> RunResult[Any]:
-        return RunResult(run_id=self._prepared_run.run_id)
+        return RunResult(run_id=(await self.prepared_run()).run_id)
 
 
 @pytest.mark.anyio
@@ -166,4 +164,3 @@ async def test_cron_schedule_creates_deployment_when_server_active(
         assert call_kwargs["name"] == "pirlo-scheduled-cron-test-2"
         assert call_kwargs["work_pool_name"] == "test-pool"
         assert call_kwargs["schedule"].cron == "0 9 * * *"
-

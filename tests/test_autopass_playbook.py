@@ -1,9 +1,10 @@
-import pytest
-from unittest.mock import AsyncMock, MagicMock
 from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock
 
-from pirlo.playbooks.autopass.main import QuickProgressListener, AutopassSession
-from pirlo.playbooks.autopass.core.use_cases import slugify, RunAutopassUseCase
+import pytest
+
+from pirlo.playbooks.autopass.core.use_cases import RunAutopassUseCase, slugify
+from pirlo.playbooks.autopass.main import QuickProgressListener
 
 
 def test_quick_progress_listener_status_context():
@@ -18,8 +19,14 @@ def test_quick_progress_listener_status_context():
 
 
 def test_slugify_task_prompt():
-    assert slugify("Go to google.com and search for OpenAI!") == "go_to_googlecom_and_search_for_openai"
-    assert slugify("   Navigate to github.com / trending   ") == "navigate_to_githubcom_trending"
+    assert (
+        slugify("Go to google.com and search for OpenAI!")
+        == "go_to_googlecom_and_search_for_openai"
+    )
+    assert (
+        slugify("   Navigate to github.com / trending   ")
+        == "navigate_to_githubcom_trending"
+    )
 
 
 @pytest.mark.anyio
@@ -32,7 +39,9 @@ async def test_run_autopass_use_case_cache_key():
     mock_cdp_checker.wait_until_ready = AsyncMock()
 
     mock_runner = MagicMock()
-    mock_runner.run = AsyncMock(side_effect=lambda task_prompt, cache_key, run_id: f"result_for_{cache_key}")
+    mock_runner.run = AsyncMock(
+        side_effect=lambda task_prompt, cache_key, run_id: f"result_for_{cache_key}"
+    )
 
     use_case = RunAutopassUseCase(
         browser_manager=mock_browser_manager,

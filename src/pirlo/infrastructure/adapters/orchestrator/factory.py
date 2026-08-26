@@ -8,6 +8,9 @@ import tomllib
 from pathlib import Path
 from typing import Any, ClassVar, cast
 
+from pirlo.core.models.parameters import Parameterizable
+from pirlo.core.ports.orchestrator import TaskOrchestrator
+from pirlo.infrastructure.adapters.cli.parameter_binder import ParameterBinder
 from pirlo.infrastructure.adapters.cli.parameter_sources import (
     EnvironmentSource,
     OverrideSource,
@@ -15,15 +18,11 @@ from pirlo.infrastructure.adapters.cli.parameter_sources import (
     TomlSource,
     ValueConverter,
 )
-from pirlo.infrastructure.services.parameter_resolution import ParameterResolver
-
-from pirlo.core.models.parameters import Parameterizable
-from pirlo.core.ports.orchestrator import TaskOrchestrator
-from pirlo.infrastructure.adapters.cli.parameter_binder import ParameterBinder
 from pirlo.infrastructure.adapters.orchestrator.prefect_orchestrator import (
     SmartPrefectTaskOrchestrator,
 )
 from pirlo.infrastructure.services.parameter_provider import ParameterProvider
+from pirlo.infrastructure.services.parameter_resolution import ParameterResolver
 
 
 class OrchestratorFactory:

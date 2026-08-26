@@ -72,7 +72,17 @@ async def run_decomposer_pydantic_ai_task(
 
     result = await agent.run(f"Decompose this multi-source request: {user_prompt}")
 
-    plan: DecomposerPlan = result.data
+    # Use getattr to safely access .data, or cast the result if type hint is failing
+    from typing import cast
+
+    # Mypy might be confused about the result type from agent.run()
+    # Pydantic AI's AgentRunResult has .data for structured outputs.
+    data = getattr(result, "data", None)
+    if not data:
+        # Fallback for older pydantic-ai versions or unexpected result structures
+        data = result  # type: ignore[assignment]
+
+    plan: DecomposerPlan = cast(DecomposerPlan, data)
     plan.plan_id = plan_id
     plan.original_prompt = user_prompt
     return plan

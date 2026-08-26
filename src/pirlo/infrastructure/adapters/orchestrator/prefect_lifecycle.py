@@ -27,7 +27,7 @@ def _connect(workspace: Path) -> sqlite3.Connection:
 
 @task(name="Pre-Register Run in pirlo.db")
 async def preregister_run_task(
-        workspace: Path, playbook: str, run_name: str, run_id: str
+    workspace: Path, playbook: str, run_name: str, run_id: str
 ) -> Run:
     conn = _connect(workspace)
     try:
@@ -67,10 +67,10 @@ async def finalize_run_task(workspace: Path, run_id: str, status: RunStatus) -> 
 
 @task(name="Aggregate Subtask Results")
 async def aggregate_subtask_results_task(
-        original_prompt: str,
-        aggregation_instruction: str,
-        subtask_results: list[dict[str, Any]],
-        llm: Any,
+    original_prompt: str,
+    aggregation_instruction: str,
+    subtask_results: list[dict[str, Any]],
+    llm: Any,
 ) -> str:
     """Synthesizes multi-source subtask results into a final Markdown report."""
     prompt = f"""\
@@ -100,13 +100,13 @@ Synthesize the data into a clean, domain-tailored Markdown report (tables, bulle
 
 @flow(name="Pirlo Decomposed Multi-Target Flow")
 async def pirlo_decomposed_flow(
-        plan: DecomposerPlan,
-        worker_fn: Callable[..., Awaitable[str]],
-        llm: Any,
-        workspace: Path | None = None,
-        playbook: str | None = None,
-        run_name: str | None = None,
-        run_id: str | None = None,
+    plan: DecomposerPlan,
+    worker_fn: Callable[..., Awaitable[str]],
+    llm: Any,
+    workspace: Path | None = None,
+    playbook: str | None = None,
+    run_name: str | None = None,
+    run_id: str | None = None,
 ) -> str:
     """Dispatches all subtasks concurrently, then merges results via the aggregator.
 
@@ -150,4 +150,3 @@ async def pirlo_decomposed_flow(
         if workspace and playbook and run_id:
             await finalize_run_task(workspace, run_id, RunStatus.FAILED)
         raise
-

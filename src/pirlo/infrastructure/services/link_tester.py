@@ -13,7 +13,11 @@ class LinkTester:
                 timeout=10.0,
             )
             # Try to invoke a simple message call
-            llm.invoke("respond with 'OK'")
-            return LinkTestResult(success=True, message="Connection successful!")
+            if llm:
+                llm.invoke("respond with 'OK'")
+                return LinkTestResult(success=True, message="Connection successful!")
+            return LinkTestResult(
+                success=False, message="Could not create LLM instance."
+            )
         except Exception as e:  # noqa: BLE001
             return LinkTestResult(success=False, message=f"Connection failed: {e!s}")

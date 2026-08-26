@@ -72,7 +72,7 @@ class ValueConverter:
                     f"Invalid dict parameter (expected JSON object): {e}"
                 ) from e
             if not isinstance(parsed, dict):
-                raise ValueError(f"Dict parameter did not decode to an object: {val!r}")
+                raise TypeError(f"Dict parameter did not decode to an object: {val!r}")
             return parsed
         return dict(val) if val else {}
 
@@ -188,4 +188,3 @@ class OverrideSource(ParameterSource):
         if param.name in self._overrides and self._overrides[param.name] is not None:
             return self._overrides[param.name]
         return _MISSING
-

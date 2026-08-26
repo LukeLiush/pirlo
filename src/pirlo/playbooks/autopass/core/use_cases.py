@@ -72,4 +72,3 @@ class RunAutopassUseCase:
             # 5. Clean up browser context
             with listener.status_context("Closing browser..."):
                 await self.browser_manager.close()
-

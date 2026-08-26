@@ -1,11 +1,12 @@
 import logging
 from typing import Any
 
-from pirlo.core.models.plan import DecomposerPlan
 from pirlo.core.ports.decomposer import DecomposerPort
 from pirlo.core.repository.plan_repository import PlanRepository
 from pirlo.core.services import WorkflowRunner
-from pirlo.infrastructure.adapters.orchestrator.prefect_lifecycle import pirlo_decomposed_flow
+from pirlo.infrastructure.adapters.orchestrator.prefect_lifecycle import (
+    pirlo_decomposed_flow,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -14,13 +15,13 @@ class DecomposedWorkflowRunner(WorkflowRunner):
     """Orchestrates plan caching, task decomposition, parallel execution, and result aggregation."""
 
     def __init__(
-            self,
-            plan_repository: PlanRepository,
-            decomposer: DecomposerPort,
-            subtask_runner_fn: Any,
-            aggregator_llm: Any,
-            workspace: Any = None,
-            playbook: str | None = None,
+        self,
+        plan_repository: PlanRepository,
+        decomposer: DecomposerPort,
+        subtask_runner_fn: Any,
+        aggregator_llm: Any,
+        workspace: Any = None,
+        playbook: str | None = None,
     ) -> None:
         self.plan_repository = plan_repository
         self.decomposer = decomposer
@@ -29,22 +30,24 @@ class DecomposedWorkflowRunner(WorkflowRunner):
         self.workspace = workspace
         self.playbook = playbook
 
-    async def run(self,
-                  task_prompt: str,
-                  cache_key: str | None = None,
-                  run_id: str | None = None, ) -> str:
+    async def run(
+        self,
+        task_prompt: str,
+        cache_key: str | None = None,
+        run_id: str | None = None,
+    ) -> str:
         # 1. Tier 1 Cache Check: Plan Repository
         plan_id: str = cache_key or task_prompt
         if self.plan_repository.exists(plan_id):
             logger.info(
                 f"Plan Cache HIT for '{task_prompt}' [plan_id={plan_id}]. Bypassing Decomposer Agent..."
             )
-            plan: DecomposerPlan = self.plan_repository.load(plan_id)
+            plan = self.plan_repository.load(plan_id)
         else:
             logger.info(
                 f"Plan Cache MISS for '{task_prompt}' [plan_id={plan_id}]. Executing Decomposer Agent..."
             )
-            plan: DecomposerPlan = await self.decomposer.decompose(task_prompt)
+            plan = await self.decomposer.decompose(task_prompt)
             plan.plan_id = plan_id
             self.plan_repository.save(plan)
             logger.info(
@@ -79,4 +82,3 @@ class DecomposedWorkflowRunner(WorkflowRunner):
                 run_name=cache_key,
                 run_id=run_id,
             )
-

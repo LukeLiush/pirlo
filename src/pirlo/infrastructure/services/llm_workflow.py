@@ -1,3 +1,4 @@
+import hashlib
 import importlib.metadata
 import logging
 import subprocess
@@ -32,11 +33,11 @@ class LlmWorkflowRunner(WorkflowRunner):
     run_history_repository: RunHistoryRepository | None
 
     def __init__(
-            self,
-            agent_factory: BrowserAgentFactory,
-            repository: WorkflowRepository,
-            browser_config: BrowserConfig,
-            run_history_repository: RunHistoryRepository | None = None,
+        self,
+        agent_factory: BrowserAgentFactory,
+        repository: WorkflowRepository,
+        browser_config: BrowserConfig,
+        run_history_repository: RunHistoryRepository | None = None,
     ) -> None:
         self.agent_factory = agent_factory
         self.repository = repository
@@ -44,7 +45,7 @@ class LlmWorkflowRunner(WorkflowRunner):
         self.run_history_repository = run_history_repository
 
     def _build_metadata(
-            self, agent: Agent, task_prompt: str, elapsed: float
+        self, agent: Agent, task_prompt: str, elapsed: float
     ) -> WorkflowMetadata:
         """Extracts runtime metadata dynamically from the agent and execution context."""
         # Extract creator Info
@@ -87,12 +88,12 @@ class LlmWorkflowRunner(WorkflowRunner):
         )
 
     async def run(
-            self,
-            task_prompt: str,
-            cache_key: str | None = None,
-            run_id: str | None = None,
+        self,
+        task_prompt: str,
+        cache_key: str | None = None,
+        run_id: str | None = None,
     ) -> str:
-        workflow_id = cache_key
+        workflow_id = cache_key or hashlib.sha256(task_prompt.encode()).hexdigest()[:16]
 
         # Launch browser-use agent
         browser: Browser = Browser(

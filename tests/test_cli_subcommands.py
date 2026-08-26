@@ -4,7 +4,6 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from pirlo.core.models.run_result import AutopassRunOutput, RunResult
 from pirlo.core.models.parameters import Parameter
 from pirlo.core.models.run_result import AutopassRunOutput, RunResult
 from pirlo.infrastructure.adapters.cli.terminal_pitch import TerminalPitch
@@ -17,7 +16,7 @@ class MockSubcommandSession(TerminalPitch):
 
     async def on_play(self) -> RunResult[AutopassRunOutput]:
         return RunResult(
-            run_id=self._prepared_run.run_id,
+            run_id=(await self.prepared_run()).run_id,
             data=AutopassRunOutput(task_prompt=self.task, final_message="Done"),
         )
 
@@ -86,4 +85,3 @@ async def test_subcommand_orchestrator_override(monkeypatch, tmp_path):
             server_url="http://localhost:4200/api",
             work_pool="my-pool",
         )
-

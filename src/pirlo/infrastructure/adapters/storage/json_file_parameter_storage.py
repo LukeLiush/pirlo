@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+
 class JsonFileParameterStorage:
     def __init__(self, workspace: Path):
         self.workspace = Path(workspace)

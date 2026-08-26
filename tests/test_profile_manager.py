@@ -52,7 +52,9 @@ class TestProfileManager(unittest.TestCase):
             json.dump(data, f)
 
         self.assertTrue(ProfileManager.is_expired("expired_prof"))
-        self.assertGreaterEqual(ProfileManager.get_days_since_created("expired_prof"), 0)
+        self.assertGreaterEqual(
+            ProfileManager.get_days_since_created("expired_prof"), 0
+        )
 
     def test_list_and_delete_profiles(self):
         ProfileManager.save_profile_metadata("prof1", urls=["https://a.com"])

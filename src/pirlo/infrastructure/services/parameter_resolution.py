@@ -116,6 +116,7 @@ class ParameterResolver:
         return self._resolve_link(param, value)
 
     def _resolve_link(self, param: LinkParameter, name: str) -> LlmLink:
+        assert self._link_repository is not None
         link_obj = self._link_repository.get_by_name(name)
         if not link_obj:
             raise MissingLinkError(param.name, name)

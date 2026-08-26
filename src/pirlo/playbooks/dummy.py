@@ -1,6 +1,6 @@
 import asyncio
 
-from pirlo.core.ports.pitch import Parameter
+from pirlo.core.models.parameters import Parameter
 from pirlo.infrastructure.adapters.cli.terminal_pitch import TerminalPitch
 
 

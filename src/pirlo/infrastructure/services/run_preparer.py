@@ -2,18 +2,12 @@
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 from typing import Any
 
 from pirlo.core.models.parameters import Parameter, Parameterizable
 from pirlo.core.models.playbook_invocation import PlaybookInvocation
 from pirlo.core.models.run import PreparedRun
-from pirlo.core.ports.orchestrator import TaskOrchestrator
-from pirlo.infrastructure.adapters.cli.argument_parser_builder import (
-    ArgumentParserBuilder,
-)
-from pirlo.infrastructure.adapters.orchestrator.factory import OrchestratorFactory
 from pirlo.infrastructure.services.parameter_provider import discover_parameters
 from pirlo.infrastructure.services.parameter_resolution import ParameterResolver
 from pirlo.infrastructure.services.run_id_generator import IdentityFactory
@@ -28,19 +22,20 @@ class RunPreparer:
     """
 
     def __init__(
-            self,
-            parameterizable_class: type[Parameterizable],
-            pirlo_workspace: Path,
+        self,
+        parameterizable_class: type[Parameterizable],
+        pirlo_workspace: Path,
+        parameter_resolver: ParameterResolver,
     ) -> None:
         self._parameterizable_class = parameterizable_class
         self._pirlo_workspace = pirlo_workspace
-        self._parser_builder = ArgumentParserBuilder(parameterizable_class)
+        self._parameter_resolver = parameter_resolver
 
     def prepare(
-            self,
-            playbook_name: str,
-            playbook_invocation: PlaybookInvocation,
-            toml_config: dict[str, Any] | None = None,
+        self,
+        playbook_name: str,
+        playbook_invocation: PlaybookInvocation,
+        toml_config: dict[str, Any] | None = None,
     ) -> PreparedRun:
         parameters: dict[str, Any] = self._resolve_parameters(
             playbook_name, playbook_invocation, toml_config
@@ -60,28 +55,19 @@ class RunPreparer:
     # --- parameter resolution --------------------------------------------
 
     def _resolve_parameters(
-            self,
-            playbook_name: str,
-            playbook_invocation: PlaybookInvocation,
-            toml_config: dict[str, Any] | None,
+        self,
+        playbook_name: str,
+        playbook_invocation: PlaybookInvocation,
+        toml_config: dict[str, Any] | None,
     ) -> dict[str, Any]:
-        parser = self._parser_builder.build_parser(
-            playbook_name=playbook_name,
-        )
-        resolver = ParameterResolver.create(
-            parser,
-            playbook_invocation,
-            self._pirlo_workspace,
-            toml_config or {},
-        )
         parameters: list[Parameter] = discover_parameters(self._parameterizable_class)
-        return resolver.resolve_all(parameters)
+        return self._parameter_resolver.resolve_all(parameters)
 
     # --- identity ---------------------------------------------------------
 
     @staticmethod
     def _establish_identity(
-            playbook_name: str, parameters: dict[str, Any]
+        playbook_name: str, parameters: dict[str, Any]
     ) -> tuple[str, str]:
         identity = IdentityFactory(playbook_name, parameters)
         run_name = identity.generate_run_name()

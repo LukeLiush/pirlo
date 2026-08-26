@@ -87,10 +87,10 @@ def get_inner_action(action_model: BaseModel) -> BaseModel:
 
 
 def convert_history_to_workflow(
-        history_list: AgentHistoryList,
-        workflow_id: str,
-        description: str,
-        metadata: WorkflowMetadata | None = None,
+    history_list: AgentHistoryList,
+    workflow_id: str,
+    description: str,
+    metadata: WorkflowMetadata | None = None,
 ) -> Workflow:
     """Converts the browser-use AgentHistoryList into a domain-pure Workflow representation."""
     domain_actions: list[Action] = []
@@ -116,8 +116,8 @@ def convert_history_to_workflow(
             element_info = None
             el_context: ElementContext | None = None
             if (
-                    action_idx < len(interacted_elements)
-                    and interacted_elements[action_idx]
+                action_idx < len(interacted_elements)
+                and interacted_elements[action_idx]
             ):
                 element_info = interacted_elements[action_idx]
 
@@ -125,10 +125,10 @@ def convert_history_to_workflow(
                 attrs = element_info.attributes or {}
                 tag = element_info.node_name or "unknown"
                 text_val = (
-                        attrs.get("text")
-                        or attrs.get("value")
-                        or element_info.ax_name
-                        or tag
+                    attrs.get("text")
+                    or attrs.get("value")
+                    or element_info.ax_name
+                    or tag
                 )
                 el_context = ElementContext(
                     xpath=element_info.x_path,

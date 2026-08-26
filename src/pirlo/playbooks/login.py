@@ -58,7 +58,7 @@ class LoginSession(TerminalPitch):
                     detail=instruction,
                 )
                 return RunResult(
-                    run_id=self._prepared_run.run_id,
+                    run_id=(await self.prepared_run()).run_id,
                     status=RunStatus.FAILED,
                     error=instruction,
                 )
@@ -79,7 +79,7 @@ class LoginSession(TerminalPitch):
                 detail=no_urls_msg,
             )
             return RunResult(
-                run_id=self._prepared_run.run_id,
+                run_id=(await self.prepared_run()).run_id,
                 status=RunStatus.FAILED,
                 error=no_urls_msg,
             )
@@ -140,7 +140,7 @@ class LoginSession(TerminalPitch):
                     ),
                 )
                 return RunResult(
-                    run_id=self._prepared_run.run_id,
+                    run_id=(await self.prepared_run()).run_id,
                     status=RunStatus.COMPLETED,
                     data={"profile": self.profile, "urls": target_urls},
                 )
@@ -150,4 +150,3 @@ class LoginSession(TerminalPitch):
 
 if __name__ == "__main__":
     LoginSession.cli("login")
-

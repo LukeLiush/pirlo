@@ -1,21 +1,14 @@
-import sqlite3
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from pirlo.core.models.run import RunStatus
+from pirlo.core.models.run import PreparedRun
 from pirlo.core.models.run_result import RunResult
 from pirlo.infrastructure.adapters.cli.terminal_pitch import TerminalPitch
-from pirlo.infrastructure.adapters.db.sqlite_run_history_repository import (
-    SqliteRunHistoryRepository,
-)
 from pirlo.infrastructure.adapters.orchestrator.prefect_orchestrator import (
     SmartPrefectTaskOrchestrator,
 )
-
-
-from pirlo.core.models.run import PreparedRun
 
 
 class DummyAutopassPitch(TerminalPitch):
@@ -24,7 +17,7 @@ class DummyAutopassPitch(TerminalPitch):
     task = "Search Google for OpenAI"
 
     async def on_play(self) -> RunResult[Any]:
-        return RunResult(run_id=self._prepared_run.run_id)
+        return RunResult(run_id=(await self.prepared_run()).run_id)
 
 
 @pytest.mark.anyio
@@ -66,7 +59,6 @@ async def test_smart_prefect_orchestrator_execution(tmp_path, monkeypatch):
         )
 
         assert result == "Automation successful!"
-
 
 
 def test_parse_cli_options_direct_contract():

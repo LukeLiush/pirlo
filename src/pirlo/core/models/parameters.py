@@ -31,7 +31,7 @@ class Parameter:
         self.help = help
         self.short = short
         self.env_name = env_name
-        self.name = None
+        self.name: str = ""
 
     def __set_name__(self, owner, name):
         self.name = name

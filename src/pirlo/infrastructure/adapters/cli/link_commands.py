@@ -3,12 +3,11 @@ import getpass
 import sys
 from pathlib import Path
 
-from pirlo.infrastructure.services.link_tester import LinkTester
-
 from pirlo.core.models.link import SUPPORTED_PROVIDERS, LlmLink
 from pirlo.infrastructure.adapters.storage.json_link_repository import (
     JsonLinkRepository,
 )
+from pirlo.infrastructure.services.link_tester import LinkTester
 
 
 def get_repo() -> JsonLinkRepository:

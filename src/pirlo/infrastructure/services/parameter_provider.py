@@ -3,7 +3,6 @@ from typing import Any
 from pirlo.core.models.parameters import Parameter, Parameterizable
 from pirlo.infrastructure.services.parameter_resolution import ParameterResolver
 
-
 # --- discovery -----------------------------------------------------------
 #
 # A stateless free function: it holds no state and needs no configuration,
@@ -13,7 +12,7 @@ from pirlo.infrastructure.services.parameter_resolution import ParameterResolver
 
 
 def discover_parameters(
-        parameterizable_class: type[Parameterizable],
+    parameterizable_class: type[Parameterizable],
 ) -> list[Parameter]:
     """Collect every ``Parameter`` declared on a playbook class."""
     return [
