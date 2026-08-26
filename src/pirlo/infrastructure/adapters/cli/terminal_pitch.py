@@ -19,13 +19,15 @@ from pirlo.core.models.run import PreparedRun
 from pirlo.core.models.run_result import RunResult
 from pirlo.core.ports.orchestrator import TaskOrchestrator
 from pirlo.core.ports.pitch import Pitch
-from pirlo.infrastructure.adapters.cli.argument_parser_builder import ArgumentParserBuilder
+from pirlo.infrastructure.adapters.cli.argument_parser_builder import (
+    ArgumentParserBuilder,
+)
 from pirlo.infrastructure.services.parameter_provider import ParameterProvider
 from pirlo.infrastructure.services.parameter_resolution import ParameterResolver
 
 
 def extract_raw_arguments_excluding_command(
-        sys_argv: list[str], playbook_name: str
+    sys_argv: list[str], playbook_name: str
 ) -> list[str]:
     """
     Strips binary and playbook command names from sys.argv.
@@ -42,7 +44,7 @@ def extract_raw_arguments_excluding_command(
 
 
 def ensure_canonical_orchestrator_delimiter(
-        raw_arguments: list[str], default_orchestrator_name: str = "prefect"
+    raw_arguments: list[str], default_orchestrator_name: str = "prefect"
 ) -> list[str]:
     """
     Ensures '-- <default_orchestrator_name>' is attached to raw CLI arguments if '--' is omitted.
@@ -71,14 +73,14 @@ class TerminalPitch(Pitch, ABC):
     )
 
     def __init__(
-            self,
-            prepared_run: PreparedRun | None = None,
-            orchestrator: TaskOrchestrator | None = None,
+        self,
+        prepared_run: PreparedRun | None = None,
+        orchestrator: TaskOrchestrator | None = None,
     ) -> None:
         super().__init__()
         self._console: Console = Console()
         self._prepared_run = prepared_run
-        self.orchestrator = orchestrator
+        self._orchestrator = orchestrator
 
     @property
     def console(self) -> Console:
@@ -86,7 +88,17 @@ class TerminalPitch(Pitch, ABC):
             self._console = Console()
         return self._console
 
+    @property
+    def orchestrator(self) -> TaskOrchestrator:
+        assert self._orchestrator is not None
+        return self._orchestrator
+
+    @orchestrator.setter
+    def orchestrator(self, value: TaskOrchestrator) -> None:
+        self._orchestrator = value
+
     async def prepared_run(self) -> PreparedRun:
+        assert self._prepared_run is not None
         return self._prepared_run
 
     async def on_play(self) -> RunResult[Any]:
@@ -139,10 +151,10 @@ class TerminalPitch(Pitch, ABC):
 
     @classmethod
     def _build_parser(
-            cls,
-            playbook_name: str,
-            parameters: list[Parameter],
-            epilog_text: str,
+        cls,
+        playbook_name: str,
+        parameters: list[Parameter],
+        epilog_text: str,
     ) -> argparse.ArgumentParser:
         parser = argparse.ArgumentParser(
             prog=f"pirlo {playbook_name}",
@@ -156,7 +168,7 @@ class TerminalPitch(Pitch, ABC):
 
     @classmethod
     def _add_argument_to_parser(
-            cls, parser: argparse.ArgumentParser, attr_name: str, attr_val: Parameter
+        cls, parser: argparse.ArgumentParser, attr_name: str, attr_val: Parameter
     ) -> None:
         flag = f"--{attr_name.replace('_', '-')}"
         if flag in parser._option_string_actions:
@@ -191,15 +203,19 @@ class TerminalPitch(Pitch, ABC):
     @classmethod
     def cli(cls, playbook_name: str = "autopass") -> RunResult[Any]:
         """Parse CLI parameters using the POSIX '--' delimiter and play the pitch."""
+        from pirlo.infrastructure.adapters.cli.parameter_binder import ParameterBinder
         from pirlo.infrastructure.adapters.cli.parameter_snapshot_writer import (
             ParameterSnapshotWriter,
         )
-        from pirlo.infrastructure.adapters.cli.parameter_binder import ParameterBinder
-        from pirlo.infrastructure.adapters.orchestrator.factory import OrchestratorFactory
+        from pirlo.infrastructure.adapters.orchestrator.factory import (
+            OrchestratorFactory,
+        )
         from pirlo.infrastructure.services.run_preparer import RunPreparer
 
         # 1. Normalize the raw invocation: strip command, ensure '--', split.
-        raw_arguments: list[str] = extract_raw_arguments_excluding_command(sys.argv, playbook_name)
+        raw_arguments: list[str] = extract_raw_arguments_excluding_command(
+            sys.argv, playbook_name
+        )
         playbook_invocation: PlaybookInvocation = PlaybookInvocation.from_raw(
             raw_arguments, default_orchestrator_name="prefect"
         )
@@ -212,9 +228,20 @@ class TerminalPitch(Pitch, ABC):
         pirlo_workspace: Path = get_workspace_path()
 
         # Step A: Prepare pure data run spec
+        argument_parser_builder: ArgumentParserBuilder = ArgumentParserBuilder(cls)
+        playbook_parser = argument_parser_builder.build_parser(playbook_name)
+
+        parameter_resolver: ParameterResolver = ParameterResolver.create(
+            playbook_parser=playbook_parser,
+            playbook_invocation=playbook_invocation,
+            pirlo_workspace=pirlo_workspace,
+            toml_config={},
+        )
+
         preparer: RunPreparer = RunPreparer(
             parameterizable_class=cls,
             pirlo_workspace=pirlo_workspace,
+            parameter_resolver=parameter_resolver,
         )
         prepared_run: PreparedRun = preparer.prepare(
             playbook_name=playbook_name,
@@ -233,20 +260,14 @@ class TerminalPitch(Pitch, ABC):
             prepared_run=prepared_run,
         )
 
-        playbook_parser: argparse.ArgumentParser = preparer._parser_builder.build_parser(
-            playbook_name
-        )
-        parameter_resolver: ParameterResolver = ParameterResolver.create(
-            playbook_parser=playbook_parser,
-            playbook_invocation=playbook_invocation,
-            pirlo_workspace=pirlo_workspace,
-            toml_config={},
-        )
         parameter_provider: ParameterProvider = ParameterProvider(parameter_resolver)
-        parameter_binder: ParameterBinder = ParameterBinder(parameter_provider)
-        parameter_snapshot_writer: ParameterSnapshotWriter = ParameterSnapshotWriter(parameter_provider)
+        parameter_snapshot_writer: ParameterSnapshotWriter = ParameterSnapshotWriter(
+            parameter_provider
+        )
 
-        bound_pitch: TerminalPitch = parameter_binder.bind(terminal_pitch)  # type: ignore[assignment]
+        bound_pitch: TerminalPitch = ParameterBinder.bind_values(
+            terminal_pitch, prepared_run.parameters
+        )  # type: ignore[assignment]
         bound_pitch.orchestrator = orchestrator
         parameter_snapshot_writer.write(bound_pitch, prepared_run.parameter_file_path)
 
@@ -258,7 +279,10 @@ class TerminalPitch(Pitch, ABC):
         except RuntimeError:
             return asyncio.run(_play())
         else:
-            return loop.create_task(_play())
+            if loop.is_running():
+                return _play()  # type: ignore[return-value]
+            else:
+                return loop.run_until_complete(_play())
 
     # --- Concrete Port Implementations ---
 

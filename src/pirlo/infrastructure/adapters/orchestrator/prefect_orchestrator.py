@@ -3,12 +3,13 @@ from __future__ import annotations
 
 import contextlib
 import os
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from prefect.settings import temporary_settings
 
 from pirlo.core.config import get_workspace_path
-from pirlo.core.models.parameters import Parameter, LinkParameter
+from pirlo.core.models.parameters import LinkParameter, Parameter
 from pirlo.core.models.run import PreparedRun
 from pirlo.core.ports.orchestrator import TaskOrchestrator
 from pirlo.infrastructure.adapters.decomposer.pydantic_ai_decomposer import (
@@ -57,19 +58,25 @@ class SmartPrefectTaskOrchestrator(TaskOrchestrator):
     # ---- public API -----------------------------------------------------
 
     async def execute(
-            self,
-            task: str,
-            prepared_run: PreparedRun,
-            worker_fn: Any,
-            schedule: str | None = None,
+        self,
+        task: str,
+        prepared_run: PreparedRun,
+        worker_fn: Any,
+        schedule: str | None = None,
     ) -> Any:
         settings = PrefectServerSettings.resolve(self.server_url)
 
-        with capture_run_logs(prepared_run.run_dir, get_prefix_fn=self._prefix_fn(prepared_run)):
+        with capture_run_logs(
+            prepared_run.run_dir, get_prefix_fn=self._prefix_fn(prepared_run)
+        ):
             if schedule:
-                result = await self._deploy_scheduled(task, prepared_run, schedule, settings)
+                result = await self._deploy_scheduled(
+                    task, prepared_run, schedule, settings
+                )
             else:
-                result = await self._run_pipeline(task, prepared_run, worker_fn, settings)
+                result = await self._run_pipeline(
+                    task, prepared_run, worker_fn, settings
+                )
 
         print(
             f"\n💡 To view detailed inspection & execution history, run:\n"
@@ -80,11 +87,11 @@ class SmartPrefectTaskOrchestrator(TaskOrchestrator):
     # ---- pipeline (immediate) execution --------------------------------
 
     async def _run_pipeline(
-            self,
-            task: str,
-            prepared_run: PreparedRun,
-            worker_fn: Any,
-            settings: PrefectServerSettings
+        self,
+        task: str,
+        prepared_run: PreparedRun,
+        worker_fn: Any,
+        settings: PrefectServerSettings,
     ) -> Any:
         if settings.is_server_mode:
             print(f"🌐 Prefect Server Detected: {settings.web_ui_base}")
@@ -100,7 +107,9 @@ class SmartPrefectTaskOrchestrator(TaskOrchestrator):
                 run_id=prepared_run.run_id,
             )
 
-    def _build_runner(self, worker_fn: Any, prepared_run: PreparedRun) -> DecomposedWorkflowRunner:
+    def _build_runner(
+        self, worker_fn: Any, prepared_run: PreparedRun
+    ) -> DecomposedWorkflowRunner:
         workspace = get_workspace_path()
         return DecomposedWorkflowRunner(
             plan_repository=JsonFilePlanRepository(workspace / "plans"),
@@ -118,14 +127,18 @@ class SmartPrefectTaskOrchestrator(TaskOrchestrator):
             or os.environ.get("GOOGLE_API_KEY")
         )
         if not api_key:
+            from pathlib import Path
+
             from pirlo.infrastructure.adapters.storage.json_link_repository import (
                 JsonLinkRepository,
             )
-            from pathlib import Path
+
             repo = JsonLinkRepository(Path("~/.pirlo-pitch/links.json").expanduser())
             link = None
             if self.decomposer_link:
-                link = repo.get_by_name(getattr(self.decomposer_link, "_name", str(self.decomposer_link)))
+                link = repo.get_by_name(
+                    getattr(self.decomposer_link, "_name", str(self.decomposer_link))
+                )
             if not link:
                 links = repo.list_all()
                 if links:
@@ -141,10 +154,12 @@ class SmartPrefectTaskOrchestrator(TaskOrchestrator):
     def _build_aggregator_llm(self) -> Any:
         link = self.decomposer_link
         if not link:
+            from pathlib import Path
+
             from pirlo.infrastructure.adapters.storage.json_link_repository import (
                 JsonLinkRepository,
             )
-            from pathlib import Path
+
             repo = JsonLinkRepository(Path("~/.pirlo-pitch/links.json").expanduser())
             links = repo.list_all()
             if links:
@@ -156,7 +171,11 @@ class SmartPrefectTaskOrchestrator(TaskOrchestrator):
     # ---- scheduled deployment ------------------------------------------
 
     async def _deploy_scheduled(
-            self, task: str, prepared_run: PreparedRun, cron_schedule: str, settings: PrefectServerSettings
+        self,
+        task: str,
+        prepared_run: PreparedRun,
+        cron_schedule: str,
+        settings: PrefectServerSettings,
     ) -> Any:
         if not settings.is_server_mode:
             raise RuntimeError(
@@ -175,9 +194,10 @@ class SmartPrefectTaskOrchestrator(TaskOrchestrator):
             schedule=schedule,  # type: ignore[arg-type]
             work_pool_name=self.work_pool,
         )
-        print(f"✅ Created scheduled Prefect deployment: pirlo-scheduled-{prepared_run.run_id}")
+        print(
+            f"✅ Created scheduled Prefect deployment: pirlo-scheduled-{prepared_run.run_id}"
+        )
         return deployment
-
 
     # ---- helpers -------------------------------------------------------
 
@@ -185,17 +205,19 @@ class SmartPrefectTaskOrchestrator(TaskOrchestrator):
     def _prefix_fn(prepared_run: PreparedRun) -> Callable[[], str]:
         def get_active_task_prefix() -> str:
             with contextlib.suppress(Exception):
-                from prefect.context import get_run_context
+                from prefect.context import (
+                    FlowRunContext,
+                    TaskRunContext,
+                    get_run_context,
+                )
 
                 ctx = get_run_context()
-                if getattr(ctx, "task_run", None):
-                    name = getattr(ctx.task_run, "name", None) or getattr(
-                        ctx.task_run, "task_key", "Task"
-                    )
+                if isinstance(ctx, TaskRunContext) and ctx.task_run:
+                    name = ctx.task_run.name or ctx.task_run.task_key
                     return f"[{name}]"
-                if getattr(ctx, "flow_run", None):
+                if isinstance(ctx, FlowRunContext) and ctx.flow_run:
                     return f"[{ctx.flow_run.name}]"
-            return f"[{prepared_run.name.capitalize()} Flow]"
+            return f"[{prepared_run.run_name.capitalize()} Flow]"
 
         return get_active_task_prefix
 
