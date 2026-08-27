@@ -7,6 +7,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, get_args, get_origin
 
+from pirlo.core.models.parameters import LinkParameter
+
 
 class ValueConverter:
     _TRUTHY = frozenset({"true", "1", "yes", "on"})
@@ -24,6 +26,8 @@ class ValueConverter:
             return self._convert_bool(val)
         if type_func is Path:
             return self._convert_path(val)
+        if isinstance(type_func, type) and not issubclass(type_func, (str, int, float, Path, bool)):
+            return str(val) if val is not None else None
         return self._convert_scalar(val, type_func)
 
     # --- list -------------------------------------------------------------
@@ -48,11 +52,12 @@ class ValueConverter:
                 sys.stderr.write(
                     f"Warning: Failed to decode list parameter as JSON: {e}\n"
                 )
-            else:
-                if isinstance(parsed, list):
-                    return [self.convert(item, item_type) for item in parsed]
-        # Fall back to comma-separated split
-        return [self.convert(item.strip(), item_type) for item in val.split(",")]
+                parsed = val
+            if isinstance(parsed, list):
+                return [self.convert(item, item_type) for item in parsed]
+
+        items = [s.strip() for s in val.split(",") if s.strip()]
+        return [self.convert(item, item_type) for item in items]
 
     # --- dict -------------------------------------------------------------
 
@@ -61,20 +66,17 @@ class ValueConverter:
         if isinstance(val, dict):
             return val
         if isinstance(val, str):
-            if not val.strip():
-                return {}
             try:
                 parsed = json.loads(val)
+                if isinstance(parsed, dict):
+                    return parsed
             except json.JSONDecodeError as e:
-                raise ValueError(
-                    f"Invalid dict parameter (expected JSON object): {e}"
-                ) from e
-            if not isinstance(parsed, dict):
-                raise TypeError(f"Dict parameter did not decode to an object: {val!r}")
-            return parsed
-        return dict(val) if val else {}
+                sys.stderr.write(
+                    f"Warning: Failed to decode dict parameter as JSON: {e}\n"
+                )
+        return {}
 
-    # --- scalars ----------------------------------------------------------
+    # --- bool -------------------------------------------------------------
 
     def _convert_bool(self, val: Any) -> bool:
         if isinstance(val, bool):
@@ -83,9 +85,15 @@ class ValueConverter:
             return val.strip().lower() in self._TRUTHY
         return bool(val)
 
+    # --- path -------------------------------------------------------------
+
     @staticmethod
     def _convert_path(val: Any) -> Path:
-        return Path(val).expanduser()
+        if isinstance(val, Path):
+            return val
+        return Path(str(val))
+
+    # --- scalar -----------------------------------------------------------
 
     @staticmethod
     def _convert_scalar(val: Any, type_func: Callable) -> Any:
@@ -113,9 +121,17 @@ class ParameterSource(ABC):
                 if isinstance(param, dict)
                 else getattr(param, "type_func", str)
             )
+            is_link = (
+                param.get("is_link", False)
+                if isinstance(param, dict)
+                else isinstance(param, LinkParameter)
+            )
             raw = self._raw_value(param)
             if raw is not _MISSING:
-                bound[name] = self._converter.convert(raw, type_func)
+                if is_link:
+                    bound[name] = str(raw) if raw is not None else None
+                else:
+                    bound[name] = self._converter.convert(raw, type_func)
         return bound
 
     @abstractmethod
@@ -134,7 +150,7 @@ _MISSING = _Missing()
 
 
 class ArgumentSource(ParameterSource):
-    """Values from parsed CLI arguments (the highest precedence)."""
+    """Binds parameters from a parsed ``argparse.Namespace``."""
 
     def __init__(
         self, parsed_args: argparse.Namespace, converter: ValueConverter
@@ -144,23 +160,25 @@ class ArgumentSource(ParameterSource):
 
     def _raw_value(self, param: Any) -> Any:
         name = param["name"] if isinstance(param, dict) else getattr(param, "name", "")
-        value = getattr(self._args, name, None)
-        return value if value is not None else _MISSING
+        if hasattr(self._args, name):
+            return getattr(self._args, name)
+        return _MISSING
 
 
 class EnvironmentSource(ParameterSource):
-    """Values from environment variables."""
+    """Binds parameters from environment variables."""
 
     def _raw_value(self, param: Any) -> Any:
-        env_names = (
-            param.get("env_name")
-            if isinstance(param, dict)
-            else getattr(param, "env_name", None)
-        )
-        if not env_names:
-            return _MISSING
-        if isinstance(env_names, str):
-            env_names = [env_names]
+        env_names: list[str] = []
+        if isinstance(param, dict):
+            raw_env = param.get("env_name")
+            if isinstance(raw_env, str):
+                env_names = [raw_env]
+            elif isinstance(raw_env, list):
+                env_names = raw_env
+        else:
+            env_names = param.env_names
+
         for env_name in env_names:
             if env_name in os.environ:
                 return os.environ[env_name]
@@ -168,23 +186,25 @@ class EnvironmentSource(ParameterSource):
 
 
 class TomlSource(ParameterSource):
-    """Values from the pirlo.toml config section."""
+    """Binds parameters from a parsed TOML config table."""
 
-    def __init__(self, toml_config: dict[str, Any], converter: ValueConverter) -> None:
+    def __init__(self, toml_data: dict[str, Any], converter: ValueConverter) -> None:
         super().__init__(converter)
-        self._toml_config = toml_config
+        self._data = toml_data
 
     def _raw_value(self, param: Any) -> Any:
         name = param["name"] if isinstance(param, dict) else getattr(param, "name", "")
-        if name in self._toml_config:
-            return self._toml_config[name]
+        if name in self._data:
+            return self._data[name]
         return _MISSING
 
 
 class OverrideSource(ParameterSource):
-    """Values from explicit dictionary overrides."""
+    """Binds parameters from an explicit keyword override dict."""
 
-    def __init__(self, overrides: dict[str, Any], converter: ValueConverter) -> None:
+    def __init__(
+        self, overrides: dict[str, Any], converter: ValueConverter
+    ) -> None:
         super().__init__(converter)
         self._overrides = overrides
 
