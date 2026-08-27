@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from pirlo.core.models.parameters import Parameter, Parameterizable
 from pirlo.core.models.playbook_invocation import PlaybookInvocation
 from pirlo.core.models.run import PreparedRun
 from pirlo.infrastructure.services.parameter_provider import discover_parameters
@@ -14,16 +13,11 @@ from pirlo.infrastructure.services.run_id_generator import IdentityFactory
 
 
 class RunPreparer:
-    """Turns a raw invocation into a :class:`PreparedRun`.
-
-    Sequences three concerns — orchestrator selection, parameter resolution,
-    and run-identity generation — so ``cli`` receives a single ready-to-use
-    value object without wiring the pieces itself.
-    """
+    """Turns a raw invocation into a :class:`PreparedRun`."""
 
     def __init__(
         self,
-        parameterizable_class: type[Parameterizable],
+        parameterizable_class: Any,
         pirlo_workspace: Path,
         parameter_resolver: ParameterResolver,
     ) -> None:
@@ -60,7 +54,9 @@ class RunPreparer:
         playbook_invocation: PlaybookInvocation,
         toml_config: dict[str, Any] | None,
     ) -> dict[str, Any]:
-        parameters: list[Parameter] = discover_parameters(self._parameterizable_class)
+        parameters: list[dict[str, Any]] = discover_parameters(
+            self._parameterizable_class
+        )
         return self._parameter_resolver.resolve_all(parameters)
 
     # --- identity ---------------------------------------------------------

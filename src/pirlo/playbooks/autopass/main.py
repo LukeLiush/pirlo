@@ -2,11 +2,13 @@ import sys
 from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 
 from pirlo.core.config import get_workspace_path
+from pirlo.core.decorators import playbook
 from pirlo.core.instructions import AutopassInstructions
 from pirlo.core.models.browser_config import BrowserConfig
+from pirlo.core.models.link import LlmLink
 from pirlo.core.models.parameters import LinkParameter, Parameter
 from pirlo.core.models.run import RunStatus
 from pirlo.core.models.run_result import AutopassRunOutput, RunResult
@@ -32,7 +34,6 @@ from pirlo.playbooks.autopass.core.ports import (
 from pirlo.playbooks.autopass.core.use_cases import RunAutopassUseCase
 
 CDP_PORT = 9222
-
 CDP_URL = f"http://localhost:{CDP_PORT}"
 
 
@@ -61,64 +62,67 @@ class QuickProgressListener(ProgressListener):
             sys.stderr.write(f"   Detail: {detail}\n")
 
 
+@playbook(name="autopass", description="Run self-healing browser automation workflows.")
 class AutopassSession(TerminalPitch):
     """Run self-healing browser automation workflows."""
 
-    profile = Parameter(
-        str,
-        default="default",
-        help="Name or path of the browser profile to use (default: 'default')",
-        env_name="PROFILE",
-    )
-    headless = Parameter(
-        bool, default=False, help="Run browser in headless mode", env_name="HEADLESS"
-    )
-    task = Parameter(
-        str,
-        default=None,
-        help=(
-            "Task prompt to execute autonomously "
-            '(e.g. "Go to google.com and search for OpenAI" or '
-            '"Navigate to github.com and find trending Python repositories").'
-        ),
-        env_name="TASK",
-    )
-    playmaker = LinkParameter(
-        help=(
-            "Link name for Playmaker (decision brain). "
-            "Use 'pirlo link list' to view registered link names, "
-            "or 'pirlo link create <name>' to register a new link."
-        ),
-        env_name="PLAYMAKER",
-    )
-    analyst = LinkParameter(
-        help=(
-            "Link name for Analyst (DOM summary / selector healer). "
-            "Use 'pirlo link list' to view registered link names, "
-            "or 'pirlo link create <name>' to register a new link."
-        ),
-        env_name="ANALYST",
-    )
-    use_vision = Parameter(
-        bool, default=False, help="Enable vision for the Agent", env_name="USE_VISION"
-    )
-    max_failures = Parameter(
-        int,
-        default=5,
-        help="Maximum failure attempts before stopping",
-        env_name="MAX_FAILURES",
-    )
-    retry_delay = Parameter(
-        int, default=10, help="Retry delay in seconds", env_name="RETRY_DELAY"
-    )
-
-    async def on_play(self) -> RunResult[AutopassRunOutput]:
+    async def on_play(
+        self,
+        profile: Annotated[
+            str,
+            Parameter(
+                help="Name or path of the browser profile to use (default: 'default')",
+                env_name="PROFILE",
+            ),
+        ] = "default",
+        headless: Annotated[
+            bool, Parameter(help="Run browser in headless mode", env_name="HEADLESS")
+        ] = False,
+        task: Annotated[
+            str, Parameter(help="Task prompt to execute autonomously", env_name="TASK")
+        ] = "",
+        playmaker: Annotated[
+            LlmLink | None,
+            LinkParameter(
+                help="Link name for Playmaker (decision brain)", env_name="PLAYMAKER"
+            ),
+        ] = None,
+        analyst: Annotated[
+            LlmLink | None,
+            LinkParameter(
+                help="Link name for Analyst (DOM summary / selector healer)",
+                env_name="ANALYST",
+            ),
+        ] = None,
+        use_vision: Annotated[
+            bool, Parameter(help="Enable vision for the Agent", env_name="USE_VISION")
+        ] = False,
+        max_failures: Annotated[
+            int,
+            Parameter(
+                help="Maximum failure attempts before stopping", env_name="MAX_FAILURES"
+            ),
+        ] = 5,
+        retry_delay: Annotated[
+            int, Parameter(help="Retry delay in seconds", env_name="RETRY_DELAY")
+        ] = 10,
+        schedule: Annotated[
+            str | None,
+            Parameter(
+                help="Optional schedule preset or raw cron string",
+                env_name="SCHEDULE",
+                short="-s",
+            ),
+        ] = None,
+        *args: Any,
+        **kwargs: Any,
+    ) -> RunResult[AutopassRunOutput]:
         self.header(
             "Autopass Workflow Pitch",
             subtitle="Autonomous Browser Automation",
         )
 
-        if not ProfileManager.exists(self.profile):
+        if not ProfileManager.exists(profile):
             all_profiles = ProfileManager.list_profiles()
             if all_profiles:
                 profiles_info = "Existing Saved Profiles:\n" + "\n".join(
@@ -129,7 +133,7 @@ class AutopassSession(TerminalPitch):
                 profiles_info = "No browser profiles currently exist."
 
             instruction = AutopassInstructions.PROFILE_MISSING.format(
-                profile=self.profile, existing_info=profiles_info
+                profile=profile, existing_info=profiles_info
             )
             self.yellow_card(instruction)
             return RunResult(
@@ -138,18 +142,18 @@ class AutopassSession(TerminalPitch):
                 error=str(instruction),
             )
 
-        if ProfileManager.is_expired(self.profile):
-            meta = ProfileManager.load_profile_metadata(self.profile)
+        if ProfileManager.is_expired(profile):
+            meta = ProfileManager.load_profile_metadata(profile)
             exp_date = meta.expires_at if meta else "N/A"
             ttl_days = meta.ttl_days if meta else 7
-            days_passed = ProfileManager.get_days_since_created(self.profile)
+            days_passed = ProfileManager.get_days_since_created(profile)
             urls_str = (
                 " ".join(meta.authenticated_urls)
                 if (meta and meta.authenticated_urls)
                 else "<target_urls>"
             )
             instruction = AutopassInstructions.PROFILE_EXPIRED.format(
-                profile=self.profile,
+                profile=profile,
                 days_passed=days_passed,
                 ttl_days=ttl_days,
                 expires_at=exp_date,
@@ -162,9 +166,9 @@ class AutopassSession(TerminalPitch):
                 error=str(instruction),
             )
 
-        profile_path: Path = ProfileManager.resolve_profile_path(self.profile)
+        profile_path: Path = ProfileManager.resolve_profile_path(profile)
 
-        if self.task is None:
+        if not task:
             self.yellow_card(AutopassInstructions.TASK_REQUIRED)
             return RunResult(
                 run_id=(await self.prepared_run()).run_id,
@@ -172,7 +176,7 @@ class AutopassSession(TerminalPitch):
                 error=str(AutopassInstructions.TASK_REQUIRED),
             )
 
-        if self.playmaker is None or self.analyst is None:
+        if playmaker is None or analyst is None:
             err_msg = (
                 "Error: Playmaker and Analyst links are required.\n"
                 "Please specify --playmaker and --analyst.\n"
@@ -185,56 +189,52 @@ class AutopassSession(TerminalPitch):
                 error=err_msg,
             )
 
-        # self.playmaker and self.analyst are resolved LlmLink domain objects
-        pm_base_url = self.playmaker.base_url or "N/A"
-        an_base_url = self.analyst.base_url or "N/A"
+        pm_base_url = playmaker.base_url or "N/A"
+        an_base_url = analyst.base_url or "N/A"
 
         self.lineup(
             "Active Run Configuration",
             columns=["Setting", "Value"],
             rows=[
                 ["Profile Path", str(profile_path.resolve())],
-                ["Headless", str(self.headless)],
-                ["Task", self.task],
+                ["Headless", str(headless)],
+                ["Task", task],
                 [
                     "Playmaker Link (Provider)",
-                    f"{self.playmaker} ({self.playmaker.provider})",
+                    f"{playmaker} ({playmaker.provider})",
                 ],
-                ["Playmaker Model", self.playmaker.model],
+                ["Playmaker Model", playmaker.model],
                 ["Playmaker Base URL", pm_base_url or "N/A"],
                 [
                     "Analyst Link (Provider)",
-                    f"{self.analyst} ({self.analyst.provider})",
+                    f"{analyst} ({analyst.provider})",
                 ],
-                ["Analyst Model", self.analyst.model],
+                ["Analyst Model", analyst.model],
                 ["Analyst Base URL", an_base_url or "N/A"],
-                ["Vision Enabled", str(self.use_vision)],
-                ["Max Failures / Delay", f"{self.max_failures} / {self.retry_delay}s"],
+                ["Vision Enabled", str(use_vision)],
+                ["Max Failures / Delay", f"{max_failures} / {retry_delay}s"],
                 [
                     "Orchestrator Backend",
                     getattr(self.orchestrator, "name", str(self.orchestrator))
                     if self.orchestrator
                     else "prefect",
                 ],
-                ["Schedule", self.schedule or "None (Immediate)"],
+                ["Schedule", schedule or "None (Immediate)"],
             ],
         )
 
-        # 1. Create LLM instances from LlmLink objects via LlmFactory
-        playmaker_llm = LlmFactory.create_langchain_llm(self.playmaker)
-        analyst_llm = LlmFactory.create_langchain_llm(self.analyst)
+        playmaker_llm = LlmFactory.create_langchain_llm(playmaker)
+        analyst_llm = LlmFactory.create_langchain_llm(analyst)
 
-        # 2. Initialize workflow repository and browser configuration
         workflows_dir = get_workspace_path() / ".pirlo" / "workflows"
         workflow_repo = JsonFileWorkflowRepository(workflows_dir)
-        browser_config = BrowserConfig(cdp_url=CDP_URL, headless=self.headless)
+        browser_config = BrowserConfig(cdp_url=CDP_URL, headless=headless)
 
-        # 3. Build agent factory and runners
         agent_factory = DefaultBrowserAgentFactory(
             llm=playmaker_llm,
-            use_vision=self.use_vision,
-            max_failures=self.max_failures,
-            retry_delay=self.retry_delay,
+            use_vision=use_vision,
+            max_failures=max_failures,
+            retry_delay=retry_delay,
         )
 
         fallback_runner = LlmWorkflowRunner(
@@ -266,9 +266,9 @@ class AutopassSession(TerminalPitch):
         async def run_use_case() -> str:
             prepared = await self.prepared_run()
             return await run_autopass_use_case.run(
-                task_prompt=self.task,
+                task_prompt=task,
                 profile_path=profile_path,
-                headless=self.headless,
+                headless=headless,
                 cdp_port=CDP_PORT,
                 listener=QuickProgressListener(),
                 run_name=prepared.run_name,
@@ -276,13 +276,12 @@ class AutopassSession(TerminalPitch):
             )
 
         prepared = await self.prepared_run()
-        schedule_value: str | None = prepared.parameters.get("schedule", None)
         raw_output = await self.orchestrator.execute(
-            self.task, prepared, run_use_case, schedule_value
+            prepared, run_use_case, task=task, schedule=schedule
         )
 
         autopass_output: AutopassRunOutput = AutopassRunOutput(
-            task_prompt=self.task,
+            task_prompt=task,
             final_message=str(raw_output),
         )
 
@@ -294,4 +293,4 @@ class AutopassSession(TerminalPitch):
 
 
 if __name__ == "__main__":
-    AutopassSession.cli("autopass")
+    AutopassSession.cli()

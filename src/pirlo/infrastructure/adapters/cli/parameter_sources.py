@@ -7,8 +7,6 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, get_args, get_origin
 
-from pirlo.core.models.parameters import Parameter
-
 
 class ValueConverter:
     _TRUTHY = frozenset({"true", "1", "yes", "on"})
@@ -94,32 +92,34 @@ class ValueConverter:
         try:
             return type_func(val)
         except (ValueError, TypeError) as e:
-            type_name = getattr(type_func, "__name__", type_func)
+            type_name = getattr(type_func, "__name__", str(type_func))
             raise ValueError(f"Could not convert {val!r} to {type_name}: {e}") from e
 
 
 class ParameterSource(ABC):
-    """A single precedence layer that supplies raw parameter values.
-
-    Each source returns a ``{param.name: converted_value}`` dict containing
-    only the parameters it actually provides, so higher-precedence sources
-    can override lower ones via simple dict merging. Parameters a source
-    does not provide are omitted (not set to ``None``).
-    """
+    """A single precedence layer that supplies raw parameter values."""
 
     def __init__(self, converter: ValueConverter) -> None:
         self._converter = converter
 
-    def bind(self, parameters: list[Parameter]) -> dict[str, Any]:
+    def bind(self, parameters: list[Any]) -> dict[str, Any]:
         bound: dict[str, Any] = {}
         for param in parameters:
+            name = (
+                param["name"] if isinstance(param, dict) else getattr(param, "name", "")
+            )
+            type_func = (
+                param["type"]
+                if isinstance(param, dict)
+                else getattr(param, "type_func", str)
+            )
             raw = self._raw_value(param)
             if raw is not _MISSING:
-                bound[param.name] = self._converter.convert(raw, param.type_func)
+                bound[name] = self._converter.convert(raw, type_func)
         return bound
 
     @abstractmethod
-    def _raw_value(self, param: Parameter) -> Any:
+    def _raw_value(self, param: Any) -> Any:
         """Return the raw value for ``param`` or ``_MISSING`` if absent."""
 
 
@@ -142,18 +142,21 @@ class ArgumentSource(ParameterSource):
         super().__init__(converter)
         self._args = parsed_args
 
-    def _raw_value(self, param: Parameter) -> Any:
-        # argparse always sets the attribute, defaulting to None when unset,
-        # so 'provided' means present AND non-None.
-        value = getattr(self._args, param.name, None)
+    def _raw_value(self, param: Any) -> Any:
+        name = param["name"] if isinstance(param, dict) else getattr(param, "name", "")
+        value = getattr(self._args, name, None)
         return value if value is not None else _MISSING
 
 
 class EnvironmentSource(ParameterSource):
     """Values from environment variables."""
 
-    def _raw_value(self, param: Parameter) -> Any:
-        env_names = getattr(param, "env_name", None)
+    def _raw_value(self, param: Any) -> Any:
+        env_names = (
+            param.get("env_name")
+            if isinstance(param, dict)
+            else getattr(param, "env_name", None)
+        )
         if not env_names:
             return _MISSING
         if isinstance(env_names, str):
@@ -171,9 +174,10 @@ class TomlSource(ParameterSource):
         super().__init__(converter)
         self._toml_config = toml_config
 
-    def _raw_value(self, param: Parameter) -> Any:
-        if param.name in self._toml_config:
-            return self._toml_config[param.name]
+    def _raw_value(self, param: Any) -> Any:
+        name = param["name"] if isinstance(param, dict) else getattr(param, "name", "")
+        if name in self._toml_config:
+            return self._toml_config[name]
         return _MISSING
 
 
@@ -184,7 +188,8 @@ class OverrideSource(ParameterSource):
         super().__init__(converter)
         self._overrides = overrides
 
-    def _raw_value(self, param: Parameter) -> Any:
-        if param.name in self._overrides and self._overrides[param.name] is not None:
-            return self._overrides[param.name]
+    def _raw_value(self, param: Any) -> Any:
+        name = param["name"] if isinstance(param, dict) else getattr(param, "name", "")
+        if name in self._overrides and self._overrides[name] is not None:
+            return self._overrides[name]
         return _MISSING

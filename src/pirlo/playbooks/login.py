@@ -1,9 +1,10 @@
 import asyncio
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 
 from cloakbrowser import launch_persistent_context_async
 
+from pirlo.core.decorators import playbook
 from pirlo.core.models.parameters import Parameter
 from pirlo.core.models.run import RunStatus
 from pirlo.core.models.run_result import RunResult
@@ -11,48 +12,52 @@ from pirlo.infrastructure.adapters.cli.terminal_pitch import TerminalPitch
 from pirlo.infrastructure.services.profile_manager import ProfileManager
 
 
+@playbook(
+    name="login",
+    description="Launch a browser to authenticate and save persistent cookies.",
+)
 class LoginSession(TerminalPitch):
     """Launch a browser to authenticate and save persistent cookies."""
 
-    profile = Parameter(
-        str,
-        default="default",
-        help="Name or path of the browser profile to authenticate and save",
-    )
-
-    ttl_days = Parameter(
-        int,
-        default=7,
-        help="Session expiration TTL in days (default: 7)",
-    )
-
-    urls = Parameter(
-        list[str],
-        default=[],
-        help="List of target website URLs to open for manual authentication",
-    )
-
-    urls_file = Parameter(
-        Path,
-        help="Path to a text file containing a list of target URLs (one per line)",
-    )
-
-    async def on_play(self) -> RunResult[Any]:
+    async def on_play(
+        self,
+        profile: Annotated[
+            str,
+            Parameter(
+                help="Name or path of the browser profile to authenticate and save"
+            ),
+        ] = "default",
+        ttl_days: Annotated[
+            int, Parameter(help="Session expiration TTL in days (default: 7)")
+        ] = 7,
+        urls: Annotated[
+            list[str] | None,
+            Parameter(
+                help="List of target website URLs to open for manual authentication"
+            ),
+        ] = None,
+        urls_file: Annotated[
+            Path | None,
+            Parameter(help="Path to a text file containing a list of target URLs"),
+        ] = None,
+        *args: Any,
+        **kwargs: Any,
+    ) -> RunResult[Any]:
         # 1. Header (Banner)
         self.header(
             "Pirlo Login Manager",
-            subtitle=f"Manage persistent session cookies for profile '{self.profile}'",
+            subtitle=f"Manage persistent session cookies for profile '{profile}'",
         )
 
-        target_urls: list[str] = self.urls.copy() if self.urls else []
-        if self.urls_file:
-            if self.urls_file.exists():
-                with open(self.urls_file, "r") as f:  # noqa: ASYNC230
+        target_urls: list[str] = urls.copy() if urls else []
+        if urls_file:
+            if urls_file.exists():
+                with open(urls_file, "r") as f:  # noqa: ASYNC230
                     target_urls.extend(
                         line.strip() for line in f.read().splitlines() if line.strip()
                     )
             else:
-                instruction = f"The specified file '{self.urls_file}' does not exist."
+                instruction = f"The specified file '{urls_file}' does not exist."
                 self.yellow_card(
                     "URLs file not found",
                     detail=instruction,
@@ -85,8 +90,8 @@ class LoginSession(TerminalPitch):
             )
 
         # 2. Status (Loading spinner)
-        profile_path = ProfileManager.resolve_profile_path(self.profile)
-        with self.status(f"Launching browser session for profile '{self.profile}'..."):
+        profile_path = ProfileManager.resolve_profile_path(profile)
+        with self.status(f"Launching browser session for profile '{profile}'..."):
             ctx = await launch_persistent_context_async(
                 str(profile_path),
                 headless=False,
@@ -125,9 +130,9 @@ class LoginSession(TerminalPitch):
 
                 # Save metadata
                 metadata = ProfileManager.save_profile_metadata(
-                    profile_input=self.profile,
+                    profile_input=profile,
                     urls=target_urls,
-                    ttl_days=self.ttl_days,
+                    ttl_days=ttl_days,
                 )
 
                 # 6. Goal! (Success box)
@@ -136,17 +141,17 @@ class LoginSession(TerminalPitch):
                     detail=(
                         f"Browser cookies saved to: {profile_path.resolve()}\n"
                         f"Profile Name: {metadata.name}\n"
-                        f"Expires At: {metadata.expires_at} (TTL: {self.ttl_days} days)"
+                        f"Expires At: {metadata.expires_at} (TTL: {ttl_days} days)"
                     ),
                 )
                 return RunResult(
                     run_id=(await self.prepared_run()).run_id,
                     status=RunStatus.COMPLETED,
-                    data={"profile": self.profile, "urls": target_urls},
+                    data={"profile": profile, "urls": target_urls},
                 )
             finally:
                 await ctx.close()
 
 
 if __name__ == "__main__":
-    LoginSession.cli("login")
+    LoginSession.cli()

@@ -1,8 +1,9 @@
-from typing import Any
+from typing import Annotated, Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from pirlo.core.decorators import orchestrator
 from pirlo.core.models.parameters import Parameter
 from pirlo.core.ports.orchestrator import TaskOrchestrator
 from pirlo.infrastructure.adapters.orchestrator.factory import OrchestratorFactory
@@ -11,28 +12,36 @@ from pirlo.infrastructure.adapters.orchestrator.prefect_orchestrator import (
 )
 
 
+@orchestrator(name="custom")
 class CustomMockOrchestrator(TaskOrchestrator):
-    name: str = "custom"
-    custom_setting = Parameter(str, default="default")
+    def __init__(self, custom_setting: str = "default") -> None:
+        self.custom_setting = custom_setting
 
-    async def execute(self, *args, **kwargs):
-        return f"executed with {self.custom_setting}"
+    async def execute(
+        self,
+        prepared_run: Any = None,
+        worker_fn: Any = None,
+        custom_setting: Annotated[str, Parameter(help="Custom setting")] = "default",
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any:
+        return f"executed with {custom_setting}"
 
 
 def test_factory_creates_prefect_default():
-    orchestrator = OrchestratorFactory.create("prefect")
-    assert isinstance(orchestrator, SmartPrefectTaskOrchestrator)
+    orchestrator_obj = OrchestratorFactory.create("prefect")
+    assert isinstance(orchestrator_obj, SmartPrefectTaskOrchestrator)
 
 
 def test_factory_merges_overrides():
-    orchestrator = OrchestratorFactory.create(
+    orchestrator_obj = OrchestratorFactory.create(
         "prefect",
         server_url="http://custom-prefect:4200/api",
         work_pool="custom-pool",
     )
-    assert isinstance(orchestrator, SmartPrefectTaskOrchestrator)
-    assert orchestrator.server_url == "http://custom-prefect:4200/api"
-    assert orchestrator.work_pool == "custom-pool"
+    assert isinstance(orchestrator_obj, SmartPrefectTaskOrchestrator)
+    assert orchestrator_obj.server_url == "http://custom-prefect:4200/api"
+    assert orchestrator_obj.work_pool == "custom-pool"
 
 
 def test_factory_toml_configuration(tmp_path):
@@ -44,10 +53,10 @@ server_url = "http://toml-server:4200/api"
 work_pool = "toml-pool"
 """
     )
-    orchestrator = OrchestratorFactory.create("prefect", config_path=config_file)
-    assert isinstance(orchestrator, SmartPrefectTaskOrchestrator)
-    assert orchestrator.server_url == "http://toml-server:4200/api"
-    assert orchestrator.work_pool == "toml-pool"
+    orchestrator_obj = OrchestratorFactory.create("prefect", config_path=config_file)
+    assert isinstance(orchestrator_obj, SmartPrefectTaskOrchestrator)
+    assert orchestrator_obj.server_url == "http://toml-server:4200/api"
+    assert orchestrator_obj.work_pool == "toml-pool"
 
 
 def test_factory_cli_override_beats_toml(tmp_path):
@@ -59,21 +68,23 @@ server_url = "http://toml-server:4200/api"
 work_pool = "toml-pool"
 """
     )
-    orchestrator = OrchestratorFactory.create(
+    orchestrator_obj = OrchestratorFactory.create(
         "prefect",
         config_path=config_file,
         server_url="http://cli-override:4200/api",
     )
-    assert isinstance(orchestrator, SmartPrefectTaskOrchestrator)
-    assert orchestrator.server_url == "http://cli-override:4200/api"
-    assert orchestrator.work_pool == "toml-pool"
+    assert isinstance(orchestrator_obj, SmartPrefectTaskOrchestrator)
+    assert orchestrator_obj.server_url == "http://cli-override:4200/api"
+    assert orchestrator_obj.work_pool == "toml-pool"
 
 
 def test_factory_dynamic_registration():
     OrchestratorFactory.register("custom", CustomMockOrchestrator)
-    orchestrator = OrchestratorFactory.create("custom", custom_setting="override_val")
-    assert isinstance(orchestrator, CustomMockOrchestrator)
-    assert orchestrator.custom_setting == "override_val"
+    orchestrator_obj = OrchestratorFactory.create(
+        "custom", custom_setting="override_val"
+    )
+    assert isinstance(orchestrator_obj, CustomMockOrchestrator)
+    assert orchestrator_obj.custom_setting == "override_val"
 
 
 def test_factory_unknown_orchestrator_raises_error():
@@ -89,7 +100,7 @@ from pirlo.infrastructure.adapters.cli.terminal_pitch import TerminalPitch
 class DummyPitch(TerminalPitch):
     """Dummy Pitch for orchestrator cron testing."""
 
-    async def on_play(self) -> RunResult[Any]:
+    async def on_play(self, *args, **kwargs) -> RunResult[Any]:
         return RunResult(run_id=(await self.prepared_run()).run_id)
 
 
@@ -100,8 +111,8 @@ async def test_cron_schedule_requires_active_server(tmp_path, monkeypatch):
     run_dir = tmp_path / "autopass" / "runs" / "cron-test-1"
     run_dir.mkdir(parents=True, exist_ok=True)
 
-    orchestrator = SmartPrefectTaskOrchestrator()
-    orchestrator.server_url = None
+    orchestrator_obj = SmartPrefectTaskOrchestrator()
+    orchestrator_obj.server_url = None
     prepared_run = PreparedRun(
         playbook_name="autopass",
         run_name="cron-test-1",
@@ -117,10 +128,10 @@ async def test_cron_schedule_requires_active_server(tmp_path, monkeypatch):
         ),
         pytest.raises(RuntimeError, match="Prefect Server is required for --schedule"),
     ):
-        await orchestrator.execute(
-            task="Do work",
+        await orchestrator_obj.execute(
             prepared_run=prepared_run,
             worker_fn=lambda: AsyncMock(return_value="ok")(),
+            task="Do work",
             schedule="0 9 * * *",
         )
 
@@ -134,9 +145,9 @@ async def test_cron_schedule_creates_deployment_when_server_active(
     run_dir = tmp_path / "autopass" / "runs" / "cron-test-2"
     run_dir.mkdir(parents=True, exist_ok=True)
 
-    orchestrator = SmartPrefectTaskOrchestrator()
-    orchestrator.server_url = "http://localhost:4200/api"
-    orchestrator.work_pool = "test-pool"
+    orchestrator_obj = SmartPrefectTaskOrchestrator()
+    orchestrator_obj.server_url = "http://localhost:4200/api"
+    orchestrator_obj.work_pool = "test-pool"
     prepared_run = PreparedRun(
         playbook_name="autopass",
         run_name="cron-test-2",
@@ -151,10 +162,10 @@ async def test_cron_schedule_creates_deployment_when_server_active(
         "pirlo.infrastructure.adapters.orchestrator.prefect_orchestrator.pirlo_decomposed_flow.to_deployment",
         mock_to_deployment,
     ):
-        result = await orchestrator.execute(
-            task="Do work",
+        result = await orchestrator_obj.execute(
             prepared_run=prepared_run,
             worker_fn=lambda: AsyncMock(return_value="ok")(),
+            task="Do work",
             schedule="0 9 * * *",
         )
 

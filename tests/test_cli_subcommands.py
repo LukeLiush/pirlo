@@ -1,23 +1,29 @@
 import inspect
 import sys
+from typing import Annotated
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from pirlo.core.decorators import playbook
 from pirlo.core.models.parameters import Parameter
 from pirlo.core.models.run_result import AutopassRunOutput, RunResult
 from pirlo.infrastructure.adapters.cli.terminal_pitch import TerminalPitch
 
 
+@playbook(name="mock", description="Mock session for testing CLI subcommands.")
 class MockSubcommandSession(TerminalPitch):
     """Mock session for testing CLI subcommands."""
 
-    task = Parameter(str, default="Test Task", help="Task prompt")
-
-    async def on_play(self) -> RunResult[AutopassRunOutput]:
+    async def on_play(
+        self,
+        task: Annotated[str, Parameter(help="Task prompt")] = "Test Task",
+        *args,
+        **kwargs,
+    ) -> RunResult[AutopassRunOutput]:
         return RunResult(
             run_id=(await self.prepared_run()).run_id,
-            data=AutopassRunOutput(task_prompt=self.task, final_message="Done"),
+            data=AutopassRunOutput(task_prompt=task, final_message="Done"),
         )
 
 

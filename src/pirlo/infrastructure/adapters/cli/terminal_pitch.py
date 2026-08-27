@@ -13,7 +13,6 @@ from rich.status import Status
 from rich.table import Table
 
 from pirlo.core.config import get_workspace_path
-from pirlo.core.models.parameters import Parameter
 from pirlo.core.models.playbook_invocation import PlaybookInvocation
 from pirlo.core.models.run import PreparedRun
 from pirlo.core.models.run_result import RunResult
@@ -29,14 +28,7 @@ from pirlo.infrastructure.services.parameter_resolution import ParameterResolver
 def extract_raw_arguments_excluding_command(
     sys_argv: list[str], playbook_name: str
 ) -> list[str]:
-    """
-    Strips binary and playbook command names from sys.argv.
-
-    Examples:
-      ['pirlo', 'autopass', '--task', 'x'] -> ['--task', 'x']
-      ['pirlo autopass', '--task', 'x']    -> ['--task', 'x']
-      ['pirlo', 'autopass', '--', 'prefect', '-h'] -> ['--', 'prefect', '-h']
-    """
+    """Strips binary and playbook command names from sys.argv."""
     raw_args = sys_argv[1:]
     if raw_args and raw_args[0] == playbook_name:
         raw_args = raw_args[1:]
@@ -46,13 +38,7 @@ def extract_raw_arguments_excluding_command(
 def ensure_canonical_orchestrator_delimiter(
     raw_arguments: list[str], default_orchestrator_name: str = "prefect"
 ) -> list[str]:
-    """
-    Ensures '-- <default_orchestrator_name>' is attached to raw CLI arguments if '--' is omitted.
-
-    Examples:
-      ['--task', 'Search'] -> ['--task', 'Search', '--', 'prefect']
-      ['--task', 'Search', '--', 'prefect'] -> unchanged
-    """
+    """Ensures '-- <default_orchestrator_name>' is attached to raw CLI arguments if '--' is omitted."""
     if "--" not in raw_arguments:
         return raw_arguments + ["--", default_orchestrator_name]
     return raw_arguments
@@ -60,17 +46,6 @@ def ensure_canonical_orchestrator_delimiter(
 
 class TerminalPitch(Pitch, ABC):
     """Concrete adapter of Pitch for Terminal screens."""
-
-    schedule = Parameter(
-        str,
-        default=None,
-        help=(
-            "Optional schedule preset ('hourly', 'daily', 'weekly', 'monthly') "
-            "or raw 5-field cron expression (e.g. '0 9 * * *' or '*/15 * * * *')"
-        ),
-        env_name="SCHEDULE",
-        short="-s",
-    )
 
     def __init__(
         self,
@@ -101,107 +76,21 @@ class TerminalPitch(Pitch, ABC):
         assert self._prepared_run is not None
         return self._prepared_run
 
-    async def on_play(self) -> RunResult[Any]:
+    async def on_play(self, *args: Any, **kwargs: Any) -> RunResult[Any]:
         """
         Abstract extension hook implemented by playbook subclasses.
-        Contains the playbook's core business logic (e.g. self-healing runner, login workflow).
+        Contains the playbook's core business logic.
         """
         raise NotImplementedError(
-            f"Playbook class '{self.__class__.__name__}' must implement the on_play() method "
-            "to define its core task logic."
+            f"Playbook class '{self.__class__.__name__}' must implement the on_play() method."
         )
 
     async def play(self) -> RunResult[Any]:
-        """
-        Framework template method:
-        1. Resolves requested orchestrator backend (default: 'prefect').
-        2. Merges CLI parameter overrides (server_url, work_pool).
-        3. Delegates execution of self.on_play() to orchestrator.execute().
-        4. Normalizes and returns a structured RunResult.
-        """
+        """Framework template method managing execution lifecycle."""
         return await self.on_play()
-        # from pirlo.core.models.run import RunStatus
-        # from pirlo.core.models.run_result import RunResult
-        #
-        # # Delegate execution of self.on_play hook to orchestrator
-        # schedule_value: str | None = self._prepared_run.parameters.get(self.schedule.name, None)
-        # result = await self._prepared_run.orchestrator.execute(
-        #     prepared_run=self._prepared_run,
-        #     schedule=schedule_value,
-        #     worker_fn=self.on_play,
-        # )
-        #
-        # if isinstance(result, RunResult):
-        #     return result
-        #
-        # return RunResult(
-        #     run_id=self._prepared_run.run_id,
-        #     status=RunStatus.COMPLETED,
-        #     data=result,
-        # )
 
     @classmethod
-    def _discover_parameters(cls) -> list[Parameter]:
-        """Collect every Parameter declared on the class."""
-        return [
-            attr_val
-            for attr_name in dir(cls)
-            if isinstance(attr_val := getattr(cls, attr_name), Parameter)
-        ]
-
-    @classmethod
-    def _build_parser(
-        cls,
-        playbook_name: str,
-        parameters: list[Parameter],
-        epilog_text: str,
-    ) -> argparse.ArgumentParser:
-        parser = argparse.ArgumentParser(
-            prog=f"pirlo {playbook_name}",
-            description=cls.__doc__,
-            epilog=epilog_text,
-            formatter_class=argparse.RawDescriptionHelpFormatter,
-        )
-        for param in parameters:
-            cls._add_argument_to_parser(parser, param.name, param)
-        return parser
-
-    @classmethod
-    def _add_argument_to_parser(
-        cls, parser: argparse.ArgumentParser, attr_name: str, attr_val: Parameter
-    ) -> None:
-        flag = f"--{attr_name.replace('_', '-')}"
-        if flag in parser._option_string_actions:
-            return
-
-        kwargs: dict[str, Any] = {
-            "help": attr_val.help,
-            "default": argparse.SUPPRESS,
-        }
-
-        type_func = attr_val.type_func
-        is_list = False
-        origin = getattr(type_func, "__origin__", type_func)
-
-        if origin is list:
-            is_list = True
-            type_args = getattr(type_func, "__args__", ())
-            type_func = type_args[0] if type_args else str
-
-        if type_func == bool:
-            kwargs["action"] = "store_true"
-        else:
-            kwargs["type"] = type_func
-            if is_list:
-                kwargs["nargs"] = "*"
-
-        if attr_val.short:
-            parser.add_argument(attr_val.short, flag, **kwargs)
-        else:
-            parser.add_argument(flag, **kwargs)
-
-    @classmethod
-    def cli(cls, playbook_name: str) -> RunResult[Any]:
+    def cli(cls, playbook_name: str | None = None) -> RunResult[Any]:
         """Parse CLI parameters using the POSIX '--' delimiter and play the pitch."""
         from pirlo.infrastructure.adapters.cli.parameter_binder import ParameterBinder
         from pirlo.infrastructure.adapters.cli.parameter_snapshot_writer import (
@@ -212,9 +101,14 @@ class TerminalPitch(Pitch, ABC):
         )
         from pirlo.infrastructure.services.run_preparer import RunPreparer
 
-        # 1. Normalize the raw invocation: strip command, ensure '--', split.
+        resolved_playbook_name = (
+            playbook_name
+            or getattr(cls, "playbook_name", None)
+            or cls.__name__.lower().replace("session", "")
+        )
+
         raw_arguments: list[str] = extract_raw_arguments_excluding_command(
-            sys.argv, playbook_name
+            sys.argv, resolved_playbook_name
         )
         playbook_invocation: PlaybookInvocation = PlaybookInvocation.from_raw(
             raw_arguments, default_orchestrator_name="prefect"
@@ -228,9 +122,11 @@ class TerminalPitch(Pitch, ABC):
         pirlo_workspace: Path = get_workspace_path()
 
         # Step A: Prepare pure data run spec
-        argument_parser_builder: ArgumentParserBuilder = ArgumentParserBuilder(cls)
+        argument_parser_builder: ArgumentParserBuilder = ArgumentParserBuilder(
+            cls.on_play
+        )
         playbook_parser: argparse.ArgumentParser = argument_parser_builder.build_parser(
-            playbook_name
+            resolved_playbook_name
         )
 
         parameter_resolver: ParameterResolver = ParameterResolver.create(
@@ -246,14 +142,14 @@ class TerminalPitch(Pitch, ABC):
             parameter_resolver=parameter_resolver,
         )
         prepared_run: PreparedRun = preparer.prepare(
-            playbook_name=playbook_name,
+            playbook_name=resolved_playbook_name,
             playbook_invocation=playbook_invocation,
         )
 
         # Step B: Instantiate orchestrator engine service directly via OrchestratorFactory
         orchestrator: TaskOrchestrator = OrchestratorFactory.create_from_invocation(
             name=orchestrator_name,
-            playbook_name=playbook_name,
+            playbook_name=resolved_playbook_name,
             orchestrator_flags=playbook_invocation.orchestrator_args,
         )
 
@@ -269,12 +165,12 @@ class TerminalPitch(Pitch, ABC):
 
         bound_pitch: TerminalPitch = ParameterBinder.bind_values(
             terminal_pitch, prepared_run.parameters
-        )  # type: ignore[assignment]
+        )
         bound_pitch.orchestrator = orchestrator
         parameter_snapshot_writer.write(bound_pitch, prepared_run.parameter_file_path)
 
         async def _play() -> RunResult[Any]:
-            return await bound_pitch.on_play()
+            return await bound_pitch.on_play(**prepared_run.parameters)
 
         try:
             loop: asyncio.AbstractEventLoop = asyncio.get_running_loop()
@@ -288,7 +184,7 @@ class TerminalPitch(Pitch, ABC):
 
     # --- Concrete Port Implementations ---
 
-    def header(self, title: str, subtitle: str | None = None):
+    def header(self, title: str, subtitle: str | None = None) -> None:
         text = f"[bold green]{title}[/bold green]"
         if subtitle:
             text += f"\n[dim]{subtitle}[/dim]"
@@ -299,7 +195,7 @@ class TerminalPitch(Pitch, ABC):
             f"[bold green]{message}[/bold green]", spinner="dots"
         )
 
-    def lineup(self, title: str, columns: list[str], rows: list[list[str]]):
+    def lineup(self, title: str, columns: list[str], rows: list[list[str]]) -> None:
         tbl = Table(
             title=title,
             show_header=True,
@@ -316,19 +212,19 @@ class TerminalPitch(Pitch, ABC):
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(None, input, f"🔍 [VAR CHECK] {message}: ")
 
-    def goal(self, message: str, detail: str | None = None):
+    def goal(self, message: str, detail: str | None = None) -> None:
         text = f"⚽[bold green]GOAL! {message}[/bold green] "
         if detail:
             text += f"\n[cyan]{detail}[/cyan]"
         self._console.print(Panel(text, border_style="green", expand=False))
 
-    def red_card(self, message: str, detail: str | None = None):
+    def red_card(self, message: str, detail: str | None = None) -> None:
         text = f"🟥 [bold red]RED CARD! {message}[/bold red] "
         if detail:
             text += f"\n[dim]{detail}[/dim]"
         self._console.print(Panel(text, border_style="red", expand=False))
 
-    def yellow_card(self, message: Any, detail: str | None = None):
+    def yellow_card(self, message: Any, detail: str | None = None) -> None:
         if hasattr(message, "message"):
             msg_str = message.message
             det_str = getattr(message, "detail", detail)

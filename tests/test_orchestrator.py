@@ -3,20 +3,23 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from pirlo.core.decorators import playbook
 from pirlo.core.models.run import PreparedRun
 from pirlo.core.models.run_result import RunResult
 from pirlo.infrastructure.adapters.cli.terminal_pitch import TerminalPitch
+from pirlo.infrastructure.adapters.orchestrator.factory import OrchestratorFactory
 from pirlo.infrastructure.adapters.orchestrator.prefect_orchestrator import (
     SmartPrefectTaskOrchestrator,
 )
 
 
+@playbook(name="autopass", description="Mock Autopass pitch for testing.")
 class DummyAutopassPitch(TerminalPitch):
     """Mock Autopass pitch for testing."""
 
     task = "Search Google for OpenAI"
 
-    async def on_play(self) -> RunResult[Any]:
+    async def on_play(self, *args, **kwargs) -> RunResult[Any]:
         return RunResult(run_id=(await self.prepared_run()).run_id)
 
 
@@ -53,16 +56,17 @@ async def test_smart_prefect_orchestrator_execution(tmp_path, monkeypatch):
         ),
     ):
         result = await orchestrator.execute(
-            task="Search Google for OpenAI",
             prepared_run=prepared_run,
             worker_fn=mock_worker,
+            task="Search Google for OpenAI",
         )
 
         assert result == "Automation successful!"
 
 
 def test_parse_cli_options_direct_contract():
-    options = SmartPrefectTaskOrchestrator.parse_cli_options(
+    orchestrator = OrchestratorFactory.create_from_invocation(
+        name="prefect",
         playbook_name="autopass",
         orchestrator_flags=[
             "--server-url",
@@ -72,7 +76,5 @@ def test_parse_cli_options_direct_contract():
         ],
     )
 
-    assert options == {
-        "server_url": "http://localhost:4200/api",
-        "work_pool": "my-pool",
-    }
+    assert orchestrator.server_url == "http://localhost:4200/api"
+    assert orchestrator.work_pool == "my-pool"

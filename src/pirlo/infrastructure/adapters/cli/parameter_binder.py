@@ -1,23 +1,12 @@
-"""Discover, resolve, and apply playbook parameter values.
-
-Responsibilities are split across small, single-purpose collaborators:
-
-* :func:`discover_parameters`      -- find ``Parameter`` attributes on a class.
-* :class:`ArgumentParserBuilder`   -- build the argparse parser.
-* :class:`ParameterResolver`       -- resolve values across sources + domain.
-* :class:`ParameterProvider`       -- discover + resolve for a playbook class.
-* :class:`ParameterBinder`         -- apply resolved values onto an instance.
-* :class:`ParameterSnapshotWriter` -- snapshot resolved values to disk.
-"""
+"""Discover, resolve, and apply playbook parameter values."""
 
 from __future__ import annotations
 
 from typing import Any, TypeVar
 
-from pirlo.core.models.parameters import Parameterizable
 from pirlo.infrastructure.services.parameter_provider import ParameterProvider
 
-T = TypeVar("T", bound=Parameterizable)
+T = TypeVar("T")
 
 
 class MissingLinkError(Exception):
@@ -37,18 +26,12 @@ class MissingLinkError(Exception):
 
 
 class ParameterBinder:
-    """Applies resolved parameter values onto a *copy* of a playbook instance.
-
-    Copy-on-bind avoids observable side effects on the caller's instance:
-    the returned object carries the resolved values while the original is
-    left untouched.
-    """
+    """Applies resolved parameter values onto an instance or dictionary."""
 
     def __init__(self, provider: ParameterProvider) -> None:
         self._provider = provider
 
     def bind(self, instance: T) -> T:
-        # bound = deepcopy(instance)
         bound = instance
         for name, value in self._provider.provide(type(instance)).items():
             setattr(bound, name, value)

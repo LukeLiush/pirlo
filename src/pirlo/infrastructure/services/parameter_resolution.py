@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from pirlo.core.models.link import LlmLink
-from pirlo.core.models.parameters import LinkParameter, Parameter
+from pirlo.core.models.parameters import LinkParameter
 from pirlo.core.models.playbook_invocation import PlaybookInvocation
 from pirlo.core.ports.link_repository import LinkRepository
 from pirlo.infrastructure.adapters.cli.parameter_sources import (
@@ -40,10 +40,6 @@ class ParameterResolver:
 
     then resolves domain-specific parameter types (e.g. ``LinkParameter``)
     into their corresponding domain objects.
-
-    Resolves a *given* list of parameters -- it does not discover them -- so
-    it stays decoupled from class introspection and is easy to test with a
-    hand-built parameter list.
     """
 
     def __init__(
@@ -51,11 +47,8 @@ class ParameterResolver:
         sources: list[ParameterSource],
         link_repository: LinkRepository,
     ) -> None:
-        # Ordered lowest -> highest precedence.
         self._sources = sources
         self._link_repository = link_repository
-
-    # --- factory ----------------------------------------------------------
 
     @classmethod
     def create(
@@ -65,11 +58,7 @@ class ParameterResolver:
         pirlo_workspace: Path,
         toml_config: dict[str, Any] | None = None,
     ) -> ParameterResolver:
-        """Wire the default precedence sources and JSON-backed link repo.
-
-        Parses the pre-split ``playbook_invocation.playbook_args`` with the
-        supplied parser and assembles the source stack in precedence order.
-        """
+        """Wire the default precedence sources and JSON-backed link repo."""
         from pirlo.infrastructure.adapters.storage.json_link_repository import (
             JsonLinkRepository,
         )
@@ -89,35 +78,55 @@ class ParameterResolver:
 
     # --- public API -------------------------------------------------------
 
-    def resolve_all(self, parameters: list[Parameter]) -> dict[str, Any]:
+    def resolve_all(self, parameters: list[Any]) -> dict[str, Any]:
         """Resolve every parameter into a ``{name: value}`` dict."""
         raw_values = self._merge_sources(parameters)
-        return {
-            param.name: self._resolve_domain_object(param, raw_values[param.name])
-            for param in parameters
-        }
+        resolved: dict[str, Any] = {}
+        for param in parameters:
+            name = (
+                param["name"] if isinstance(param, dict) else getattr(param, "name", "")
+            )
+            resolved[name] = self._resolve_domain_object(param, raw_values[name])
+        return resolved
 
     # --- precedence resolution --------------------------------------------
 
-    def _merge_sources(self, parameters: list[Parameter]) -> dict[str, Any]:
+    def _merge_sources(self, parameters: list[Any]) -> dict[str, Any]:
         """Merge all sources over defaults, honoring precedence order."""
-        merged: dict[str, Any] = {p.name: p.default for p in parameters}
+        merged: dict[str, Any] = {}
+        for param in parameters:
+            name = (
+                param["name"] if isinstance(param, dict) else getattr(param, "name", "")
+            )
+            default_val = (
+                param["default"]
+                if isinstance(param, dict)
+                else getattr(param, "default", None)
+            )
+            merged[name] = default_val
+
         for source in self._sources:  # lowest -> highest precedence
             merged.update(source.bind(parameters))
         return merged
 
     # --- domain resolution ------------------------------------------------
 
-    def _resolve_domain_object(self, param: Parameter, value: Any) -> Any:
-        if not isinstance(param, LinkParameter):
+    def _resolve_domain_object(self, param: Any, value: Any) -> Any:
+        is_link = (
+            param.get("is_link", False)
+            if isinstance(param, dict)
+            else isinstance(param, LinkParameter)
+        )
+        name = param["name"] if isinstance(param, dict) else getattr(param, "name", "")
+        if not is_link:
             return value
         if not value:
             return None
-        return self._resolve_link(param, value)
+        return self._resolve_link(name, value)
 
-    def _resolve_link(self, param: LinkParameter, name: str) -> LlmLink:
+    def _resolve_link(self, param_name: str, name: str) -> LlmLink:
         assert self._link_repository is not None
         link_obj = self._link_repository.get_by_name(name)
         if not link_obj:
-            raise MissingLinkError(param.name, name)
+            raise MissingLinkError(param_name, name)
         return link_obj

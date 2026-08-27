@@ -1,19 +1,18 @@
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from typing import Any
 
-from pirlo.core.models.parameters import Parameterizable
 from pirlo.core.models.run_result import RunResult
 
 
-class Pitch(Parameterizable):
+class Pitch(ABC):
     """Pure Abstract Port representing the presentation canvas & lifecycle contract."""
 
     @abstractmethod
-    async def prepared_run(self):
+    async def prepared_run(self) -> Any:
         """Return the prepared run instance."""
 
     @abstractmethod
-    async def on_play(self) -> RunResult[Any]:
+    async def on_play(self, *args: Any, **kwargs: Any) -> RunResult[Any]:
         """Core playbook execution logic implemented by subclasses."""
 
     @abstractmethod
@@ -21,7 +20,7 @@ class Pitch(Parameterizable):
         """Framework template method managing execution lifecycle."""
 
     @abstractmethod
-    def header(self, title: str, subtitle: str | None = None):
+    def header(self, title: str, subtitle: str | None = None) -> None:
         """Draw a banner/header."""
 
     @abstractmethod
@@ -29,7 +28,7 @@ class Pitch(Parameterizable):
         """Context manager for loading status (spinner)."""
 
     @abstractmethod
-    def lineup(self, title: str, columns: list[str], rows: list[list[str]]):
+    def lineup(self, title: str, columns: list[str], rows: list[list[str]]) -> None:
         """Draw starting lineup table."""
 
     @abstractmethod
@@ -37,13 +36,13 @@ class Pitch(Parameterizable):
         """VAR Check: Halts play to pause and wait for the user to press Enter."""
 
     @abstractmethod
-    def goal(self, message: str, detail: str | None = None):
+    def goal(self, message: str, detail: str | None = None) -> None:
         """Draw success panel (Scoring a goal!)."""
 
     @abstractmethod
-    def red_card(self, message: str, detail: str | None = None):
+    def red_card(self, message: str, detail: str | None = None) -> None:
         """Draw error panel (Red Card!)."""
 
     @abstractmethod
-    def yellow_card(self, message: str, detail: str | None = None):
+    def yellow_card(self, message: str, detail: str | None = None) -> None:
         """Draw warning panel (Warning flag)."""

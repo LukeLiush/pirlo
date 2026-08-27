@@ -5,11 +5,12 @@ import contextlib
 import os
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 
 from prefect.settings import temporary_settings
 
 from pirlo.core.config import get_workspace_path
+from pirlo.core.decorators import orchestrator
 from pirlo.core.models.link import LlmLink
 from pirlo.core.models.parameters import LinkParameter, Parameter
 from pirlo.core.models.run import PreparedRun
@@ -34,53 +35,79 @@ from pirlo.infrastructure.services.log_streamer import capture_run_logs
 from pirlo.playbooks.autopass.adapters.llm_factory import LlmFactory
 
 
+@orchestrator(
+    name="prefect", description="Prefect 3.0 workflow orchestrator engine backend"
+)
 class SmartPrefectTaskOrchestrator(TaskOrchestrator):
-    name: str = "prefect"
-
-    server_url = Parameter(
-        str,
-        default=None,
-        help="Prefect Server API endpoint URL (e.g. http://localhost:4200/api)",
-        env_name="SERVER_URL",
-    )
-    work_pool = Parameter(
-        str,
-        default=None,
-        help="Prefect work pool name for scheduled deployments",
-        env_name="WORK_POOL",
-    )
-    decomposer_model = Parameter(
-        str,
-        default=None,
-        help="Model name used by the task decomposer",
-        env_name="DECOMPOSER_MODEL",
-    )
-    decomposer_link = LinkParameter(
-        help="LLM link name used to synthesize subtask results",
-        env_name="DECOMPOSER_LINK",
-    )
+    def __init__(
+        self,
+        server_url: str | None = None,
+        work_pool: str | None = None,
+        decomposer_model: str | None = None,
+        decomposer_link: LlmLink | str | None = None,
+    ) -> None:
+        self.server_url = server_url
+        self.work_pool = work_pool
+        self.decomposer_model = decomposer_model
+        self.decomposer_link = decomposer_link
 
     # ---- public API -----------------------------------------------------
 
     async def execute(
         self,
-        task: str,
         prepared_run: PreparedRun,
         worker_fn: Any,
-        schedule: str | None = None,
+        task: Annotated[str, Parameter(help="Task prompt to execute")] = "",
+        schedule: Annotated[
+            str | None, Parameter(help="Schedule preset or cron string", short="-s")
+        ] = None,
+        server_url: Annotated[
+            str | None,
+            Parameter(help="Prefect Server API endpoint URL", env_name="SERVER_URL"),
+        ] = None,
+        work_pool: Annotated[
+            str | None, Parameter(help="Prefect work pool name", env_name="WORK_POOL")
+        ] = None,
+        decomposer_model: Annotated[
+            str | None,
+            Parameter(
+                help="Model name used by task decomposer", env_name="DECOMPOSER_MODEL"
+            ),
+        ] = None,
+        decomposer_link: Annotated[
+            LlmLink | str | None,
+            LinkParameter(
+                help="LLM link name for decomposer", env_name="DECOMPOSER_LINK"
+            ),
+        ] = None,
+        *args: Any,
+        **kwargs: Any,
     ) -> Any:
+        # Override instance attrs if passed explicitly in execute kwargs
+        if server_url is not None:
+            self.server_url = server_url
+        if work_pool is not None:
+            self.work_pool = work_pool
+        if decomposer_model is not None:
+            self.decomposer_model = decomposer_model
+        if decomposer_link is not None:
+            self.decomposer_link = decomposer_link
+
+        task_str = task or prepared_run.parameters.get("task", "")
+        schedule_str = schedule or prepared_run.parameters.get("schedule")
+
         settings = PrefectServerSettings.resolve(self.server_url)
 
         with capture_run_logs(
             prepared_run.run_dir, get_prefix_fn=self._prefix_fn(prepared_run)
         ):
-            if schedule:
+            if schedule_str:
                 result = await self._deploy_scheduled(
-                    task, prepared_run, schedule, settings
+                    task_str, prepared_run, schedule_str, settings
                 )
             else:
                 result = await self._run_pipeline(
-                    task, prepared_run, worker_fn, settings
+                    task_str, prepared_run, worker_fn, settings
                 )
 
         print(
@@ -226,6 +253,3 @@ class SmartPrefectTaskOrchestrator(TaskOrchestrator):
             return f"[{prepared_run.run_name.capitalize()} Flow]"
 
         return get_active_task_prefix
-
-    # ---- CLI epilog (moved from TerminalPitch, per earlier discussion) --
-    # If you centralize the epilog on OrchestratorFactory instead, delete this.

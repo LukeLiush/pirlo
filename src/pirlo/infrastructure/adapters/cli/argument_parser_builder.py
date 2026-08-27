@@ -1,31 +1,118 @@
 from __future__ import annotations
 
 import argparse
-from typing import Any
+import inspect
+from collections.abc import Callable
+from typing import Annotated, Any, get_args, get_origin, get_type_hints
 
-from pirlo.core.models.parameters import Parameter, Parameterizable
-from pirlo.infrastructure.services.parameter_provider import discover_parameters
+from pirlo.core.models.parameters import LinkParameter, Parameter
+
+
+def extract_signature_parameters(
+    target_fn: Callable[..., Any],
+) -> list[dict[str, Any]]:
+    """Extract type annotations, defaults, and Annotated metadata from a function signature."""
+    sig = inspect.signature(target_fn)
+    try:
+        type_hints = get_type_hints(target_fn, include_extras=True)
+    except Exception:  # noqa: BLE001
+        type_hints = {}
+
+    params_metadata: list[dict[str, Any]] = []
+
+    for idx, (name, param) in enumerate(sig.parameters.items()):
+        if name in ("self", "self_inst", "prepared_run", "worker_fn") or (
+            idx == 0 and name.startswith("self")
+        ):
+            continue
+        if param.kind in (
+            inspect.Parameter.VAR_POSITIONAL,
+            inspect.Parameter.VAR_KEYWORD,
+        ):
+            continue
+
+        param_type: Any = type_hints.get(name, param.annotation)
+        default_val: Any = (
+            param.default if param.default is not inspect.Parameter.empty else None
+        )
+
+        if param_type is inspect.Parameter.empty:
+            if default_val is not None and type(default_val) is not object:
+                param_type = type(default_val)
+            else:
+                param_type = str
+
+        parameter_meta: Parameter | None = None
+
+        if get_origin(param_type) is Annotated:
+            args = get_args(param_type)
+            param_type = args[0]
+            for arg in args[1:]:
+                if isinstance(arg, Parameter):
+                    parameter_meta = arg
+                    break
+
+        raw_type = param_type
+        origin = get_origin(param_type)
+        if (
+            origin is not list
+            and origin is not dict
+            and hasattr(param_type, "__args__")
+            and type(None) in get_args(param_type)
+        ):
+            non_none = [a for a in get_args(param_type) if a is not type(None)]
+            if non_none:
+                param_type = non_none[0]
+
+        params_metadata.append(
+            {
+                "name": name,
+                "type": param_type,
+                "raw_type": raw_type,
+                "default": default_val,
+                "help": parameter_meta.help if parameter_meta else None,
+                "short": parameter_meta.short if parameter_meta else None,
+                "env_name": parameter_meta.env_name if parameter_meta else None,
+                "is_link": isinstance(parameter_meta, LinkParameter),
+                "parameter_meta": parameter_meta,
+            }
+        )
+
+    return params_metadata
 
 
 class ArgumentParserBuilder:
-    """Builds the ``argparse`` parser for a playbook class's parameters.
+    """Builds an ``argparse.ArgumentParser`` by inspecting function signatures."""
 
-    Single responsibility: translate declared ``Parameter`` objects into
-    argparse arguments. Parameters are discovered once at construction.
-    """
+    def __init__(self, target_fn_or_cls: Any) -> None:
+        if inspect.isclass(target_fn_or_cls):
+            if hasattr(target_fn_or_cls, "on_play"):
+                self._target_fn = target_fn_or_cls.on_play
+            elif hasattr(target_fn_or_cls, "execute"):
+                self._target_fn = target_fn_or_cls.execute
+            else:
+                self._target_fn = target_fn_or_cls
+            self._description = target_fn_or_cls.__doc__
+        else:
+            self._target_fn = target_fn_or_cls
+            self._description = getattr(target_fn_or_cls, "__doc__", None)
 
-    def __init__(self, parameterizable_class: type[Parameterizable]) -> None:
-        self._parameterizable_class = parameterizable_class
-        self._parameters: list[Parameter] = discover_parameters(parameterizable_class)
+        self._parameters: list[dict[str, Any]] = extract_signature_parameters(
+            self._target_fn
+        )
+
+    @property
+    def parameters(self) -> list[dict[str, Any]]:
+        return self._parameters
 
     def build_parser(
         self,
-        playbook_name: str,
+        prog_name: str,
         epilog_text: str | None = None,
     ) -> argparse.ArgumentParser:
         parser = argparse.ArgumentParser(
-            prog=f"pirlo {playbook_name}",
-            description=self._parameterizable_class.__doc__,
+            prog=prog_name,
+            description=self._description,
             epilog=epilog_text,
             formatter_class=argparse.RawDescriptionHelpFormatter,
         )
@@ -37,34 +124,47 @@ class ArgumentParserBuilder:
     @staticmethod
     def _add_argument(
         parser: argparse.ArgumentParser,
-        param: Parameter,
+        param_info: dict[str, Any],
         added_flags: set[str],
     ) -> None:
-        flag = f"--{param.name.replace('_', '-')}"
+        name = param_info["name"]
+        flag = f"--{name.replace('_', '-')}"
         if flag in added_flags:
             return
         added_flags.add(flag)
 
         kwargs: dict[str, Any] = {
-            "help": param.help,
+            "help": param_info.get("help"),
             "default": argparse.SUPPRESS,
         }
 
-        type_func = param.type_func
-        origin = getattr(type_func, "__origin__", type_func)
-        is_list = origin is list
-        if is_list:
-            type_args = getattr(type_func, "__args__", ())
+        type_func = param_info.get("type", str)
+        origin = get_origin(type_func)
+        if origin is list:
+            is_list = True
+            type_args = get_args(type_func)
             type_func = type_args[0] if type_args else str
+        else:
+            is_list = False
+            if (
+                origin is not None
+                and hasattr(type_func, "__args__")
+                and type(None) in get_args(type_func)
+            ):
+                non_none_args = [
+                    arg for arg in get_args(type_func) if arg is not type(None)
+                ]
+                type_func = non_none_args[0] if non_none_args else str
 
         if type_func is bool:
             kwargs["action"] = "store_true"
         else:
-            kwargs["type"] = type_func
+            kwargs["type"] = type_func if callable(type_func) else str
             if is_list:
                 kwargs["nargs"] = "*"
 
-        if param.short:
-            parser.add_argument(param.short, flag, **kwargs)
+        short = param_info.get("short")
+        if short:
+            parser.add_argument(short, flag, **kwargs)
         else:
             parser.add_argument(flag, **kwargs)

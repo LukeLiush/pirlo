@@ -1,40 +1,26 @@
 from typing import Any
 
-from pirlo.core.models.parameters import Parameter, Parameterizable
+from pirlo.infrastructure.adapters.cli.argument_parser_builder import (
+    extract_signature_parameters,
+)
 from pirlo.infrastructure.services.parameter_resolution import ParameterResolver
 
-# --- discovery -----------------------------------------------------------
-#
-# A stateless free function: it holds no state and needs no configuration,
-# so a class or injected instance would be ceremony with no benefit. Reads
-# from the *class*, never an instance, so it stays correct even after values
-# have been bound onto an instance.
 
-
-def discover_parameters(
-    parameterizable_class: type[Parameterizable],
-) -> list[Parameter]:
-    """Collect every ``Parameter`` declared on a playbook class."""
-    return [
-        attr_val
-        for attr_name in dir(parameterizable_class)
-        if isinstance(attr_val := getattr(parameterizable_class, attr_name), Parameter)
-    ]
-
-
-# --- provider seam -------------------------------------------------------
-#
-# Pairs discovery + resolution so downstream consumers (binder, writer)
-# don't each repeat "discover then resolve". The single place that knows
-# those two steps belong together.
+def discover_parameters(target_cls_or_fn: Any) -> list[dict[str, Any]]:
+    """Collect parameter metadata dicts declared on a playbook/orchestrator signature."""
+    if hasattr(target_cls_or_fn, "on_play"):
+        return extract_signature_parameters(target_cls_or_fn.on_play)
+    if hasattr(target_cls_or_fn, "execute"):
+        return extract_signature_parameters(target_cls_or_fn.execute)
+    return extract_signature_parameters(target_cls_or_fn)
 
 
 class ParameterProvider:
-    """Discovers and resolves the parameter values for a playbook class."""
+    """Discovers and resolves parameter values for a playbook or orchestrator class."""
 
     def __init__(self, parameter_resolver: ParameterResolver) -> None:
         self._parameter_resolver = parameter_resolver
 
-    def provide(self, parameterizable_class: type[Parameterizable]) -> dict[str, Any]:
-        parameters = discover_parameters(parameterizable_class)
+    def provide(self, target_cls_or_fn: Any) -> dict[str, Any]:
+        parameters = discover_parameters(target_cls_or_fn)
         return self._parameter_resolver.resolve_all(parameters)
