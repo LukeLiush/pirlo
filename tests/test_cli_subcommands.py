@@ -15,7 +15,7 @@ from pirlo.infrastructure.adapters.cli.terminal_pitch import TerminalPitch
 class MockSubcommandSession(TerminalPitch):
     """Mock session for testing CLI subcommands."""
 
-    async def on_play(
+    async def play(
         self,
         task: Annotated[str, Parameter(help="Task prompt")] = "Test Task",
         *args,

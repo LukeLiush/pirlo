@@ -19,7 +19,7 @@ class DummyAutopassPitch(TerminalPitch):
 
     task = "Search Google for OpenAI"
 
-    async def on_play(self, *args, **kwargs) -> RunResult[Any]:
+    async def play(self, *args, **kwargs) -> RunResult[Any]:
         return RunResult(run_id=(await self.prepared_run()).run_id)
 
 

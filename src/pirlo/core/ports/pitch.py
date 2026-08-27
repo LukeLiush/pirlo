@@ -12,12 +12,8 @@ class Pitch(ABC):
         """Return the prepared run instance."""
 
     @abstractmethod
-    async def on_play(self, *args: Any, **kwargs: Any) -> RunResult[Any]:
+    async def play(self, *args: Any, **kwargs: Any) -> RunResult[Any]:
         """Core playbook execution logic implemented by subclasses."""
-
-    @abstractmethod
-    async def play(self) -> RunResult[Any]:
-        """Framework template method managing execution lifecycle."""
 
     @abstractmethod
     def header(self, title: str, subtitle: str | None = None) -> None:

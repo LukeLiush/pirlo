@@ -66,54 +66,17 @@ class QuickProgressListener(ProgressListener):
 class AutopassSession(TerminalPitch):
     """Run self-healing browser automation workflows."""
 
-    async def on_play(
+    async def play(
         self,
-        profile: Annotated[
-            str,
-            Parameter(
-                help="Name or path of the browser profile to use (default: 'default')",
-                env_name="PROFILE",
-            ),
-        ] = "default",
-        headless: Annotated[
-            bool, Parameter(help="Run browser in headless mode", env_name="HEADLESS")
-        ] = False,
-        task: Annotated[
-            str, Parameter(help="Task prompt to execute autonomously", env_name="TASK")
-        ] = "",
-        playmaker: Annotated[
-            LlmLink | None,
-            LinkParameter(
-                help="Link name for Playmaker (decision brain)", env_name="PLAYMAKER"
-            ),
-        ] = None,
-        analyst: Annotated[
-            LlmLink | None,
-            LinkParameter(
-                help="Link name for Analyst (DOM summary / selector healer)",
-                env_name="ANALYST",
-            ),
-        ] = None,
-        use_vision: Annotated[
-            bool, Parameter(help="Enable vision for the Agent", env_name="USE_VISION")
-        ] = False,
-        max_failures: Annotated[
-            int,
-            Parameter(
-                help="Maximum failure attempts before stopping", env_name="MAX_FAILURES"
-            ),
-        ] = 5,
-        retry_delay: Annotated[
-            int, Parameter(help="Retry delay in seconds", env_name="RETRY_DELAY")
-        ] = 10,
-        schedule: Annotated[
-            str | None,
-            Parameter(
-                help="Optional schedule preset or raw cron string",
-                env_name="SCHEDULE",
-                short="-s",
-            ),
-        ] = None,
+        profile: Annotated[str, Parameter(help="Name or path of the browser profile to use (default: 'default')", env_name="PROFILE")] = "default",
+        headless: Annotated[bool, Parameter(help="Run browser in headless mode", env_name="HEADLESS")] = False,
+        task: Annotated[str, Parameter(help="Task prompt to execute autonomously", env_name="TASK")] = "",
+        playmaker: Annotated[LlmLink | None, LinkParameter(help="Link name for Playmaker (decision brain)", env_name="PLAYMAKER")] = None,
+        analyst: Annotated[LlmLink | None, LinkParameter(help="Link name for Analyst (DOM summary / selector healer)", env_name="ANALYST")] = None,
+        use_vision: Annotated[bool, Parameter(help="Enable vision for the Agent", env_name="USE_VISION")] = False,
+        max_failures: Annotated[int, Parameter(help="Maximum failure attempts before stopping", env_name="MAX_FAILURES")] = 5,
+        retry_delay: Annotated[int, Parameter(help="Retry delay in seconds", env_name="RETRY_DELAY")] = 10,
+        schedule: Annotated[str | None, Parameter(help="Optional schedule preset or raw cron string", env_name="SCHEDULE", short="-s")] = None,
         *args: Any,
         **kwargs: Any,
     ) -> RunResult[AutopassRunOutput]:

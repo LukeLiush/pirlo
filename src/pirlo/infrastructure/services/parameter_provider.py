@@ -8,8 +8,8 @@ from pirlo.infrastructure.services.parameter_resolution import ParameterResolver
 
 def discover_parameters(target_cls_or_fn: Any) -> list[dict[str, Any]]:
     """Collect parameter metadata dicts declared on a playbook/orchestrator signature."""
-    if hasattr(target_cls_or_fn, "on_play"):
-        return extract_signature_parameters(target_cls_or_fn.on_play)
+    if hasattr(target_cls_or_fn, "play"):
+        return extract_signature_parameters(target_cls_or_fn.play)
     if hasattr(target_cls_or_fn, "execute"):
         return extract_signature_parameters(target_cls_or_fn.execute)
     return extract_signature_parameters(target_cls_or_fn)

@@ -76,18 +76,14 @@ class TerminalPitch(Pitch, ABC):
         assert self._prepared_run is not None
         return self._prepared_run
 
-    async def on_play(self, *args: Any, **kwargs: Any) -> RunResult[Any]:
+    async def play(self, *args: Any, **kwargs: Any) -> RunResult[Any]:
         """
         Abstract extension hook implemented by playbook subclasses.
         Contains the playbook's core business logic.
         """
         raise NotImplementedError(
-            f"Playbook class '{self.__class__.__name__}' must implement the on_play() method."
+            f"Playbook class '{self.__class__.__name__}' must implement the play() method."
         )
-
-    async def play(self) -> RunResult[Any]:
-        """Framework template method managing execution lifecycle."""
-        return await self.on_play()
 
     @classmethod
     def cli(cls, playbook_name: str | None = None) -> RunResult[Any]:
@@ -122,9 +118,7 @@ class TerminalPitch(Pitch, ABC):
         pirlo_workspace: Path = get_workspace_path()
 
         # Step A: Prepare pure data run spec
-        argument_parser_builder: ArgumentParserBuilder = ArgumentParserBuilder(
-            cls.on_play
-        )
+        argument_parser_builder: ArgumentParserBuilder = ArgumentParserBuilder(cls.play)
         playbook_parser: argparse.ArgumentParser = argument_parser_builder.build_parser(
             resolved_playbook_name
         )
@@ -170,7 +164,7 @@ class TerminalPitch(Pitch, ABC):
         parameter_snapshot_writer.write(bound_pitch, prepared_run.parameter_file_path)
 
         async def _play() -> RunResult[Any]:
-            return await bound_pitch.on_play(**prepared_run.parameters)
+            return await bound_pitch.play(**prepared_run.parameters)
 
         try:
             loop: asyncio.AbstractEventLoop = asyncio.get_running_loop()
