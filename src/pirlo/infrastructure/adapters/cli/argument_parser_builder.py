@@ -7,6 +7,10 @@ from pathlib import Path
 from typing import Annotated, Any, get_args, get_origin, get_type_hints
 
 from pirlo.core.models.parameters import LinkParameter, Parameter
+from pirlo.core.ports.orchestrator import TaskOrchestrator
+from pirlo.core.ports.pitch import Pitch
+
+TargetSignatureSource = type[Pitch] | type[TaskOrchestrator] | Callable[..., Any]
 
 
 def extract_signature_parameters(
@@ -75,7 +79,7 @@ def extract_signature_parameters(
 class ArgumentParserBuilder:
     """Builds an ``argparse.ArgumentParser`` by inspecting function signatures."""
 
-    def __init__(self, target_fn_or_cls: Any) -> None:
+    def __init__(self, target_fn_or_cls: TargetSignatureSource) -> None:
         if inspect.isclass(target_fn_or_cls):
             if hasattr(target_fn_or_cls, "play"):
                 self._target_fn = target_fn_or_cls.play

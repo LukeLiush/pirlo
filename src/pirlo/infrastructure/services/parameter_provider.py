@@ -1,12 +1,21 @@
+from __future__ import annotations
+
+from collections.abc import Callable
 from typing import Any
 
+from pirlo.core.ports.orchestrator import TaskOrchestrator
+from pirlo.core.ports.pitch import Pitch
 from pirlo.infrastructure.adapters.cli.argument_parser_builder import (
     extract_signature_parameters,
 )
 from pirlo.infrastructure.services.parameter_resolution import ParameterResolver
 
+TargetSignatureSource = type[Pitch] | type[TaskOrchestrator] | Callable[..., Any]
 
-def discover_parameters(target_cls_or_fn: Any) -> list[dict[str, Any]]:
+
+def discover_parameters(
+    target_cls_or_fn: TargetSignatureSource,
+) -> list[dict[str, Any]]:
     """Collect parameter metadata dicts declared on a playbook/orchestrator signature."""
     if hasattr(target_cls_or_fn, "play"):
         return extract_signature_parameters(target_cls_or_fn.play)
@@ -21,6 +30,8 @@ class ParameterProvider:
     def __init__(self, parameter_resolver: ParameterResolver) -> None:
         self._parameter_resolver = parameter_resolver
 
-    def provide(self, target_cls_or_fn: Any) -> dict[str, Any]:
+    def provide(
+        self, target_cls_or_fn: TargetSignatureSource
+    ) -> dict[str, Any]:
         parameters = discover_parameters(target_cls_or_fn)
         return self._parameter_resolver.resolve_all(parameters)
