@@ -131,7 +131,7 @@ class TerminalPitch(Pitch, ABC):
         )
 
         preparer: RunPreparer = RunPreparer(
-            parameterizable_class=cls,
+            playbook_cls=cls,
             pirlo_workspace=pirlo_workspace,
             parameter_resolver=parameter_resolver,
         )

@@ -7,6 +7,7 @@ from typing import Any
 
 from pirlo.core.models.playbook_invocation import PlaybookInvocation
 from pirlo.core.models.run import PreparedRun
+from pirlo.core.ports.pitch import Pitch
 from pirlo.infrastructure.services.parameter_provider import discover_parameters
 from pirlo.infrastructure.services.parameter_resolution import ParameterResolver
 from pirlo.infrastructure.services.run_id_generator import IdentityFactory
@@ -17,11 +18,11 @@ class RunPreparer:
 
     def __init__(
         self,
-        parameterizable_class: Any,
+        playbook_cls: type[Pitch],
         pirlo_workspace: Path,
         parameter_resolver: ParameterResolver,
     ) -> None:
-        self._parameterizable_class = parameterizable_class
+        self._playbook_cls = playbook_cls
         self._pirlo_workspace = pirlo_workspace
         self._parameter_resolver = parameter_resolver
 
@@ -55,7 +56,7 @@ class RunPreparer:
         toml_config: dict[str, Any] | None,
     ) -> dict[str, Any]:
         parameters: list[dict[str, Any]] = discover_parameters(
-            self._parameterizable_class
+            self._playbook_cls
         )
         return self._parameter_resolver.resolve_all(parameters)
 
