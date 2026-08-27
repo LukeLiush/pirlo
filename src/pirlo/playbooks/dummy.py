@@ -49,4 +49,4 @@ class DummySession(TerminalPitch):
 
 
 if __name__ == "__main__":
-    DummySession.cli()
+    DummySession.cli(playbook_name="dummy")

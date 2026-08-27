@@ -201,7 +201,7 @@ class TerminalPitch(Pitch, ABC):
             parser.add_argument(flag, **kwargs)
 
     @classmethod
-    def cli(cls, playbook_name: str = "autopass") -> RunResult[Any]:
+    def cli(cls, playbook_name: str) -> RunResult[Any]:
         """Parse CLI parameters using the POSIX '--' delimiter and play the pitch."""
         from pirlo.infrastructure.adapters.cli.parameter_binder import ParameterBinder
         from pirlo.infrastructure.adapters.cli.parameter_snapshot_writer import (

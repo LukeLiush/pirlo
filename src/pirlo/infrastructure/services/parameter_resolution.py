@@ -49,7 +49,7 @@ class ParameterResolver:
     def __init__(
         self,
         sources: list[ParameterSource],
-        link_repository: LinkRepository | None = None,
+        link_repository: LinkRepository,
     ) -> None:
         # Ordered lowest -> highest precedence.
         self._sources = sources

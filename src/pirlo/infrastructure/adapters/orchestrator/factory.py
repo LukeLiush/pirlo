@@ -8,7 +8,9 @@ import tomllib
 from pathlib import Path
 from typing import Any, ClassVar, cast
 
+from pirlo.core.config import get_workspace_path
 from pirlo.core.models.parameters import Parameterizable
+from pirlo.core.ports.link_repository import LinkRepository
 from pirlo.core.ports.orchestrator import TaskOrchestrator
 from pirlo.infrastructure.adapters.cli.parameter_binder import ParameterBinder
 from pirlo.infrastructure.adapters.cli.parameter_sources import (
@@ -20,6 +22,9 @@ from pirlo.infrastructure.adapters.cli.parameter_sources import (
 )
 from pirlo.infrastructure.adapters.orchestrator.prefect_orchestrator import (
     SmartPrefectTaskOrchestrator,
+)
+from pirlo.infrastructure.adapters.storage.json_link_repository import (
+    JsonLinkRepository,
 )
 from pirlo.infrastructure.services.parameter_provider import ParameterProvider
 from pirlo.infrastructure.services.parameter_resolution import ParameterResolver
@@ -128,7 +133,9 @@ class OrchestratorFactory:
             EnvironmentSource(converter),
             OverrideSource(overrides, converter),
         ]
-        return ParameterResolver(sources)  # link_repository defaults to None
+        links_file = get_workspace_path() / "links.json"
+        link_repository: LinkRepository = JsonLinkRepository(links_file)
+        return ParameterResolver(sources, link_repository)
 
     # --- config resolution ------------------------------------------------
 

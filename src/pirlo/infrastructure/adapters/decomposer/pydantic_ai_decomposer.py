@@ -1,5 +1,6 @@
 import hashlib
 import logging
+from typing import Any
 
 from duckduckgo_search import DDGS
 from prefect import task
@@ -28,17 +29,29 @@ You are Pirlo's Task Decomposer Engine, an expert at breaking down multi-source 
 def get_decomposer_agent(
     model_name: str = "google-gla:gemini-1.5-flash",
     api_key: str | None = None,
+    base_url: str | None = None,
 ) -> Agent[None, DecomposerPlan]:
     """Create and return a PydanticAI Agent with tools and system prompt."""
     import os
 
-    if api_key:
-        os.environ["GOOGLE_API_KEY"] = api_key
-        os.environ["GEMINI_API_KEY"] = api_key
-    elif "GEMINI_API_KEY" in os.environ and "GOOGLE_API_KEY" not in os.environ:
-        os.environ["GOOGLE_API_KEY"] = os.environ["GEMINI_API_KEY"]
+    if base_url:
+        from pydantic_ai.models.openai import OpenAIModel
+        from pydantic_ai.providers.openai import OpenAIProvider
 
-    model = model_name or "google-gla:gemini-1.5-flash"
+        endpoint = base_url.rstrip("/")
+        if not endpoint.endswith("/v1"):
+            endpoint = f"{endpoint}/v1"
+
+        provider = OpenAIProvider(base_url=endpoint, api_key=api_key or "ollama")
+        model: Any = OpenAIModel(model_name, provider=provider)
+    else:
+        if api_key:
+            os.environ["GOOGLE_API_KEY"] = api_key
+            os.environ["GEMINI_API_KEY"] = api_key
+        elif "GEMINI_API_KEY" in os.environ and "GOOGLE_API_KEY" not in os.environ:
+            os.environ["GOOGLE_API_KEY"] = os.environ["GEMINI_API_KEY"]
+        model = model_name or "google-gla:gemini-1.5-flash"
+
     agent: Agent[None, DecomposerPlan] = Agent(
         model=model,
         output_type=DecomposerPlan,
@@ -65,10 +78,11 @@ async def run_decomposer_pydantic_ai_task(
     user_prompt: str,
     model_name: str = "google-gla:gemini-1.5-flash",
     api_key: str | None = None,
+    base_url: str | None = None,
 ) -> DecomposerPlan:
     """Prefect Task wrapper executing PydanticAI Agent with full Prefect tracking & logging."""
     plan_id = hashlib.sha256(user_prompt.encode()).hexdigest()[:16]
-    agent = get_decomposer_agent(model_name, api_key=api_key)
+    agent = get_decomposer_agent(model_name, api_key=api_key, base_url=base_url)
 
     result = await agent.run(f"Decompose this multi-source request: {user_prompt}")
 
@@ -95,11 +109,16 @@ class PydanticAiDecomposer(DecomposerPort):
         self,
         model_name: str = "google-gla:gemini-1.5-flash",
         api_key: str | None = None,
+        base_url: str | None = None,
     ) -> None:
         self.model_name = model_name
         self.api_key = api_key
+        self.base_url = base_url
 
     async def decompose(self, user_prompt: str) -> DecomposerPlan:
         return await run_decomposer_pydantic_ai_task(
-            user_prompt, model_name=self.model_name, api_key=self.api_key
+            user_prompt,
+            model_name=self.model_name,
+            api_key=self.api_key,
+            base_url=self.base_url,
         )

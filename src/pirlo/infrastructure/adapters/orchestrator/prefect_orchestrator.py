@@ -4,11 +4,13 @@ from __future__ import annotations
 import contextlib
 import os
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 from prefect.settings import temporary_settings
 
 from pirlo.core.config import get_workspace_path
+from pirlo.core.models.link import LlmLink
 from pirlo.core.models.parameters import LinkParameter, Parameter
 from pirlo.core.models.run import PreparedRun
 from pirlo.core.ports.orchestrator import TaskOrchestrator
@@ -20,6 +22,9 @@ from pirlo.infrastructure.adapters.orchestrator.prefect_lifecycle import (
 )
 from pirlo.infrastructure.adapters.orchestrator.prefect_settings import (
     PrefectServerSettings,
+)
+from pirlo.infrastructure.adapters.storage.json_link_repository import (
+    JsonLinkRepository,
 )
 from pirlo.infrastructure.repository.json_file_plan_repository import (
     JsonFilePlanRepository,
@@ -120,50 +125,51 @@ class SmartPrefectTaskOrchestrator(TaskOrchestrator):
             playbook=prepared_run.playbook_name,
         )
 
-    def _build_decomposer(self) -> PydanticAiDecomposer:
+    def _get_resolved_link(self) -> LlmLink:
+        if self.decomposer_link:
+            if isinstance(self.decomposer_link, LlmLink):
+                return self.decomposer_link
+
+            repo = JsonLinkRepository(Path("~/.pirlo-pitch/links.json").expanduser())
+            link_name = getattr(
+                self.decomposer_link, "_name", str(self.decomposer_link)
+            )
+            link = repo.get_by_name(link_name)
+            if link:
+                return link
+
+        # Check if environment variable API keys exist for cloud providers
         api_key = (
             os.environ.get("PIRLO_DECOMPOSER_API_KEY")
             or os.environ.get("GEMINI_API_KEY")
             or os.environ.get("GOOGLE_API_KEY")
         )
-        if not api_key:
-            from pathlib import Path
-
-            from pirlo.infrastructure.adapters.storage.json_link_repository import (
-                JsonLinkRepository,
+        if api_key:
+            return LlmLink(
+                name="cloud-env-link",
+                provider="gemini",
+                model=self.decomposer_model or "google-gla:gemini-1.5-flash",
+                api_key=api_key,
             )
 
-            repo = JsonLinkRepository(Path("~/.pirlo-pitch/links.json").expanduser())
-            link = None
-            if self.decomposer_link:
-                link = repo.get_by_name(
-                    getattr(self.decomposer_link, "_name", str(self.decomposer_link))
-                )
-            if not link:
-                links = repo.list_all()
-                if links:
-                    link = links[0]
-            if link and link.api_key:
-                api_key = link.api_key
+        # Fallback to local Ollama auto-discovery provider
+        from pirlo.infrastructure.services.ollama_resolver import (
+            LocalDecomposerModelProvider,
+        )
 
+        provider = LocalDecomposerModelProvider()
+        return provider.provide_link()
+
+    def _build_decomposer(self) -> PydanticAiDecomposer:
+        link = self._get_resolved_link()
         return PydanticAiDecomposer(
-            model_name=self.decomposer_model or "google-gla:gemini-2.5-flash",
-            api_key=api_key,
+            model_name=link.model,
+            api_key=link.api_key,
+            base_url=link.base_url,
         )
 
     def _build_aggregator_llm(self) -> Any:
-        link = self.decomposer_link
-        if not link:
-            from pathlib import Path
-
-            from pirlo.infrastructure.adapters.storage.json_link_repository import (
-                JsonLinkRepository,
-            )
-
-            repo = JsonLinkRepository(Path("~/.pirlo-pitch/links.json").expanduser())
-            links = repo.list_all()
-            if links:
-                link = links[0]
+        link = self._get_resolved_link()
         return LlmFactory.create_langchain_llm(
             link=link, temperature=0.0, timeout=120.0
         )
