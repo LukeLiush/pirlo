@@ -26,7 +26,9 @@ class ValueConverter:
             return self._convert_bool(val)
         if type_func is Path:
             return self._convert_path(val)
-        if isinstance(type_func, type) and not issubclass(type_func, (str, int, float, Path, bool)):
+        if isinstance(type_func, type) and not issubclass(
+            type_func, (str, int, float, Path, bool)
+        ):
             return str(val) if val is not None else None
         return self._convert_scalar(val, type_func)
 
@@ -202,9 +204,7 @@ class TomlSource(ParameterSource):
 class OverrideSource(ParameterSource):
     """Binds parameters from an explicit keyword override dict."""
 
-    def __init__(
-        self, overrides: dict[str, Any], converter: ValueConverter
-    ) -> None:
+    def __init__(self, overrides: dict[str, Any], converter: ValueConverter) -> None:
         super().__init__(converter)
         self._overrides = overrides
 

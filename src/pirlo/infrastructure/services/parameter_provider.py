@@ -30,8 +30,6 @@ class ParameterProvider:
     def __init__(self, parameter_resolver: ParameterResolver) -> None:
         self._parameter_resolver = parameter_resolver
 
-    def provide(
-        self, target_cls_or_fn: TargetSignatureSource
-    ) -> dict[str, Any]:
+    def provide(self, target_cls_or_fn: TargetSignatureSource) -> dict[str, Any]:
         parameters = discover_parameters(target_cls_or_fn)
         return self._parameter_resolver.resolve_all(parameters)

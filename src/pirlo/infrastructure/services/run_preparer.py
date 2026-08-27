@@ -55,9 +55,7 @@ class RunPreparer:
         playbook_invocation: PlaybookInvocation,
         toml_config: dict[str, Any] | None,
     ) -> dict[str, Any]:
-        parameters: list[dict[str, Any]] = discover_parameters(
-            self._playbook_cls
-        )
+        parameters: list[dict[str, Any]] = discover_parameters(self._playbook_cls)
         return self._parameter_resolver.resolve_all(parameters)
 
     # --- identity ---------------------------------------------------------

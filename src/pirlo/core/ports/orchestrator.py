@@ -21,11 +21,11 @@ class TaskOrchestrator(ABC):
 
     @abstractmethod
     async def execute(
-            self,
-            prepared_run: PreparedRun,
-            worker_fn: Callable[[], Awaitable[Any]],
-            *args: Any,
-            **kwargs: Any,
+        self,
+        prepared_run: PreparedRun,
+        worker_fn: Callable[[], Awaitable[Any]],
+        *args: Any,
+        **kwargs: Any,
     ) -> RunResult[Any] | Any:
         """
         Abstract execution hook implemented by orchestrator subclasses.
