@@ -13,10 +13,14 @@ class DummySession(TerminalPitch):
 
     async def play(
         self,
-        target: Annotated[str, Parameter(help="Target host and port")] = "localhost:8080",
+        target: Annotated[
+            str, Parameter(help="Target host and port")
+        ] = "localhost:8080",
         retries: Annotated[int, Parameter(help="Number of retry attempts")] = 3,
         verbose: Annotated[bool, Parameter(help="Enable verbose logging")] = True,
-        message: Annotated[str, Parameter(help="Message to print")] = "Initialization sequence started...",
+        message: Annotated[
+            str, Parameter(help="Message to print")
+        ] = "Initialization sequence started...",
         *args: Any,
         **kwargs: Any,
     ) -> RunResult[Any]:
@@ -52,7 +56,9 @@ class DummySession(TerminalPitch):
             detail=f"Target {target} is fully initialized.",
         )
         return RunResult(
-            run_id=(await self.prepared_run()).run_id if self._prepared_run else "dummy-run",
+            run_id=(await self.prepared_run()).run_id
+            if self._prepared_run
+            else "dummy-run",
             data={"target": target, "retries": retries},
         )
 

@@ -11,19 +11,34 @@ from pirlo.core.models.run_result import RunResult
 from pirlo.infrastructure.adapters.cli.terminal_pitch import TerminalPitch
 
 
-@playbook(name="dummy_resolution", description="Session subclass for testing parameter resolution.")
+@playbook(
+    name="dummy_resolution",
+    description="Session subclass for testing parameter resolution.",
+)
 class DummyResolutionSession(TerminalPitch):
     """Session subclass for testing parameter resolution."""
 
     async def play(
         self,
-        task: Annotated[str, Parameter(help="Task", env_name="TEST_TASK")] = "default-task",
+        task: Annotated[
+            str, Parameter(help="Task", env_name="TEST_TASK")
+        ] = "default-task",
         count: Annotated[int, Parameter(help="Count", env_name="TEST_COUNT")] = 5,
-        enabled: Annotated[bool, Parameter(help="Enabled", env_name="TEST_ENABLED")] = False,
-        items: Annotated[list[str] | None, Parameter(help="Items", env_name="TEST_ITEMS")] = None,
-        details: Annotated[dict | None, Parameter(help="Details", env_name="TEST_DETAILS")] = None,
-        path_val: Annotated[Path | None, Parameter(help="Path val", env_name="TEST_PATH")] = None,
-        multi_env: Annotated[str, Parameter(help="Multi env", env_name=["TEST_KEY_A", "TEST_KEY_B"])] = "default-multi",
+        enabled: Annotated[
+            bool, Parameter(help="Enabled", env_name="TEST_ENABLED")
+        ] = False,
+        items: Annotated[
+            list[str] | None, Parameter(help="Items", env_name="TEST_ITEMS")
+        ] = None,
+        details: Annotated[
+            dict | None, Parameter(help="Details", env_name="TEST_DETAILS")
+        ] = None,
+        path_val: Annotated[
+            Path | None, Parameter(help="Path val", env_name="TEST_PATH")
+        ] = None,
+        multi_env: Annotated[
+            str, Parameter(help="Multi env", env_name=["TEST_KEY_A", "TEST_KEY_B"])
+        ] = "default-multi",
         *args: Any,
         **kwargs: Any,
     ) -> RunResult[Any]:
@@ -50,24 +65,38 @@ async def test_default_values_fallback(monkeypatch, tmp_path):
 
     async def mock_play(
         self,
-        task: Annotated[str, Parameter(help="Task", env_name="TEST_TASK")] = "default-task",
+        task: Annotated[
+            str, Parameter(help="Task", env_name="TEST_TASK")
+        ] = "default-task",
         count: Annotated[int, Parameter(help="Count", env_name="TEST_COUNT")] = 5,
-        enabled: Annotated[bool, Parameter(help="Enabled", env_name="TEST_ENABLED")] = False,
-        items: Annotated[list[str] | None, Parameter(help="Items", env_name="TEST_ITEMS")] = None,
-        details: Annotated[dict | None, Parameter(help="Details", env_name="TEST_DETAILS")] = None,
-        path_val: Annotated[Path | None, Parameter(help="Path val", env_name="TEST_PATH")] = None,
-        multi_env: Annotated[str, Parameter(help="Multi env", env_name=["TEST_KEY_A", "TEST_KEY_B"])] = "default-multi",
+        enabled: Annotated[
+            bool, Parameter(help="Enabled", env_name="TEST_ENABLED")
+        ] = False,
+        items: Annotated[
+            list[str] | None, Parameter(help="Items", env_name="TEST_ITEMS")
+        ] = None,
+        details: Annotated[
+            dict | None, Parameter(help="Details", env_name="TEST_DETAILS")
+        ] = None,
+        path_val: Annotated[
+            Path | None, Parameter(help="Path val", env_name="TEST_PATH")
+        ] = None,
+        multi_env: Annotated[
+            str, Parameter(help="Multi env", env_name=["TEST_KEY_A", "TEST_KEY_B"])
+        ] = "default-multi",
         **kwargs,
     ):
-        captured_data.update({
-            "task": task,
-            "count": count,
-            "enabled": enabled,
-            "items": items or [],
-            "details": details or {},
-            "path_val": path_val,
-            "multi_env": multi_env,
-        })
+        captured_data.update(
+            {
+                "task": task,
+                "count": count,
+                "enabled": enabled,
+                "items": items or [],
+                "details": details or {},
+                "path_val": path_val,
+                "multi_env": multi_env,
+            }
+        )
         return RunResult(run_id="test", data=captured_data)
 
     monkeypatch.setattr(DummyResolutionSession, "play", mock_play)
@@ -100,24 +129,38 @@ async def test_env_variables_resolution(monkeypatch, tmp_path):
 
     async def mock_play(
         self,
-        task: Annotated[str, Parameter(help="Task", env_name="TEST_TASK")] = "default-task",
+        task: Annotated[
+            str, Parameter(help="Task", env_name="TEST_TASK")
+        ] = "default-task",
         count: Annotated[int, Parameter(help="Count", env_name="TEST_COUNT")] = 5,
-        enabled: Annotated[bool, Parameter(help="Enabled", env_name="TEST_ENABLED")] = False,
-        items: Annotated[list[str] | None, Parameter(help="Items", env_name="TEST_ITEMS")] = None,
-        details: Annotated[dict | None, Parameter(help="Details", env_name="TEST_DETAILS")] = None,
-        path_val: Annotated[Path | None, Parameter(help="Path val", env_name="TEST_PATH")] = None,
-        multi_env: Annotated[str, Parameter(help="Multi env", env_name=["TEST_KEY_A", "TEST_KEY_B"])] = "default-multi",
+        enabled: Annotated[
+            bool, Parameter(help="Enabled", env_name="TEST_ENABLED")
+        ] = False,
+        items: Annotated[
+            list[str] | None, Parameter(help="Items", env_name="TEST_ITEMS")
+        ] = None,
+        details: Annotated[
+            dict | None, Parameter(help="Details", env_name="TEST_DETAILS")
+        ] = None,
+        path_val: Annotated[
+            Path | None, Parameter(help="Path val", env_name="TEST_PATH")
+        ] = None,
+        multi_env: Annotated[
+            str, Parameter(help="Multi env", env_name=["TEST_KEY_A", "TEST_KEY_B"])
+        ] = "default-multi",
         **kwargs,
     ):
-        captured_data.update({
-            "task": task,
-            "count": count,
-            "enabled": enabled,
-            "items": items,
-            "details": details,
-            "path_val": path_val,
-            "multi_env": multi_env,
-        })
+        captured_data.update(
+            {
+                "task": task,
+                "count": count,
+                "enabled": enabled,
+                "items": items,
+                "details": details,
+                "path_val": path_val,
+                "multi_env": multi_env,
+            }
+        )
         return RunResult(run_id="test", data=captured_data)
 
     monkeypatch.setattr(DummyResolutionSession, "play", mock_play)
@@ -160,24 +203,38 @@ async def test_cli_overrides_env_and_default(monkeypatch, tmp_path):
 
     async def mock_play(
         self,
-        task: Annotated[str, Parameter(help="Task", env_name="TEST_TASK")] = "default-task",
+        task: Annotated[
+            str, Parameter(help="Task", env_name="TEST_TASK")
+        ] = "default-task",
         count: Annotated[int, Parameter(help="Count", env_name="TEST_COUNT")] = 5,
-        enabled: Annotated[bool, Parameter(help="Enabled", env_name="TEST_ENABLED")] = False,
-        items: Annotated[list[str] | None, Parameter(help="Items", env_name="TEST_ITEMS")] = None,
-        details: Annotated[dict | None, Parameter(help="Details", env_name="TEST_DETAILS")] = None,
-        path_val: Annotated[Path | None, Parameter(help="Path val", env_name="TEST_PATH")] = None,
-        multi_env: Annotated[str, Parameter(help="Multi env", env_name=["TEST_KEY_A", "TEST_KEY_B"])] = "default-multi",
+        enabled: Annotated[
+            bool, Parameter(help="Enabled", env_name="TEST_ENABLED")
+        ] = False,
+        items: Annotated[
+            list[str] | None, Parameter(help="Items", env_name="TEST_ITEMS")
+        ] = None,
+        details: Annotated[
+            dict | None, Parameter(help="Details", env_name="TEST_DETAILS")
+        ] = None,
+        path_val: Annotated[
+            Path | None, Parameter(help="Path val", env_name="TEST_PATH")
+        ] = None,
+        multi_env: Annotated[
+            str, Parameter(help="Multi env", env_name=["TEST_KEY_A", "TEST_KEY_B"])
+        ] = "default-multi",
         **kwargs,
     ):
-        captured_data.update({
-            "task": task,
-            "count": count,
-            "enabled": enabled,
-            "items": items,
-            "details": details,
-            "path_val": path_val,
-            "multi_env": multi_env,
-        })
+        captured_data.update(
+            {
+                "task": task,
+                "count": count,
+                "enabled": enabled,
+                "items": items,
+                "details": details,
+                "path_val": path_val,
+                "multi_env": multi_env,
+            }
+        )
         return RunResult(run_id="test", data=captured_data)
 
     monkeypatch.setattr(DummyResolutionSession, "play", mock_play)

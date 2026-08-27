@@ -12,16 +12,34 @@ from pirlo.infrastructure.adapters.cli.terminal_pitch import TerminalPitch
 from pirlo.infrastructure.services.profile_manager import ProfileManager
 
 
-@playbook(name="login", description="Launch a browser to authenticate and save persistent cookies.")
+@playbook(
+    name="login",
+    description="Launch a browser to authenticate and save persistent cookies.",
+)
 class LoginSession(TerminalPitch):
     """Launch a browser to authenticate and save persistent cookies."""
 
     async def play(
         self,
-        profile: Annotated[str, Parameter(help="Name or path of the browser profile to authenticate and save")] = "default",
-        ttl_days: Annotated[int, Parameter(help="Session expiration TTL in days (default: 7)")] = 7,
-        urls: Annotated[list[str] | None, Parameter(help="List of target website URLs to open for manual authentication")] = None,
-        urls_file: Annotated[Path | None, Parameter(help="Path to a text file containing a list of target URLs")] = None,
+        profile: Annotated[
+            str,
+            Parameter(
+                help="Name or path of the browser profile to authenticate and save"
+            ),
+        ] = "default",
+        ttl_days: Annotated[
+            int, Parameter(help="Session expiration TTL in days (default: 7)")
+        ] = 7,
+        urls: Annotated[
+            list[str] | None,
+            Parameter(
+                help="List of target website URLs to open for manual authentication"
+            ),
+        ] = None,
+        urls_file: Annotated[
+            Path | None,
+            Parameter(help="Path to a text file containing a list of target URLs"),
+        ] = None,
         *args: Any,
         **kwargs: Any,
     ) -> RunResult[Any]:

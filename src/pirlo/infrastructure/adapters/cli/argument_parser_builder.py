@@ -21,9 +21,14 @@ def extract_signature_parameters(
     params_metadata: list[dict[str, Any]] = []
 
     for idx, (name, param) in enumerate(sig.parameters.items()):
-        if name in ("self", "self_inst", "prepared_run", "worker_fn") or (idx == 0 and name.startswith("self")):
+        if name in ("self", "self_inst", "prepared_run", "worker_fn") or (
+            idx == 0 and name.startswith("self")
+        ):
             continue
-        if param.kind in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD):
+        if param.kind in (
+            inspect.Parameter.VAR_POSITIONAL,
+            inspect.Parameter.VAR_KEYWORD,
+        ):
             continue
 
         param_type: Any = type_hints.get(name, param.annotation)
@@ -49,7 +54,12 @@ def extract_signature_parameters(
 
         raw_type = param_type
         origin = get_origin(param_type)
-        if origin is not list and origin is not dict and hasattr(param_type, "__args__") and type(None) in get_args(param_type):
+        if (
+            origin is not list
+            and origin is not dict
+            and hasattr(param_type, "__args__")
+            and type(None) in get_args(param_type)
+        ):
             non_none = [a for a in get_args(param_type) if a is not type(None)]
             if non_none:
                 param_type = non_none[0]
