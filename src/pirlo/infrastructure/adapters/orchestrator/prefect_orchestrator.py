@@ -44,12 +44,10 @@ class SmartPrefectTaskOrchestrator(TaskOrchestrator):
         self,
         server_url: str | None = None,
         work_pool: str | None = None,
-        decomposer_model: str | None = None,
         decomposer_link: LlmLink | str | None = None,
     ) -> None:
         self.server_url = server_url
         self.work_pool = work_pool
-        self.decomposer_model = decomposer_model
         self.decomposer_link = decomposer_link
 
     # ---- public API -----------------------------------------------------
@@ -69,12 +67,6 @@ class SmartPrefectTaskOrchestrator(TaskOrchestrator):
         work_pool: Annotated[
             str | None, Parameter(help="Prefect work pool name", env_name="WORK_POOL")
         ] = None,
-        decomposer_model: Annotated[
-            str | None,
-            Parameter(
-                help="Model name used by task decomposer", env_name="DECOMPOSER_MODEL"
-            ),
-        ] = None,
         decomposer_link: Annotated[
             LlmLink | str | None,
             LinkParameter(
@@ -89,8 +81,6 @@ class SmartPrefectTaskOrchestrator(TaskOrchestrator):
             self.server_url = server_url
         if work_pool is not None:
             self.work_pool = work_pool
-        if decomposer_model is not None:
-            self.decomposer_model = decomposer_model
         if decomposer_link is not None:
             self.decomposer_link = decomposer_link
 
@@ -179,7 +169,7 @@ class SmartPrefectTaskOrchestrator(TaskOrchestrator):
             return LlmLink(
                 name="cloud-env-link",
                 provider="gemini",
-                model=self.decomposer_model or "google-gla:gemini-1.5-flash",
+                model="google-gla:gemini-1.5-flash",
                 api_key=api_key,
             )
 
@@ -187,7 +177,7 @@ class SmartPrefectTaskOrchestrator(TaskOrchestrator):
         return LlmLink(
             name="default-gemini",
             provider="gemini",
-            model=self.decomposer_model or "google-gla:gemini-1.5-flash",
+            model="google-gla:gemini-1.5-flash",
             api_key="",
         )
 
