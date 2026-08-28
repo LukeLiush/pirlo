@@ -82,7 +82,7 @@ class PlaywrightReplayRunner(WorkflowRunner[PlaywrightPage]):
             self.repository.save(workflow)
 
         if page is not None:
-            adapter: PlaywrightAdapter = PlaywrightAdapter(page, self.link)
+            adapter: PlaywrightAdapter = PlaywrightAdapter(page)
             await adapter.execute_workflow(workflow, on_step_update=on_step_update)
         else:
             # Run standard Playwright context
@@ -107,7 +107,7 @@ class PlaywrightReplayRunner(WorkflowRunner[PlaywrightPage]):
                     pw_context = await browser.new_context()
                     target_page = await pw_context.new_page()
 
-                adapter = PlaywrightAdapter(target_page, self.link)
+                adapter = PlaywrightAdapter(target_page)
                 await adapter.execute_workflow(workflow, on_step_update=on_step_update)
 
                 if not self.browser_config.cdp_url:

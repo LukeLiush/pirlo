@@ -3,17 +3,7 @@ import logging
 from collections.abc import Callable, Coroutine
 from typing import Any
 
-import httpx
-import openai
 from playwright.async_api import Locator, Page
-
-
-def is_timeout_exception(e: Exception) -> bool:
-    """Determines if the exception is an explicit or implicit timeout error."""
-    if isinstance(e, (httpx.TimeoutException, openai.APITimeoutError, TimeoutError)):
-        return True
-    return "timeout" in str(e).lower()
-
 
 from pirlo.core.models.actions import (
     Action,
@@ -25,14 +15,15 @@ from pirlo.core.models.actions import (
     ScrollAction,
     SendKeysAction,
 )
-from pirlo.core.models.link import LlmLink
 from pirlo.core.models.specifications import SafetyCandidate
 from pirlo.core.models.workflow import Workflow
+from pirlo.infrastructure.adapters.browser.content_sanitizer import (
+    PageContentSanitizer,
+)
 from pirlo.infrastructure.adapters.browser.locator_resolver import (
     ResilientLocatorResolver,
 )
 from pirlo.infrastructure.adapters.browser.page_waiter import ResilientPageWaiter
-from pirlo.infrastructure.services.llm_client import LlmClient
 
 logger = logging.getLogger("workflow_replay.playwright_adapter")
 
@@ -41,33 +32,27 @@ class PlaywrightAdapter:
     """Executes domain actions against a Playwright Page instance with resilience and safety checks."""
 
     page: Page
-    link: LlmLink | None
     locator_resolver: ResilientLocatorResolver
     page_waiter: ResilientPageWaiter
+    content_sanitizer: PageContentSanitizer
     last_extraction_result: str | None
     live_results: list[str]
 
     def __init__(
         self,
         page: Page,
-        link: LlmLink | None = None,
         locator_resolver: ResilientLocatorResolver | None = None,
         page_waiter: ResilientPageWaiter | None = None,
+        content_sanitizer: PageContentSanitizer | None = None,
     ) -> None:
         self.page = page
-        self.link = link
         self.locator_resolver = locator_resolver or ResilientLocatorResolver(
             page, timeout_ms=3000
         )
         self.page_waiter = page_waiter or ResilientPageWaiter(page)
+        self.content_sanitizer = content_sanitizer or PageContentSanitizer()
         self.last_extraction_result = None
         self.live_results = []
-
-    async def _invoke_llm_text(self, prompt: str) -> str:
-        """Safely invokes LiteLLM for text transformation/summarization."""
-        if self.link:
-            return await LlmClient.acompletion(link=self.link, prompt=prompt)
-        return ""
 
     async def execute_workflow(
         self,
@@ -236,72 +221,27 @@ class PlaywrightAdapter:
                 await self.page.keyboard.press(keys)
                 self.live_results.append(f"Sent keyboard keys '{keys}'.")
 
-            case ExtractContentAction(include_links=_, goal=goal):
-                if not self.link:
-                    raise RuntimeError(
-                        "LLM link is required to execute ExtractContentAction."
-                    )
-
-                logger.info("Executing LLM Data Extraction on live page content...")
-                # 1. Wait for page text content to settle (e.g. streaming responses)
+            case ExtractContentAction():
+                logger.info("Capturing live page text content snapshot...")
                 await self.page_waiter.wait_for_text_settled()
-                page_text = await self.page.locator("body").inner_text()
-
-                # 2. Instruct LLM to perform cognitive extraction from the live text
-                prompt = (
-                    f"You are a web data extraction assistant. Based on the page content below, "
-                    f"perform the step goal: '{goal}'.\n"
-                    f"Be direct and concise in your response.\n\n"
-                    f"Page Content:\n{page_text}"
+                self.last_extraction_result = (
+                    await self.content_sanitizer.extract_markdown(self.page)
                 )
-                prompt_bytes = len(prompt.encode("utf-8"))
-                try:
-                    self.last_extraction_result = await self._invoke_llm_text(prompt)
-                    logger.info(
-                        f"LLM Data Extraction completed: {self.last_extraction_result}"
-                    )
-                    self.live_results.append(
-                        f"Extracted content: '{self.last_extraction_result}'"
-                    )
-                except Exception as e:
-                    if is_timeout_exception(e):
-                        raise RuntimeError(
-                            f"LLM request timed out during content extraction. "
-                            f"Exception type: '{type(e).__name__}'. Input size: {prompt_bytes} bytes. "
-                            f"Please consider increasing the LLM 'timeout' configuration (e.g. timeout=120) in play_self_healing.py."
-                        ) from e
-                    raise
+                self.live_results.append(
+                    f"Captured page content snapshot ({len(self.last_extraction_result)} chars)."
+                )
 
-            case DoneAction(text=text, goal=goal):
-                if self.link and goal:
-                    logger.info("Synthesizing final workflow result via LLM...")
-                    # 1. Wait for page text content to settle (e.g. streaming responses)
-                    await self.page_waiter.wait_for_text_settled()
-                    page_text = await self.page.locator("body").inner_text()
-
-                    # Construct synthesis prompt
-                    prompt = (
-                        f"You are completing a browser automation workflow. Your final goal is: '{goal}'.\n"
-                        f"Here are the live results of the actions taken:\n"
-                        f"{self.live_results}\n\n"
-                        f"Current Page Content:\n{page_text}\n\n"
-                        f"Provide the final direct response/answer as plain text. Do NOT wrap your output in JSON, code blocks, or markdown formatting."
-                    )
-                    prompt_bytes = len(prompt.encode("utf-8"))
-
-                    try:
-                        action.text = await self._invoke_llm_text(prompt)
-                    except Exception as e:
-                        if is_timeout_exception(e):
-                            raise RuntimeError(
-                                f"LLM request timed out during final response synthesis. "
-                                f"Exception type: '{type(e).__name__}'. Input size: {prompt_bytes} bytes. "
-                                f"Please consider increasing the LLM 'timeout' configuration (e.g. timeout=120) in play_self_healing.py."
-                            ) from e
-                        raise
-                elif self.last_extraction_result is not None:
+            case DoneAction():
+                if self.last_extraction_result is not None:
                     action.text = self.last_extraction_result
-                logger.info(f"DoneAction encountered: {action.text}")
+                else:
+                    await self.page_waiter.wait_for_text_settled()
+                    action.text = await self.content_sanitizer.extract_markdown(
+                        self.page
+                    )
+                logger.info(
+                    f"DoneAction encountered: captured {len(action.text)} chars."
+                )
 
             case _:
                 raise TypeError(f"Unrecognized action subclass type: {type(action)}")
