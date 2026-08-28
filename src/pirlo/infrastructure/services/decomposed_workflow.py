@@ -38,12 +38,19 @@ class DecomposedWorkflowRunner(WorkflowRunner):
     ) -> str:
         # 1. Tier 1 Cache Check: Plan Repository
         plan_id: str = cache_key or task_prompt
+        plan = None
         if self.plan_repository.exists(plan_id):
-            logger.info(
-                f"Plan Cache HIT for '{task_prompt}' [plan_id={plan_id}]. Bypassing Decomposer Agent..."
-            )
-            plan = self.plan_repository.load(plan_id)
-        else:
+            try:
+                logger.info(
+                    f"Plan Cache HIT for '{task_prompt}' [plan_id={plan_id}]. Bypassing Decomposer Agent..."
+                )
+                plan = self.plan_repository.load(plan_id)
+            except Exception as e:
+                logger.warning(
+                    f"Failed to load cached plan '{plan_id}': {e}. Re-running Decomposer Agent..."
+                )
+
+        if not plan:
             logger.info(
                 f"Plan Cache MISS for '{task_prompt}' [plan_id={plan_id}]. Executing Decomposer Agent..."
             )

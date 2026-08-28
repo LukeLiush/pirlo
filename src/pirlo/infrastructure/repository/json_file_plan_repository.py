@@ -18,15 +18,20 @@ class JsonFilePlanRepository(PlanRepository):
         return self.directory / f"{plan_id}_plan.json"
 
     def exists(self, plan_id: str) -> bool:
-        return self._get_path(plan_id).exists()
+        path = self._get_path(plan_id)
+        return path.exists() and path.stat().st_size > 0
 
     def load(self, plan_id: str) -> DecomposerPlan:
         path = self._get_path(plan_id)
-        if not path.exists():
-            raise FileNotFoundError(f"Plan cache file not found at: {path}")
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        return DecomposerPlan.model_validate(data)
+        if not self.exists(plan_id):
+            raise FileNotFoundError(f"Plan cache file not found or empty at: {path}")
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            return DecomposerPlan.model_validate(data)
+        except Exception as e:
+            path.unlink(missing_ok=True)
+            raise FileNotFoundError(f"Plan cache file corrupted at {path}: {e}") from e
 
     def save(self, plan: DecomposerPlan) -> None:
         path = self._get_path(plan.plan_id)

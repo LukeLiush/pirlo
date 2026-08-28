@@ -263,10 +263,13 @@ class AutopassSession(TerminalPitch):
             workflow_runner=runner,
         )
 
-        async def run_use_case() -> str:
+        async def run_use_case(
+            task_prompt: str | None = None, site: str | None = None, **kwargs: Any
+        ) -> str:
+            effective_task = task_prompt or task
             prepared = await self.prepared_run()
             return await run_autopass_use_case.run(
-                task_prompt=task,
+                task_prompt=effective_task,
                 profile_path=profile_path,
                 headless=headless,
                 cdp_port=CDP_PORT,

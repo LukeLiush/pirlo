@@ -179,13 +179,13 @@ class SmartPrefectTaskOrchestrator(TaskOrchestrator):
                 api_key=api_key,
             )
 
-        # Fallback to local Ollama auto-discovery provider
-        from pirlo.infrastructure.services.ollama_resolver import (
-            LocalDecomposerModelProvider,
+        # Fallback default link if no link or env key provided
+        return LlmLink(
+            name="default-gemini",
+            provider="gemini",
+            model=self.decomposer_model or "google-gla:gemini-1.5-flash",
+            api_key="",
         )
-
-        provider = LocalDecomposerModelProvider()
-        return provider.provide_link()
 
     def _build_decomposer(self) -> PydanticAiDecomposer:
         link = self._get_resolved_link()
