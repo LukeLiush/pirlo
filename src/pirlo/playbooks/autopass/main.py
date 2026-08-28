@@ -265,14 +265,14 @@ class AutopassSession(TerminalPitch):
         )
         prepared: PreparedRun = await self.prepared_run()
 
-        async with browser_manager.session():
+        async with browser_manager.session() as session:
 
             async def run_use_case(
                 task_prompt: str | None = None, site: str | None = None, **kwargs: Any
             ) -> str:
                 effective_task = task_prompt or task
                 return await run_autopass_use_case.run(
-                    browser_manager=browser_manager,
+                    browser_manager=session,
                     task_prompt=effective_task,
                     listener=QuickProgressListener(),
                     run_name=prepared.run_name,

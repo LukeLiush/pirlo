@@ -29,7 +29,10 @@ from pirlo.infrastructure.adapters.storage.json_link_repository import (
 from pirlo.infrastructure.repository.json_file_plan_repository import (
     JsonFilePlanRepository,
 )
-from pirlo.infrastructure.services.decomposed_workflow import DecomposedWorkflowRunner
+from pirlo.infrastructure.services.decomposed_workflow import (
+    DecomposedWorkflowRunner,
+    WorkflowRunner,
+)
 from pirlo.infrastructure.services.log_streamer import capture_run_logs
 
 
@@ -128,10 +131,10 @@ class SmartPrefectTaskOrchestrator(TaskOrchestrator):
         else:
             print("⚡ Running in Prefect Ephemeral Mode (In-Process)")
 
-        runner: DecomposedWorkflowRunner = self._build_runner(worker_fn, prepared_run)
+        workflow_runner: WorkflowRunner = self._build_runner(worker_fn, prepared_run)
 
         with temporary_settings(settings.overrides):
-            res: str = await runner.run(
+            res: str = await workflow_runner.run(
                 task_prompt=task,
                 cache_key=prepared_run.run_name,
                 run_id=prepared_run.run_id,
@@ -142,7 +145,7 @@ class SmartPrefectTaskOrchestrator(TaskOrchestrator):
         self,
         worker_fn: Callable[..., Awaitable[Any]] | Callable[..., Any],
         prepared_run: PreparedRun,
-    ) -> DecomposedWorkflowRunner:
+    ) -> WorkflowRunner:
         workspace: Path = get_workspace_path()
         return DecomposedWorkflowRunner(
             plan_repository=JsonFilePlanRepository(workspace / "plans"),

@@ -36,16 +36,7 @@ class DecomposedWorkflowRunner(WorkflowRunner):
         )
         self.playbook = playbook
 
-    async def run(
-        self,
-        task_prompt: str,
-        page: Any | None = None,
-        cache_key: str | None = None,
-        run_id: str | None = None,
-    ) -> str:
-
-        # 1. Tier 1 Cache Check: Plan Repository
-        plan_id: str = cache_key or task_prompt
+    async def _load_plan(self, plan_id: str, task_prompt: str) -> DecomposerPlan | None:
         plan: DecomposerPlan | None = None
         if self.plan_repository.exists(plan_id):
             try:
@@ -57,17 +48,34 @@ class DecomposedWorkflowRunner(WorkflowRunner):
                 logger.warning(
                     f"Failed to load cached plan '{plan_id}': {e}. Re-running Decomposer Agent..."
                 )
+        return plan
 
+    async def _decompose_plan(self, plan_id: str, task_prompt: str) -> DecomposerPlan:
+        plan: DecomposerPlan = await self.decomposer.decompose(task_prompt)
+        plan.plan_id = plan_id
+        self.plan_repository.save(plan)
+        logger.info(
+            f"Saved new DecomposerPlan '{plan_id}' with {len(plan.subtasks)} subtasks to Plan Cache."
+        )
+        return plan
+
+    async def _get_plan(self, plan_id: str, task_prompt: str) -> DecomposerPlan:
+        plan: DecomposerPlan | None = await self._load_plan(plan_id, task_prompt)
         if not plan:
-            logger.info(
-                f"Plan Cache MISS for '{task_prompt}' [plan_id={plan_id}]. Executing Decomposer Agent..."
-            )
-            plan = await self.decomposer.decompose(task_prompt)
-            plan.plan_id = plan_id
-            self.plan_repository.save(plan)
-            logger.info(
-                f"Saved new DecomposerPlan '{plan_id}' with {len(plan.subtasks)} subtasks to Plan Cache."
-            )
+            return await self._decompose_plan(plan_id, task_prompt)
+        return plan
+
+    async def run(
+        self,
+        task_prompt: str,
+        page: Any | None = None,
+        cache_key: str | None = None,
+        run_id: str | None = None,
+    ) -> str:
+
+        # 1. Tier 1 Cache Check: Plan Repository
+        plan_id: str = cache_key or task_prompt
+        plan: DecomposerPlan = await self._get_plan(plan_id, task_prompt)
 
         # 2. Parallel Subtask Execution via Prefect Flow
         from prefect.settings import (
