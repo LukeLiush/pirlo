@@ -121,11 +121,19 @@ async def pirlo_decomposed_flow(
         for spec, subtask_result in zip(plan.subtasks, subtask_results):
             if isinstance(subtask_result, Exception):
                 formatted_results.append(
-                    {"site": spec.target_site, "status": "FAILED", "error": str(subtask_result)}
+                    {
+                        "site": spec.target_site,
+                        "status": "FAILED",
+                        "error": str(subtask_result),
+                    }
                 )
             else:
                 formatted_results.append(
-                    {"site": spec.target_site, "status": "COMPLETED", "data": str(subtask_result)}
+                    {
+                        "site": spec.target_site,
+                        "status": "COMPLETED",
+                        "data": str(subtask_result),
+                    }
                 )
 
         # 3. Aggregate

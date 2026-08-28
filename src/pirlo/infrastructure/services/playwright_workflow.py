@@ -1,4 +1,5 @@
 import logging
+from typing import Any
 
 from playwright.async_api import Browser as PlaywrightBrowser
 from playwright.async_api import BrowserContext as PlaywrightContext
@@ -40,6 +41,7 @@ class PlaywrightReplayRunner(WorkflowRunner):
     async def run(
         self,
         task_prompt: str,
+        page: Any | None = None,
         cache_key: str | None = None,
         run_id: str | None = None,
     ) -> str:
@@ -78,30 +80,35 @@ class PlaywrightReplayRunner(WorkflowRunner):
                 )
             self.repository.save(workflow)
 
-        # Run standard Playwright context
-        async with async_playwright() as p:
-            if self.browser_config.cdp_url:
-                logger.info(
-                    f"Connecting Playwright replayer to CDP: {self.browser_config.cdp_url}"
-                )
-                browser: PlaywrightBrowser = await p.chromium.connect_over_cdp(
-                    self.browser_config.cdp_url
-                )
-                context: PlaywrightContext = browser.contexts[0]
-                page: PlaywrightPage = (
-                    context.pages[0] if context.pages else await context.new_page()
-                )
-            else:
-                browser = await p.chromium.launch(headless=self.browser_config.headless)
-                context = await browser.new_context()
-                page = await context.new_page()
-
+        if page is not None:
             adapter: PlaywrightAdapter = PlaywrightAdapter(page, self.link)
-            # Execute workflow with safety verifications
             await adapter.execute_workflow(workflow, on_step_update=on_step_update)
+        else:
+            # Run standard Playwright context
+            async with async_playwright() as p:
+                if self.browser_config.cdp_url:
+                    logger.info(
+                        f"Connecting Playwright replayer to CDP: {self.browser_config.cdp_url}"
+                    )
+                    browser: PlaywrightBrowser = await p.chromium.connect_over_cdp(
+                        self.browser_config.cdp_url
+                    )
+                    context: PlaywrightContext = browser.contexts[0]
+                    target_page: PlaywrightPage = (
+                        context.pages[0] if context.pages else await context.new_page()
+                    )
+                else:
+                    browser = await p.chromium.launch(
+                        headless=self.browser_config.headless
+                    )
+                    context = await browser.new_context()
+                    target_page = await context.new_page()
 
-            if not self.browser_config.cdp_url:
-                await browser.close()
+                adapter = PlaywrightAdapter(target_page, self.link)
+                await adapter.execute_workflow(workflow, on_step_update=on_step_update)
+
+                if not self.browser_config.cdp_url:
+                    await browser.close()
 
         # Retrieve final action result
         final_action: Action = workflow.actions[-1]

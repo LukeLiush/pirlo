@@ -1,4 +1,3 @@
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -29,32 +28,35 @@ def test_slugify_task_prompt():
     )
 
 
+from contextlib import asynccontextmanager
+
+
 @pytest.mark.anyio
 async def test_run_autopass_use_case_cache_key():
+    mock_page = MagicMock()
     mock_browser_manager = MagicMock()
-    mock_browser_manager.launch = AsyncMock()
-    mock_browser_manager.close = AsyncMock()
 
-    mock_cdp_checker = MagicMock()
-    mock_cdp_checker.wait_until_ready = AsyncMock()
+    @asynccontextmanager
+    async def fake_new_page():
+        yield mock_page
+
+    mock_browser_manager.new_page = fake_new_page
 
     mock_runner = MagicMock()
     mock_runner.run = AsyncMock(
-        side_effect=lambda task_prompt, cache_key, run_id: f"result_for_{cache_key}"
+        side_effect=lambda task_prompt, page, cache_key, run_id: (
+            f"result_for_{cache_key}"
+        )
     )
 
     use_case = RunAutopassUseCase(
-        browser_manager=mock_browser_manager,
-        cdp_checker=mock_cdp_checker,
         workflow_runner=mock_runner,
     )
 
     listener = QuickProgressListener()
     res = await use_case.run(
+        browser_manager=mock_browser_manager,
         task_prompt="Search OpenAI on Google",
-        profile_path=Path("/tmp/test_profile"),
-        headless=True,
-        cdp_port=9222,
         listener=listener,
         run_name="run123",
         run_id="id123",

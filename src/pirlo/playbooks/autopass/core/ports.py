@@ -1,19 +1,18 @@
 from abc import ABC, abstractmethod
-from contextlib import AbstractContextManager
-from pathlib import Path
+from contextlib import AbstractAsyncContextManager, AbstractContextManager
 from typing import Any
 
 
 class BrowserManager(ABC):
-    """Port for browser session lifecycle operations."""
+    """Port for browser process session and page lifecycle operations."""
 
     @abstractmethod
-    async def launch(self, profile_path: Path, headless: bool, cdp_port: int) -> Any:
-        """Launch a browser session and return the browser/context instance."""
+    def session(self) -> AbstractAsyncContextManager[Any]:
+        """Launches browser session on enter, closes on exit."""
 
     @abstractmethod
-    async def close(self) -> None:
-        """Close the active browser session and clean up resources."""
+    def new_page(self) -> AbstractAsyncContextManager[Any]:
+        """Spawns an isolated page on enter, closes on exit."""
 
 
 class CdpChecker(ABC):

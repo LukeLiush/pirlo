@@ -39,9 +39,11 @@ class DecomposedWorkflowRunner(WorkflowRunner):
     async def run(
         self,
         task_prompt: str,
+        page: Any | None = None,
         cache_key: str | None = None,
         run_id: str | None = None,
     ) -> str:
+
         # 1. Tier 1 Cache Check: Plan Repository
         plan_id: str = cache_key or task_prompt
         plan: DecomposerPlan | None = None

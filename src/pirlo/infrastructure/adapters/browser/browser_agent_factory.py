@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from typing import Any
 
 os.environ.setdefault("ANONYMIZED_TELEMETRY", "false")
 
@@ -46,12 +47,16 @@ class DefaultBrowserAgentFactory(BrowserAgentFactory):
         self.max_actions_per_step = max_actions_per_step
         self.save_conversation_path = save_conversation_path
 
-    def create_agent(self, task: str, browser: Browser) -> Agent:
+    def create_agent(
+        self,
+        task: str,
+        browser: Browser | None = None,
+        browser_context: Any | None = None,
+    ) -> Agent:
         llm = BrowserUseAdapterRegistry.to_chat_model(self.link)
-        kwargs = {
+        kwargs: dict[str, Any] = {
             "task": task,
             "llm": llm,
-            "browser": browser,
             "controller": self.controller,
             "use_vision": self.use_vision,
             "max_failures": self.max_failures,
@@ -59,6 +64,11 @@ class DefaultBrowserAgentFactory(BrowserAgentFactory):
             "generate_gif": self.generate_gif,
             "max_actions_per_step": self.max_actions_per_step,
         }
+        if browser is not None:
+            kwargs["browser"] = browser
+        if browser_context is not None:
+            kwargs["browser_context"] = browser_context
+
         if self.system_prompt_class is not None:
             kwargs["system_prompt_class"] = self.system_prompt_class
         if self.include_attributes is not None:

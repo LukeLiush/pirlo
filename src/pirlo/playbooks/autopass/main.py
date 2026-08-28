@@ -26,13 +26,8 @@ from pirlo.infrastructure.services.llm_workflow import LlmWorkflowRunner
 from pirlo.infrastructure.services.playwright_workflow import PlaywrightReplayRunner
 from pirlo.infrastructure.services.profile_manager import ProfileManager
 from pirlo.infrastructure.services.self_healing_workflow import SelfHealingRunner
-from pirlo.playbooks.autopass.adapters.browser_manager import CloakBrowserManager
-from pirlo.playbooks.autopass.adapters.cdp_checker import HttpCdpConnectionChecker
-from pirlo.playbooks.autopass.core.ports import (
-    BrowserManager,
-    CdpChecker,
-    ProgressListener,
-)
+from pirlo.playbooks.autopass.adapters.browser_manager import BrowserManager
+from pirlo.playbooks.autopass.core.ports import ProgressListener
 from pirlo.playbooks.autopass.core.use_cases import RunAutopassUseCase
 
 CDP_PORT = 9222
@@ -260,32 +255,33 @@ class AutopassSession(TerminalPitch):
             repository=workflow_repo,
         )
 
-        browser_manager: BrowserManager = CloakBrowserManager()
-        cdp_checker: CdpChecker = HttpCdpConnectionChecker(CDP_URL)
+        browser_manager: BrowserManager = BrowserManager(
+            profile_path=profile_path,
+            headless=headless,
+            cdp_port=CDP_PORT,
+        )
         run_autopass_use_case: RunAutopassUseCase = RunAutopassUseCase(
-            browser_manager=browser_manager,
-            cdp_checker=cdp_checker,
             workflow_runner=self_healing_runner,
         )
         prepared: PreparedRun = await self.prepared_run()
 
-        async def run_use_case(
-            task_prompt: str | None = None, site: str | None = None, **kwargs: Any
-        ) -> str:
-            effective_task = task_prompt or task
-            return await run_autopass_use_case.run(
-                task_prompt=effective_task,
-                profile_path=profile_path,
-                headless=headless,
-                cdp_port=CDP_PORT,
-                listener=QuickProgressListener(),
-                run_name=prepared.run_name,
-                run_id=prepared.run_id,
-            )
+        async with browser_manager.session():
 
-        raw_output = await self.orchestrator.execute(
-            prepared, run_use_case, task=task, schedule=schedule
-        )
+            async def run_use_case(
+                task_prompt: str | None = None, site: str | None = None, **kwargs: Any
+            ) -> str:
+                effective_task = task_prompt or task
+                return await run_autopass_use_case.run(
+                    browser_manager=browser_manager,
+                    task_prompt=effective_task,
+                    listener=QuickProgressListener(),
+                    run_name=prepared.run_name,
+                    run_id=prepared.run_id,
+                )
+
+            raw_output = await self.orchestrator.execute(
+                prepared, run_use_case, task=task, schedule=schedule
+            )
 
         autopass_output: AutopassRunOutput = AutopassRunOutput(
             task_prompt=task,

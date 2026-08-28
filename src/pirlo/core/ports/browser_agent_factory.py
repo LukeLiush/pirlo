@@ -1,11 +1,17 @@
 from abc import ABC, abstractmethod
+from typing import Any
 
 from browser_use import Agent, Browser
 
 
 class BrowserAgentFactory(ABC):
     @abstractmethod
-    def create_agent(self, task: str, browser: Browser) -> Agent:
+    def create_agent(
+        self,
+        task: str,
+        browser: Browser | None = None,
+        browser_context: Any | None = None,
+    ) -> Agent:
         """Create a new, stateful Agent instance for the given task."""
 
     @abstractmethod

@@ -5,6 +5,7 @@ import subprocess
 import sys
 import time
 from datetime import UTC, datetime
+from typing import Any
 
 from browser_use import Agent, Browser
 from browser_use.agent.views import AgentHistoryList
@@ -90,6 +91,7 @@ class LlmWorkflowRunner(WorkflowRunner):
     async def run(
         self,
         task_prompt: str,
+        page: Any | None = None,
         cache_key: str | None = None,
         run_id: str | None = None,
     ) -> str:
@@ -100,7 +102,7 @@ class LlmWorkflowRunner(WorkflowRunner):
             cdp_url=self.browser_config.cdp_url,
             headless=self.browser_config.headless,
         )
-        agent: Agent = self.agent_factory.create_agent(task_prompt, browser)
+        agent: Agent = self.agent_factory.create_agent(task_prompt, browser=browser)
 
         started_dt = datetime.now(UTC)
         if run_id and self.run_history_repository:
