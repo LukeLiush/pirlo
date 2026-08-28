@@ -12,7 +12,6 @@ from pirlo.core.models.link import LlmLink
 from pirlo.core.models.parameters import LinkParameter, Parameter
 from pirlo.core.models.run import PreparedRun, RunStatus
 from pirlo.core.models.run_result import RunResult
-from pirlo.playbooks.autopass.models import AutopassRunOutput
 from pirlo.core.ports.browser_agent_factory import BrowserAgentFactory
 from pirlo.core.repository.workflow_repository import WorkflowRepository
 from pirlo.core.services.workflow_runner import WorkflowRunner
@@ -30,6 +29,7 @@ from pirlo.infrastructure.services.self_healing_workflow import SelfHealingRunne
 from pirlo.playbooks.autopass.adapters.browser_manager import CloakBrowserManager
 from pirlo.playbooks.autopass.core.ports import ProgressListener
 from pirlo.playbooks.autopass.core.use_cases import RunAutopassUseCase
+from pirlo.playbooks.autopass.models import AutopassRunOutput
 
 CDP_PORT = 9222
 CDP_URL = f"http://localhost:{CDP_PORT}"
