@@ -1,7 +1,6 @@
 import logging
 
 import litellm
-from browser_use.llm.base import BaseChatModel as BrowserUseChatModel
 
 from pirlo.core.models.link import SUPPORTED_PROVIDERS, LlmLink
 
@@ -75,63 +74,3 @@ class LlmClient:
             **kwargs,
         )
         return response.choices[0].message.content or ""
-
-    @staticmethod
-    def create_browser_use_llm(
-        link: LlmLink,
-        temperature: float = 0.0,
-        timeout: float = 30.0,
-    ) -> BrowserUseChatModel:
-        """Instantiates native model objects required by browser-use Agent sessions."""
-        provider = link.provider.lower()
-
-        base_url = link.base_url
-        if not base_url and provider in SUPPORTED_PROVIDERS:
-            base_url = SUPPORTED_PROVIDERS[provider].get("default_base_url")
-
-        if provider in ("google", "gemini"):
-            try:
-                from browser_use.llm.google.chat import ChatGoogle
-            except ImportError as e:
-                raise ImportError(
-                    "The 'google-genai' package is required for Google browser-use LLMs. "
-                    "Please install it using 'pip install google-genai'."
-                ) from e
-
-            return ChatGoogle(
-                model=link.model,
-                api_key=link.api_key or None,
-                temperature=temperature,
-            )
-        elif provider == "anthropic":
-            try:
-                from browser_use.llm.anthropic.chat import (
-                    ChatAnthropic as BUAnthropic,
-                )
-            except ImportError as e:
-                raise ImportError(
-                    "The 'anthropic' package is required for Anthropic browser-use LLMs. "
-                    "Please install it using 'pip install anthropic'."
-                ) from e
-
-            return BUAnthropic(
-                model=link.model,
-                api_key=link.api_key or None,
-                temperature=temperature,
-            )
-        else:
-            try:
-                from browser_use.llm.openai.chat import ChatOpenAI as BUOpenAI
-            except ImportError as e:
-                raise ImportError(
-                    "The 'openai' package is required for OpenAI browser-use LLMs. "
-                    "Please install it using 'pip install openai'."
-                ) from e
-
-            return BUOpenAI(
-                model=link.model,
-                api_key=link.api_key or None,
-                base_url=base_url or None,
-                temperature=temperature,
-                timeout=timeout,
-            )

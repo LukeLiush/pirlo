@@ -1,19 +1,24 @@
 import os
 from pathlib import Path
-from typing import Any
 
 os.environ.setdefault("ANONYMIZED_TELEMETRY", "false")
 
 from browser_use import Agent, Browser, Controller
 from browser_use.agent.prompts import SystemPrompt
 
+from pirlo.core.models.link import LlmLink
 from pirlo.core.ports.browser_agent_factory import BrowserAgentFactory
+from pirlo.infrastructure.adapters.browser.browser_use_adapters import (
+    BrowserUseAdapterRegistry,
+)
 
 
 class DefaultBrowserAgentFactory(BrowserAgentFactory):
+    link: LlmLink
+
     def __init__(
         self,
-        llm: Any,
+        link: LlmLink,
         controller: Controller | None = None,
         use_vision: bool = False,
         system_prompt_class: type[SystemPrompt] | None = None,
@@ -24,38 +29,8 @@ class DefaultBrowserAgentFactory(BrowserAgentFactory):
         max_actions_per_step: int = 10,
         save_conversation_path: str | None = None,
     ):
-        """
-        Factory to construct configured browser-use Agent sessions.
-
-        Args:
-            llm (BaseChatModel):
-                The LangChain chat model used for reasoning, planning, and action selection.
-            controller (Optional[Controller], optional):
-                The custom tools registry. Registering custom Python functions here allows
-                the agent to run custom actions beyond standard browser interactions. Defaults to None.
-            use_vision (bool, optional):
-                Toggles screenshot processing. True allows the model to process images, which
-                improves accuracy on visual-heavy elements, but increases token costs and latency. Defaults to False.
-            system_prompt_class (Optional[Type[SystemPrompt]], optional):
-                Custom SystemPrompt template override, allowing custom guidelines, safety policies,
-                or output restrictions. Defaults to None.
-            include_attributes (Optional[List[str]], optional):
-                List of DOM node attributes serialized and sent to the LLM (e.g. data-testid for tests).
-                Defaults to None.
-            max_failures (int, optional):
-                Maximum consecutive action failures (e.g., element not found, parse errors) tolerated
-                before the agent stops execution. Defaults to 5.
-            retry_delay (int, optional):
-                Delay in seconds between retrying a failed step. Defaults to 10.
-            generate_gif (Union[bool, str, Path], optional):
-                Whether to capture screenshots and generate a GIF recording, or path to destination GIF file. Defaults to False.
-            max_actions_per_step (int, optional):
-                Maximum actions the agent can output in a single model turn. Lower numbers reduce cascades
-                of wrong actions. Defaults to 10.
-            save_conversation_path (Optional[str], optional):
-                Path to output a JSON formatted file containing the complete history/run trace. Defaults to None.
-        """
-        self.llm = llm
+        """Factory to construct configured browser-use Agent sessions from an LlmLink."""
+        self.link = link
         self.controller = controller or Controller()
         self.use_vision = use_vision
         self.system_prompt_class = system_prompt_class
@@ -72,9 +47,10 @@ class DefaultBrowserAgentFactory(BrowserAgentFactory):
         self.save_conversation_path = save_conversation_path
 
     def create_agent(self, task: str, browser: Browser) -> Agent:
+        llm = BrowserUseAdapterRegistry.to_chat_model(self.link)
         kwargs = {
             "task": task,
-            "llm": self.llm,
+            "llm": llm,
             "browser": browser,
             "controller": self.controller,
             "use_vision": self.use_vision,
@@ -93,6 +69,4 @@ class DefaultBrowserAgentFactory(BrowserAgentFactory):
         return Agent(**kwargs)  # type: ignore[arg-type]
 
     def get_llm_metadata(self) -> tuple[str, str]:
-        provider = self.llm.__class__.__name__
-        model = getattr(self.llm, "model_name", getattr(self.llm, "model", "unknown"))
-        return provider, model
+        return self.link.provider, self.link.model

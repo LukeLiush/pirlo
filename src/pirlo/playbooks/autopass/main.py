@@ -19,7 +19,6 @@ from pirlo.infrastructure.adapters.cli.terminal_pitch import TerminalPitch
 from pirlo.infrastructure.repository.json_file_workflow_repository import (
     JsonFileWorkflowRepository,
 )
-from pirlo.infrastructure.services.llm_client import LlmClient
 from pirlo.infrastructure.services.llm_workflow import LlmWorkflowRunner
 from pirlo.infrastructure.services.playwright_workflow import PlaywrightReplayRunner
 from pirlo.infrastructure.services.profile_manager import ProfileManager
@@ -223,16 +222,12 @@ class AutopassSession(TerminalPitch):
             ],
         )
 
-        playmaker_llm = (
-            LlmClient.create_browser_use_llm(playmaker) if playmaker else None
-        )
-
         workflows_dir = get_workspace_path() / ".pirlo" / "workflows"
         workflow_repo = JsonFileWorkflowRepository(workflows_dir)
         browser_config = BrowserConfig(cdp_url=CDP_URL, headless=headless)
 
         agent_factory = DefaultBrowserAgentFactory(
-            llm=playmaker_llm,
+            link=playmaker,
             use_vision=use_vision,
             max_failures=max_failures,
             retry_delay=retry_delay,
