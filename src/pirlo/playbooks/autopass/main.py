@@ -214,7 +214,11 @@ class AutopassSession(TerminalPitch):
                 ["Max Failures / Delay", f"{max_failures} / {retry_delay}s"],
                 [
                     "Orchestrator Backend",
-                    getattr(self.orchestrator, "name", str(self.orchestrator))
+                    getattr(
+                        self.orchestrator,
+                        "orchestrator_name",
+                        self.orchestrator.__class__.__name__,
+                    )
                     if self.orchestrator
                     else "prefect",
                 ],
