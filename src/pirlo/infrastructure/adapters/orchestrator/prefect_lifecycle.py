@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import asyncio
-import inspect
 import json
 import sqlite3
 from collections.abc import Awaitable, Callable
@@ -12,11 +11,13 @@ from typing import Any
 
 from prefect import flow, task
 
+from pirlo.core.models.link import LlmLink
 from pirlo.core.models.plan import DecomposerPlan
 from pirlo.core.models.run import Run, RunStatus
 from pirlo.infrastructure.adapters.db.sqlite_run_history_repository import (
     SqliteRunHistoryRepository,
 )
+from pirlo.infrastructure.services.llm_client import LlmClient
 
 
 def _connect(workspace: Path) -> sqlite3.Connection:
@@ -70,7 +71,7 @@ async def aggregate_subtask_results_task(
     original_prompt: str,
     aggregation_instruction: str,
     subtask_results: list[dict[str, Any]],
-    llm: Any,
+    link: LlmLink | None = None,
 ) -> str:
     prompt = (
         f"Original User Request: {original_prompt}\n\n"
@@ -78,23 +79,14 @@ async def aggregate_subtask_results_task(
         f"Subtask Results Data: {json.dumps(subtask_results, indent=2)}\n\n"
         f"Please combine and summarize these results according to the aggregation instructions."
     )
-    if llm and hasattr(llm, "ainvoke"):
-        res = await llm.ainvoke(prompt)
-        if hasattr(res, "content"):
-            return str(res.content)
-        return str(res)
-    if llm and hasattr(llm, "invoke"):
-        res = llm.invoke(prompt)
-        if hasattr(res, "content"):
-            return str(res.content)
-        if inspect.isawaitable(res):
-            res = await res
-        return str(res)
-    if callable(llm):
-        res_callable = llm(prompt)
-        if inspect.isawaitable(res_callable):
-            res_callable = await res_callable
-        return str(res_callable)
+    if link:
+        return await LlmClient.acompletion(
+            link=link,
+            prompt=prompt,
+            temperature=0.0,
+            timeout=120.0,
+        )
+
     return f"Aggregator unable to process prompt: {prompt}"
 
 
@@ -102,7 +94,7 @@ async def aggregate_subtask_results_task(
 async def pirlo_decomposed_flow(
     plan: DecomposerPlan,
     worker_fn: Callable[..., Awaitable[Any]] | Callable[..., Any],
-    llm: Any = None,
+    link: LlmLink | None = None,
     workspace: Path | None = None,
     playbook: str | None = None,
     run_name: str | None = None,
@@ -141,7 +133,7 @@ async def pirlo_decomposed_flow(
             original_prompt=plan.original_prompt,
             aggregation_instruction=plan.aggregation_prompt,
             subtask_results=formatted_results,
-            llm=llm,
+            link=link,
         )
         if workspace and playbook and run_id:
             await finalize_run_task(workspace, run_id, RunStatus.COMPLETED)

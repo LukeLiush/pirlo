@@ -5,7 +5,6 @@ from typing import Any
 
 import httpx
 import openai
-from langchain_core.language_models.chat_models import BaseChatModel
 from playwright.async_api import Locator, Page
 
 
@@ -26,12 +25,14 @@ from pirlo.core.models.actions import (
     ScrollAction,
     SendKeysAction,
 )
+from pirlo.core.models.link import LlmLink
 from pirlo.core.models.specifications import SafetyCandidate
 from pirlo.core.models.workflow import Workflow
 from pirlo.infrastructure.adapters.browser.locator_resolver import (
     ResilientLocatorResolver,
 )
 from pirlo.infrastructure.adapters.browser.page_waiter import ResilientPageWaiter
+from pirlo.infrastructure.services.llm_client import LlmClient
 
 logger = logging.getLogger("workflow_replay.playwright_adapter")
 
@@ -40,7 +41,7 @@ class PlaywrightAdapter:
     """Executes domain actions against a Playwright Page instance with resilience and safety checks."""
 
     page: Page
-    llm: BaseChatModel | None
+    link: LlmLink | None
     locator_resolver: ResilientLocatorResolver
     page_waiter: ResilientPageWaiter
     last_extraction_result: str | None
@@ -49,18 +50,24 @@ class PlaywrightAdapter:
     def __init__(
         self,
         page: Page,
-        llm: BaseChatModel | None = None,
+        link: LlmLink | None = None,
         locator_resolver: ResilientLocatorResolver | None = None,
         page_waiter: ResilientPageWaiter | None = None,
     ) -> None:
         self.page = page
-        self.llm = llm
+        self.link = link
         self.locator_resolver = locator_resolver or ResilientLocatorResolver(
             page, timeout_ms=3000
         )
         self.page_waiter = page_waiter or ResilientPageWaiter(page)
         self.last_extraction_result = None
         self.live_results = []
+
+    async def _invoke_llm_text(self, prompt: str) -> str:
+        """Safely invokes LiteLLM for text transformation/summarization."""
+        if self.link:
+            return await LlmClient.acompletion(link=self.link, prompt=prompt)
+        return ""
 
     async def execute_workflow(
         self,
@@ -230,9 +237,9 @@ class PlaywrightAdapter:
                 self.live_results.append(f"Sent keyboard keys '{keys}'.")
 
             case ExtractContentAction(include_links=_, goal=goal):
-                if not self.llm:
+                if not self.link:
                     raise RuntimeError(
-                        "LLM is required to execute ExtractContentAction."
+                        "LLM link is required to execute ExtractContentAction."
                     )
 
                 logger.info("Executing LLM Data Extraction on live page content...")
@@ -248,10 +255,8 @@ class PlaywrightAdapter:
                     f"Page Content:\n{page_text}"
                 )
                 prompt_bytes = len(prompt.encode("utf-8"))
-
                 try:
-                    response = await self.llm.ainvoke(prompt)
-                    self.last_extraction_result = str(response.content)
+                    self.last_extraction_result = await self._invoke_llm_text(prompt)
                     logger.info(
                         f"LLM Data Extraction completed: {self.last_extraction_result}"
                     )
@@ -268,7 +273,7 @@ class PlaywrightAdapter:
                     raise
 
             case DoneAction(text=text, goal=goal):
-                if self.llm and goal:
+                if self.link and goal:
                     logger.info("Synthesizing final workflow result via LLM...")
                     # 1. Wait for page text content to settle (e.g. streaming responses)
                     await self.page_waiter.wait_for_text_settled()
@@ -285,8 +290,7 @@ class PlaywrightAdapter:
                     prompt_bytes = len(prompt.encode("utf-8"))
 
                     try:
-                        response = await self.llm.ainvoke(prompt)
-                        action.text = str(response.content)
+                        action.text = await self._invoke_llm_text(prompt)
                     except Exception as e:
                         if is_timeout_exception(e):
                             raise RuntimeError(

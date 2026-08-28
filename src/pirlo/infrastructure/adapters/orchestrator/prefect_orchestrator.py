@@ -6,9 +6,6 @@ from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Annotated, Any
 
-from langchain_core.language_models.chat_models import (
-    BaseChatModel as LangChainBaseChatModel,
-)
 from prefect.settings import temporary_settings
 
 from pirlo.core.config import get_workspace_path
@@ -34,7 +31,6 @@ from pirlo.infrastructure.repository.json_file_plan_repository import (
 )
 from pirlo.infrastructure.services.decomposed_workflow import DecomposedWorkflowRunner
 from pirlo.infrastructure.services.log_streamer import capture_run_logs
-from pirlo.playbooks.autopass.adapters.llm_factory import LlmFactory
 
 
 @orchestrator(
@@ -152,7 +148,7 @@ class SmartPrefectTaskOrchestrator(TaskOrchestrator):
             plan_repository=JsonFilePlanRepository(workspace / "plans"),
             decomposer=self._build_decomposer(),
             subtask_runner_fn=worker_fn,
-            aggregator_llm=self._build_aggregator_llm(),
+            aggregator_link=self._get_resolved_link(),
             workspace=workspace,
             playbook=prepared_run.playbook_name,
         )
@@ -198,12 +194,6 @@ class SmartPrefectTaskOrchestrator(TaskOrchestrator):
             model_name=link.model,
             api_key=link.api_key,
             base_url=link.base_url,
-        )
-
-    def _build_aggregator_llm(self) -> LangChainBaseChatModel | None:
-        link = self._get_resolved_link()
-        return LlmFactory.create_langchain_llm(
-            link=link, temperature=0.0, timeout=120.0
         )
 
     # ---- scheduled deployment ------------------------------------------

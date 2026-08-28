@@ -440,7 +440,7 @@ class TestRunHistoryAndMVC(unittest.TestCase):
 
             runner = PlaywrightReplayRunner(
                 repository=repo,
-                llm=None,
+                link=None,
                 browser_config=BrowserConfig(cdp_url=None),
             )
 

@@ -8,7 +8,7 @@ SUPPORTED_PROVIDERS: dict[str, dict[str, Any]] = {
     },
     "gemini": {
         "env_names": ["GEMINI_API_KEY", "GOOGLE_API_KEY"],
-        "default_base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
+        "default_base_url": None,
     },
     "openai": {
         "env_names": ["OPENAI_API_KEY"],

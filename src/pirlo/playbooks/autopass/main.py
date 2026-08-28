@@ -19,13 +19,13 @@ from pirlo.infrastructure.adapters.cli.terminal_pitch import TerminalPitch
 from pirlo.infrastructure.repository.json_file_workflow_repository import (
     JsonFileWorkflowRepository,
 )
+from pirlo.infrastructure.services.llm_client import LlmClient
 from pirlo.infrastructure.services.llm_workflow import LlmWorkflowRunner
 from pirlo.infrastructure.services.playwright_workflow import PlaywrightReplayRunner
 from pirlo.infrastructure.services.profile_manager import ProfileManager
 from pirlo.infrastructure.services.self_healing_workflow import SelfHealingRunner
 from pirlo.playbooks.autopass.adapters.browser_manager import CloakBrowserManager
 from pirlo.playbooks.autopass.adapters.cdp_checker import HttpCdpConnectionChecker
-from pirlo.playbooks.autopass.adapters.llm_factory import LlmFactory
 from pirlo.playbooks.autopass.core.ports import (
     BrowserManager,
     CdpChecker,
@@ -223,8 +223,9 @@ class AutopassSession(TerminalPitch):
             ],
         )
 
-        playmaker_llm = LlmFactory.create_langchain_llm(playmaker)
-        analyst_llm = LlmFactory.create_langchain_llm(analyst)
+        playmaker_llm = (
+            LlmClient.create_browser_use_llm(playmaker) if playmaker else None
+        )
 
         workflows_dir = get_workspace_path() / ".pirlo" / "workflows"
         workflow_repo = JsonFileWorkflowRepository(workflows_dir)
@@ -245,7 +246,7 @@ class AutopassSession(TerminalPitch):
 
         replay_runner = PlaywrightReplayRunner(
             repository=workflow_repo,
-            llm=analyst_llm,
+            link=analyst,
             browser_config=browser_config,
         )
 

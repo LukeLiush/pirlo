@@ -1,6 +1,5 @@
 import logging
 
-from langchain_core.language_models.chat_models import BaseChatModel
 from playwright.async_api import Browser as PlaywrightBrowser
 from playwright.async_api import BrowserContext as PlaywrightContext
 from playwright.async_api import Page as PlaywrightPage
@@ -8,6 +7,7 @@ from playwright.async_api import async_playwright
 
 from pirlo.core.models.actions import Action, DoneAction
 from pirlo.core.models.browser_config import BrowserConfig
+from pirlo.core.models.link import LlmLink
 from pirlo.core.models.workflow import Workflow
 from pirlo.core.repository.run_history_repository import RunHistoryRepository
 from pirlo.core.repository.workflow_repository import WorkflowRepository
@@ -21,20 +21,20 @@ class PlaywrightReplayRunner(WorkflowRunner):
     """Executes a cached domain Workflow sequence deterministically using standard Playwright."""
 
     repository: WorkflowRepository
-    llm: BaseChatModel | None
+    link: LlmLink | None
     browser_config: BrowserConfig
     run_history_repository: RunHistoryRepository | None
 
     def __init__(
         self,
         repository: WorkflowRepository,
-        llm: BaseChatModel | None,
-        browser_config: BrowserConfig,
+        link: LlmLink | None = None,
+        browser_config: BrowserConfig | None = None,
         run_history_repository: RunHistoryRepository | None = None,
     ) -> None:
         self.repository = repository
-        self.llm = llm
-        self.browser_config = browser_config
+        self.link = link
+        self.browser_config = browser_config or BrowserConfig()
         self.run_history_repository = run_history_repository
 
     async def run(
@@ -96,7 +96,7 @@ class PlaywrightReplayRunner(WorkflowRunner):
                 context = await browser.new_context()
                 page = await context.new_page()
 
-            adapter: PlaywrightAdapter = PlaywrightAdapter(page, self.llm)
+            adapter: PlaywrightAdapter = PlaywrightAdapter(page, self.link)
             # Execute workflow with safety verifications
             await adapter.execute_workflow(workflow, on_step_update=on_step_update)
 

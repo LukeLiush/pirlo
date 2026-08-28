@@ -1,23 +1,23 @@
 from pirlo.core.models.link import LinkTestResult, LlmLink
-from pirlo.playbooks.autopass.adapters.llm_factory import LlmFactory
+from pirlo.infrastructure.services.llm_client import LlmClient
 
 
 class LinkTester:
     @staticmethod
     def test_link(link: LlmLink) -> LinkTestResult:
-        """Tests the connectivity of a link by sending a minimal token call."""
+        """Tests provider support, credentials, and connectivity of a link via LiteLLM."""
         try:
-            llm = LlmFactory.create_langchain_llm(
+            response = LlmClient.completion(
                 link=link,
+                prompt="respond with 'OK'",
                 temperature=0.0,
+                max_tokens=100,
                 timeout=10.0,
             )
-            # Try to invoke a simple message call
-            if llm:
-                llm.invoke("respond with 'OK'")
+            if response:
                 return LinkTestResult(success=True, message="Connection successful!")
             return LinkTestResult(
-                success=False, message="Could not create LLM instance."
+                success=False, message="No response received from LLM provider."
             )
         except Exception as e:  # noqa: BLE001
             return LinkTestResult(success=False, message=f"Connection failed: {e!s}")

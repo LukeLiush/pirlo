@@ -1,8 +1,10 @@
 import tempfile
 from pathlib import Path
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from pirlo.core.models.link import LlmLink
 from pirlo.core.models.plan import DecomposerPlan, SubtaskSpec
 from pirlo.core.ports.decomposer import DecomposerPort
 from pirlo.infrastructure.repository.json_file_plan_repository import (
@@ -79,33 +81,40 @@ class DummyDecomposer(DecomposerPort):
 async def test_decomposed_runner_cache_hit_and_miss():
     from prefect.testing.utilities import prefect_test_harness
 
-    with prefect_test_harness():
-        with tempfile.TemporaryDirectory() as tmpdir:
-            repo = JsonFilePlanRepository(directory=Path(tmpdir))
+    with prefect_test_harness(), tempfile.TemporaryDirectory() as tmpdir:
+        repo = JsonFilePlanRepository(directory=Path(tmpdir))
         decomposer = DummyDecomposer()
 
         async def dummy_worker(task_prompt: str, site: str) -> str:
             return f"Result for {site}: {task_prompt}"
 
-        async def dummy_aggregator(prompt: str) -> str:
-            return "Aggregated Report"
+        link = LlmLink(
+            name="test-link",
+            provider="gemini",
+            model="gemini-1.5-flash",
+            api_key="key",
+        )
 
         runner = DecomposedWorkflowRunner(
             plan_repository=repo,
             decomposer=decomposer,
             subtask_runner_fn=dummy_worker,
-            aggregator_llm=dummy_aggregator,
+            aggregator_link=link,
         )
 
         prompt = "Compare prices across sites"
 
-        # 1. First run: Cache MISS -> calls decomposer
-        result1 = await runner.run(prompt)
-        assert "Aggregated Report" in result1
-        assert decomposer.call_count == 1
-        assert repo.exists(prompt)
+        with patch(
+            "pirlo.infrastructure.services.llm_client.LlmClient.acompletion",
+            new=AsyncMock(return_value="Aggregated Report"),
+        ):
+            # 1. First run: Cache MISS -> calls decomposer
+            result1 = await runner.run(prompt)
+            assert "Aggregated Report" in result1
+            assert decomposer.call_count == 1
+            assert repo.exists(prompt)
 
-        # 2. Second run: Cache HIT -> does NOT call decomposer
-        result2 = await runner.run(prompt)
-        assert "Aggregated Report" in result2
-        assert decomposer.call_count == 1  # Still 1 because loaded from cache!
+            # 2. Second run: Cache HIT -> does NOT call decomposer
+            result2 = await runner.run(prompt)
+            assert "Aggregated Report" in result2
+            assert decomposer.call_count == 1  # Still 1 because loaded from cache!

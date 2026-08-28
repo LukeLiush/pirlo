@@ -3,10 +3,7 @@ from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
 
-from langchain_core.language_models.chat_models import (
-    BaseChatModel as LangChainBaseChatModel,
-)
-
+from pirlo.core.models.link import LlmLink
 from pirlo.core.ports.decomposer import DecomposerPort
 from pirlo.core.repository.plan_repository import PlanRepository
 from pirlo.core.services import WorkflowRunner
@@ -25,14 +22,14 @@ class DecomposedWorkflowRunner(WorkflowRunner):
         plan_repository: PlanRepository,
         decomposer: DecomposerPort,
         subtask_runner_fn: Callable[..., Awaitable[Any]] | Callable[..., Any],
-        aggregator_llm: LangChainBaseChatModel | None,
+        aggregator_link: LlmLink | None = None,
         workspace: Path | str | None = None,
         playbook: str | None = None,
     ) -> None:
         self.plan_repository = plan_repository
         self.decomposer = decomposer
         self.subtask_runner_fn = subtask_runner_fn
-        self.aggregator_llm = aggregator_llm
+        self.aggregator_link = aggregator_link
         self.workspace: Path | None = (
             Path(workspace) if isinstance(workspace, str) else workspace
         )
@@ -91,7 +88,7 @@ class DecomposedWorkflowRunner(WorkflowRunner):
             return await pirlo_decomposed_flow(
                 plan=plan,
                 worker_fn=self.subtask_runner_fn,
-                llm=self.aggregator_llm,
+                link=self.aggregator_link,
                 workspace=self.workspace,
                 playbook=self.playbook,
                 run_name=cache_key,
