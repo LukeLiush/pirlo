@@ -10,7 +10,7 @@ from cloakbrowser import launch_persistent_context_async
 from pirlo.playbooks.autopass.core.ports import BrowserManager as BaseBrowserManager
 
 
-class BrowserManager(BaseBrowserManager):
+class CloakBrowserManager(BaseBrowserManager):
     """Unified manager for persistent browser process and Playwright page lifecycles."""
 
     def __init__(
@@ -22,7 +22,7 @@ class BrowserManager(BaseBrowserManager):
         self._ctx: Any = None
 
     @asynccontextmanager
-    async def session(self) -> AsyncIterator[BrowserManager]:
+    async def session(self) -> AsyncIterator[CloakBrowserManager]:
         """Launches the persistent CloakBrowser context on enter, and closes it on exit."""
         self._ctx = await launch_persistent_context_async(
             str(self.profile_path),
@@ -49,7 +49,3 @@ class BrowserManager(BaseBrowserManager):
             yield page
         finally:
             await page.close()
-
-
-# Backward compatibility alias
-CloakBrowserManager = BrowserManager

@@ -20,22 +20,22 @@ class RunAutopassUseCase:
     """Application Service (Use Case) coordinating workflow execution on active browser pages."""
 
     def __init__(
-            self,
-            workflow_runner: WorkflowRunner,
-            browser_manager: BrowserManager | None = None,
-            cdp_checker: CdpChecker | None = None,
+        self,
+        workflow_runner: WorkflowRunner,
+        browser_manager: BrowserManager | None = None,
+        cdp_checker: CdpChecker | None = None,
     ):
         self.workflow_runner = workflow_runner
         self._browser_manager = browser_manager
         self.cdp_checker = cdp_checker
 
     async def run(
-            self,
-            task_prompt: str,
-            listener: ProgressListener,
-            browser_manager: BrowserManager | None = None,
-            run_name: str | None = None,
-            run_id: str | None = None,
+        self,
+        task_prompt: str,
+        listener: ProgressListener,
+        browser_manager: BrowserManager | None = None,
+        run_name: str | None = None,
+        run_id: str | None = None,
     ) -> Any:
         mgr = browser_manager or self._browser_manager
         if not mgr:

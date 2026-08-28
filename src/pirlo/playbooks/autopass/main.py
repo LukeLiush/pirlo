@@ -26,7 +26,7 @@ from pirlo.infrastructure.services.llm_workflow import LlmWorkflowRunner
 from pirlo.infrastructure.services.playwright_workflow import PlaywrightReplayRunner
 from pirlo.infrastructure.services.profile_manager import ProfileManager
 from pirlo.infrastructure.services.self_healing_workflow import SelfHealingRunner
-from pirlo.playbooks.autopass.adapters.browser_manager import BrowserManager
+from pirlo.playbooks.autopass.adapters.browser_manager import CloakBrowserManager
 from pirlo.playbooks.autopass.core.ports import ProgressListener
 from pirlo.playbooks.autopass.core.use_cases import RunAutopassUseCase
 
@@ -255,7 +255,7 @@ class AutopassSession(TerminalPitch):
             repository=workflow_repo,
         )
 
-        browser_manager: BrowserManager = BrowserManager(
+        browser_manager: CloakBrowserManager = CloakBrowserManager(
             profile_path=profile_path,
             headless=headless,
             cdp_port=CDP_PORT,
