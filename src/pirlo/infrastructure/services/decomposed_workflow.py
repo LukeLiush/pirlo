@@ -1,5 +1,11 @@
 import logging
+from collections.abc import Awaitable, Callable
+from pathlib import Path
 from typing import Any
+
+from langchain_core.language_models.chat_models import (
+    BaseChatModel as LangChainBaseChatModel,
+)
 
 from pirlo.core.ports.decomposer import DecomposerPort
 from pirlo.core.repository.plan_repository import PlanRepository
@@ -18,16 +24,18 @@ class DecomposedWorkflowRunner(WorkflowRunner):
         self,
         plan_repository: PlanRepository,
         decomposer: DecomposerPort,
-        subtask_runner_fn: Any,
-        aggregator_llm: Any,
-        workspace: Any = None,
+        subtask_runner_fn: Callable[..., Awaitable[Any]] | Callable[..., Any],
+        aggregator_llm: LangChainBaseChatModel | None,
+        workspace: Path | str | None = None,
         playbook: str | None = None,
     ) -> None:
         self.plan_repository = plan_repository
         self.decomposer = decomposer
         self.subtask_runner_fn = subtask_runner_fn
         self.aggregator_llm = aggregator_llm
-        self.workspace = workspace
+        self.workspace: Path | None = (
+            Path(workspace) if isinstance(workspace, str) else workspace
+        )
         self.playbook = playbook
 
     async def run(
@@ -45,7 +53,7 @@ class DecomposedWorkflowRunner(WorkflowRunner):
                     f"Plan Cache HIT for '{task_prompt}' [plan_id={plan_id}]. Bypassing Decomposer Agent..."
                 )
                 plan = self.plan_repository.load(plan_id)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 logger.warning(
                     f"Failed to load cached plan '{plan_id}': {e}. Re-running Decomposer Agent..."
                 )

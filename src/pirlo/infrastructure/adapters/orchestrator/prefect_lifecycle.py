@@ -72,37 +72,37 @@ async def aggregate_subtask_results_task(
     subtask_results: list[dict[str, Any]],
     llm: Any,
 ) -> str:
-    """Synthesizes multi-source subtask results into a final Markdown report."""
-    prompt = f"""\
-You are Pirlo's Result Synthesis Engine. Synthesize the collected multi-source web data to directly answer the user's request.
-
-### 🎯 Original User Request:
-{original_prompt}
-
-### 📋 Synthesis Guidelines:
-{aggregation_instruction}
-
-### 📊 Collected Multi-Source Data:
-{json.dumps(subtask_results, indent=2, ensure_ascii=False)}
-
-Synthesize the data into a clean, domain-tailored Markdown report (tables, bullet points, source attributions).
-"""
-    if hasattr(llm, "ainvoke"):
-        response = await llm.ainvoke(prompt)
-        return str(getattr(response, "content", response))
-    if callable(llm):
-        res = llm(prompt)
+    prompt = (
+        f"Original User Request: {original_prompt}\n\n"
+        f"Aggregation Instructions: {aggregation_instruction}\n\n"
+        f"Subtask Results Data: {json.dumps(subtask_results, indent=2)}\n\n"
+        f"Please combine and summarize these results according to the aggregation instructions."
+    )
+    if llm and hasattr(llm, "ainvoke"):
+        res = await llm.ainvoke(prompt)
+        if hasattr(res, "content"):
+            return str(res.content)
+        return str(res)
+    if llm and hasattr(llm, "invoke"):
+        res = llm.invoke(prompt)
+        if hasattr(res, "content"):
+            return str(res.content)
         if inspect.isawaitable(res):
             res = await res
         return str(res)
+    if callable(llm):
+        res_callable = llm(prompt)
+        if inspect.isawaitable(res_callable):
+            res_callable = await res_callable
+        return str(res_callable)
     return f"Aggregator unable to process prompt: {prompt}"
 
 
 @flow(name="Pirlo Decomposed Multi-Target Flow")
 async def pirlo_decomposed_flow(
     plan: DecomposerPlan,
-    worker_fn: Callable[..., Awaitable[str]],
-    llm: Any,
+    worker_fn: Callable[..., Awaitable[Any]] | Callable[..., Any],
+    llm: Any = None,
     workspace: Path | None = None,
     playbook: str | None = None,
     run_name: str | None = None,

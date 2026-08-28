@@ -1,12 +1,14 @@
-# pirlo/infrastructure/adapters/orchestrator/prefect_orchestrator.py
 from __future__ import annotations
 
 import contextlib
 import os
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Annotated, Any
 
+from langchain_core.language_models.chat_models import (
+    BaseChatModel as LangChainBaseChatModel,
+)
 from prefect.settings import temporary_settings
 
 from pirlo.core.config import get_workspace_path
@@ -56,7 +58,7 @@ class SmartPrefectTaskOrchestrator(TaskOrchestrator):
     async def execute(
         self,
         prepared_run: PreparedRun,
-        worker_fn: Any,
+        worker_fn: Callable[..., Awaitable[Any]] | Callable[..., Any],
         task: Annotated[str, Parameter(help="Task prompt to execute")] = "",
         schedule: Annotated[
             str | None, Parameter(help="Schedule preset or cron string", short="-s")
@@ -93,10 +95,10 @@ class SmartPrefectTaskOrchestrator(TaskOrchestrator):
         if decomposer_link is not None:
             self.decomposer_link = decomposer_link
 
-        task_str = task or prepared_run.parameters.get("task", "")
-        schedule_str = schedule or prepared_run.parameters.get("schedule")
+        task_str: str = task or str(prepared_run.parameters.get("task", ""))
+        schedule_str: str | None = schedule or prepared_run.parameters.get("schedule")
 
-        settings = PrefectServerSettings.resolve(self.server_url)
+        settings: PrefectServerSettings = PrefectServerSettings.resolve(self.server_url)
 
         with capture_run_logs(
             prepared_run.run_dir, get_prefix_fn=self._prefix_fn(prepared_run)
@@ -122,27 +124,30 @@ class SmartPrefectTaskOrchestrator(TaskOrchestrator):
         self,
         task: str,
         prepared_run: PreparedRun,
-        worker_fn: Any,
+        worker_fn: Callable[..., Awaitable[Any]] | Callable[..., Any],
         settings: PrefectServerSettings,
-    ) -> Any:
+    ) -> str:
         if settings.is_server_mode:
             print(f"🌐 Prefect Server Detected: {settings.web_ui_base}")
         else:
             print("⚡ Running in Prefect Ephemeral Mode (In-Process)")
 
-        runner = self._build_runner(worker_fn, prepared_run)
+        runner: DecomposedWorkflowRunner = self._build_runner(worker_fn, prepared_run)
 
         with temporary_settings(settings.overrides):
-            return await runner.run(
+            res: str = await runner.run(
                 task_prompt=task,
                 cache_key=prepared_run.run_name,
                 run_id=prepared_run.run_id,
             )
+            return res
 
     def _build_runner(
-        self, worker_fn: Any, prepared_run: PreparedRun
+        self,
+        worker_fn: Callable[..., Awaitable[Any]] | Callable[..., Any],
+        prepared_run: PreparedRun,
     ) -> DecomposedWorkflowRunner:
-        workspace = get_workspace_path()
+        workspace: Path = get_workspace_path()
         return DecomposedWorkflowRunner(
             plan_repository=JsonFilePlanRepository(workspace / "plans"),
             decomposer=self._build_decomposer(),
@@ -195,7 +200,7 @@ class SmartPrefectTaskOrchestrator(TaskOrchestrator):
             base_url=link.base_url,
         )
 
-    def _build_aggregator_llm(self) -> Any:
+    def _build_aggregator_llm(self) -> LangChainBaseChatModel | None:
         link = self._get_resolved_link()
         return LlmFactory.create_langchain_llm(
             link=link, temperature=0.0, timeout=120.0

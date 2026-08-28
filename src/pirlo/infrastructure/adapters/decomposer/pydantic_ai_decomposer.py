@@ -97,7 +97,9 @@ async def run_decomposer_pydantic_ai_task(
     elif isinstance(data, str):
         plan = DecomposerPlan.model_validate_json(data)
     else:
-        raise ValueError(f"Unexpected result from PydanticAI decomposer agent: {type(data or result)}")
+        raise TypeError(
+            f"Unexpected result from PydanticAI decomposer agent: {type(data or result)}"
+        )
 
     plan.plan_id = plan_id
     plan.original_prompt = user_prompt
