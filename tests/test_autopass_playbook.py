@@ -20,11 +20,11 @@ def test_quick_progress_listener_status_context():
 def test_slugify_task_prompt():
     assert (
         slugify("Go to google.com and search for OpenAI!")
-        == "go_to_googlecom_and_search_for_openai"
+        == "go_to_googlecom_and_search_for_open_931edcb9"
     )
     assert (
         slugify("   Navigate to github.com / trending   ")
-        == "navigate_to_githubcom_trending"
+        == "navigate_to_githubcom_trending_feb2e89f"
     )
 
 
@@ -62,4 +62,4 @@ async def test_run_autopass_use_case_cache_key():
         run_id="id123",
     )
 
-    assert res == "result_for_run123_search_openai_on_google"
+    assert res == "result_for_run123_search_openai_on_google_8b57355d"

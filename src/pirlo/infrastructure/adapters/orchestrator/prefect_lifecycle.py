@@ -111,18 +111,18 @@ async def pirlo_decomposed_flow(
     try:
         # 1. Dispatch subtasks concurrently
         subtask_futures = [
-            worker_fn(task_prompt=spec.task_prompt, site=spec.target_site)
-            for spec in plan.subtasks
+            worker_fn(task_prompt=subtask.task_prompt, site=subtask.target_site)
+            for subtask in plan.subtasks
         ]
         subtask_results = await asyncio.gather(*subtask_futures, return_exceptions=True)
 
         # 2. Format results for the aggregator
         formatted_results: list[dict[str, Any]] = []
-        for spec, subtask_result in zip(plan.subtasks, subtask_results):
+        for subtask, subtask_result in zip(plan.subtasks, subtask_results):
             if isinstance(subtask_result, Exception):
                 formatted_results.append(
                     {
-                        "site": spec.target_site,
+                        "site": subtask.target_site,
                         "status": "FAILED",
                         "error": str(subtask_result),
                     }
@@ -130,7 +130,7 @@ async def pirlo_decomposed_flow(
             else:
                 formatted_results.append(
                     {
-                        "site": spec.target_site,
+                        "site": subtask.target_site,
                         "status": "COMPLETED",
                         "data": str(subtask_result),
                     }

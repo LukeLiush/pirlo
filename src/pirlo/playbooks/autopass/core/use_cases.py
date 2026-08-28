@@ -1,3 +1,4 @@
+import hashlib
 import re
 from typing import Any
 
@@ -10,10 +11,12 @@ from pirlo.playbooks.autopass.core.ports import (
 
 
 def slugify(text: str) -> str:
-    """Converts a task prompt into a safe, normalized string identifier for cache keys."""
-    text = text.lower().strip()
-    text = re.sub(r"[^\w\s-]", "", text)
-    return re.sub(r"[\s_-]+", "_", text)[:50]
+    """Converts a task prompt into a safe, normalized, unique string identifier for cache keys."""
+    raw = text.lower().strip()
+    clean = re.sub(r"[^\w\s-]", "", raw)
+    normalized = re.sub(r"[\s_-]+", "_", clean)[:35]
+    prompt_hash = hashlib.md5(text.encode("utf-8")).hexdigest()[:8]
+    return f"{normalized}_{prompt_hash}" if normalized else prompt_hash
 
 
 class RunAutopassUseCase:
