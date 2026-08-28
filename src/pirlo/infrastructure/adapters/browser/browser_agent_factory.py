@@ -57,6 +57,7 @@ class DefaultBrowserAgentFactory(BrowserAgentFactory):
         kwargs: dict[str, Any] = {
             "task": task,
             "llm": llm,
+            "keep_alive": True,
             "controller": self.controller,
             "use_vision": self.use_vision,
             "max_failures": self.max_failures,

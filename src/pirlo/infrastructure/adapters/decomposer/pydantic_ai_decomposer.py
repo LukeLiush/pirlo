@@ -52,7 +52,7 @@ def get_decomposer_agent(
             os.environ["GOOGLE_API_KEY"] = os.environ["GEMINI_API_KEY"]
         model = model_name or "google-gla:gemini-1.5-flash"
 
-    agent: Agent[None, DecomposerPlan] = Agent(
+    agent: Agent[None, DecomposerPlan] = Agent[None, DecomposerPlan](
         model=model,
         output_type=DecomposerPlan,
         system_prompt=DECOMPOSER_SYSTEM_PROMPT,

@@ -6,8 +6,9 @@ import sys
 import time
 from datetime import UTC, datetime
 
-from browser_use import Agent, Browser
+from browser_use import Agent, BrowserSession
 from browser_use.agent.views import AgentHistoryList
+from browser_use.browser.events import SwitchTabEvent
 from playwright.async_api import Page as PlaywrightPage
 
 from pirlo.core.models.browser_config import BrowserConfig
@@ -95,32 +96,42 @@ class LlmWorkflowRunner(WorkflowRunner[PlaywrightPage]):
         context: ExecutionContext[PlaywrightPage] = DEFAULT_CONTEXT,
     ) -> str:
         page = context.page
+        if page is None:
+            raise ValueError(
+                "LlmWorkflowRunner requires an active page in the ExecutionContext"
+            )
+        if not self.browser_config.cdp_url:
+            raise ValueError(
+                "LlmWorkflowRunner requires a CDP URL in the BrowserConfig"
+            )
         cache_key = context.cache_key
         run_id = context.run_id
         workflow_id = cache_key or hashlib.sha256(task_prompt.encode()).hexdigest()[:16]
 
-        if page is not None:
-            agent: Agent = self.agent_factory.create_agent(task_prompt)
-            browser: Browser | None = None
-        else:
-            browser = Browser(
-                cdp_url=self.browser_config.cdp_url,
-                headless=self.browser_config.headless,
-            )
+        browser: BrowserSession = BrowserSession(
+            cdp_url=self.browser_config.cdp_url,
+            headless=self.browser_config.headless,
+        )
+        target_id: str = await self._target_id_for_page(page)
+        await browser.start()
+        started_dt = datetime.now(UTC)
+        try:
+            evt = browser.event_bus.dispatch(SwitchTabEvent(target_id=target_id))
+            await evt
+            await evt.event_result(raise_if_any=True, raise_if_none=False)
+
             agent = self.agent_factory.create_agent(task_prompt, browser=browser)
 
-        started_dt = datetime.now(UTC)
-        if run_id and self.run_history_repository:
-            self.run_history_repository.save_step(
-                run_id=run_id,
-                step_number=1,
-                action_type="llm_execution",
-                status="running",
-                goal=task_prompt,
-                started_at=started_dt,
-            )
+            if run_id and self.run_history_repository:
+                self.run_history_repository.save_step(
+                    run_id=run_id,
+                    step_number=1,
+                    action_type="llm_execution",
+                    status="running",
+                    goal=task_prompt,
+                    started_at=started_dt,
+                )
 
-        try:
             logger.info("Agent run started...")
             start_time = time.time()
             history: AgentHistoryList = await agent.run()
@@ -188,5 +199,12 @@ class LlmWorkflowRunner(WorkflowRunner[PlaywrightPage]):
                 )
             raise
         finally:
-            if browser is not None:
-                await browser.close()
+            await browser.stop()
+
+    async def _target_id_for_page(self, page: PlaywrightPage) -> str:
+        cdp = await page.context.new_cdp_session(page)
+        try:
+            info = await cdp.send("Target.getTargetInfo")
+            return info["targetInfo"]["targetId"]
+        finally:
+            await cdp.detach()
