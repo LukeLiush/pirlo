@@ -12,6 +12,7 @@ from pirlo.core.models.actions import (
 )
 from pirlo.core.models.browser_config import BrowserConfig
 from pirlo.core.models.exception import SafetyViolationException
+from pirlo.core.models.execution_context import ExecutionContext
 from pirlo.core.models.run import Run, RunCreateDTO, RunStatus
 from pirlo.core.models.specifications import (
     AndSpecification,
@@ -36,6 +37,7 @@ __all__ = [
     "ElementContext",
     "ElementMutationSpecification",
     "ElementTagMatchSpecification",
+    "ExecutionContext",
     "ExtractContentAction",
     "InputTextAction",
     "NavigateAction",

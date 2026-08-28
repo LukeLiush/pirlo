@@ -334,10 +334,12 @@ class TestRunHistoryAndMVC(unittest.TestCase):
 
         cache_dir = Path(tempfile.mkdtemp())
         try:
+            from pirlo.core.models.execution_context import ExecutionContext
+
             repo = JsonFileWorkflowRepository(directory=cache_dir)
             mock_replay = MagicMock()
             mock_replay.run = MagicMock(
-                side_effect=lambda task_prompt, cache_key, run_id: asyncio.sleep(
+                side_effect=lambda task_prompt, context=None: asyncio.sleep(
                     0, result="replay result"
                 )
             )
@@ -363,7 +365,10 @@ class TestRunHistoryAndMVC(unittest.TestCase):
             )
 
             result = asyncio.run(
-                runner.run(task_prompt="test prompt", cache_key=run_name, run_id=run_id)
+                runner.run(
+                    task_prompt="test prompt",
+                    context=ExecutionContext(cache_key=run_name, run_id=run_id),
+                )
             )
             self.assertEqual(result, "replay result")
             self.assertTrue(repo.exists(run_name))
@@ -417,6 +422,7 @@ class TestRunHistoryAndMVC(unittest.TestCase):
 
         from pirlo.core.models.actions import DoneAction, NavigateAction
         from pirlo.core.models.browser_config import BrowserConfig
+        from pirlo.core.models.execution_context import ExecutionContext
         from pirlo.core.models.workflow import Workflow
         from pirlo.infrastructure.repository import JsonFileWorkflowRepository
         from pirlo.infrastructure.services.playwright_workflow import (
@@ -462,7 +468,10 @@ class TestRunHistoryAndMVC(unittest.TestCase):
                 ):
                     asyncio.run(
                         runner.run(
-                            task_prompt="test", cache_key=cache_key, run_id=run_id
+                            task_prompt="test",
+                            context=ExecutionContext(
+                                cache_key=cache_key, run_id=run_id
+                            ),
                         )
                     )
 

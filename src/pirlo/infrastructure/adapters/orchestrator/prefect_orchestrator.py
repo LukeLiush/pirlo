@@ -10,6 +10,7 @@ from prefect.settings import temporary_settings
 
 from pirlo.core.config import get_workspace_path
 from pirlo.core.decorators import orchestrator
+from pirlo.core.models.execution_context import ExecutionContext
 from pirlo.core.models.link import LlmLink
 from pirlo.core.models.parameters import LinkParameter, Parameter
 from pirlo.core.models.run import PreparedRun
@@ -126,8 +127,10 @@ class SmartPrefectTaskOrchestrator(TaskOrchestrator):
         with temporary_settings(settings.overrides):
             res: str = await workflow_runner.run(
                 task_prompt=task,
-                cache_key=prepared_run.run_name,
-                run_id=prepared_run.run_id,
+                context=ExecutionContext(
+                    cache_key=prepared_run.run_name,
+                    run_id=prepared_run.run_id,
+                ),
             )
             return res
 

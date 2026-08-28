@@ -2,6 +2,7 @@ import hashlib
 import re
 from typing import Any
 
+from pirlo.core.models.execution_context import ExecutionContext
 from pirlo.core.services import WorkflowRunner
 from pirlo.playbooks.autopass.core.ports import (
     BrowserManager,
@@ -47,14 +48,17 @@ class RunAutopassUseCase:
         async with mgr.new_page() as page:
             slug_prompt = slugify(task_prompt)
             cache_key = f"{run_name}_{slug_prompt}" if run_name else slug_prompt
+            context = ExecutionContext(
+                page=page,
+                cache_key=cache_key,
+                run_id=run_id,
+            )
 
             try:
                 with listener.status_context("Executing autonomous autopass play..."):
                     result = await self.workflow_runner.run(
                         task_prompt=task_prompt,
-                        page=page,
-                        cache_key=cache_key,
-                        run_id=run_id,
+                        context=context,
                     )
 
                 listener.show_goal(

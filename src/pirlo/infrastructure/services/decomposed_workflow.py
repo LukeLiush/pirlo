@@ -3,6 +3,9 @@ from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
 
+from playwright.async_api import Page as PlaywrightPage
+
+from pirlo.core.models.execution_context import DEFAULT_CONTEXT, ExecutionContext
 from pirlo.core.models.link import LlmLink
 from pirlo.core.models.plan import DecomposerPlan
 from pirlo.core.ports.decomposer import DecomposerPort
@@ -15,7 +18,7 @@ from pirlo.infrastructure.adapters.orchestrator.prefect_lifecycle import (
 logger = logging.getLogger(__name__)
 
 
-class DecomposedWorkflowRunner(WorkflowRunner):
+class DecomposedWorkflowRunner(WorkflowRunner[PlaywrightPage]):
     """Orchestrates plan caching, task decomposition, parallel execution, and result aggregation."""
 
     def __init__(
@@ -68,10 +71,10 @@ class DecomposedWorkflowRunner(WorkflowRunner):
     async def run(
         self,
         task_prompt: str,
-        page: Any | None = None,
-        cache_key: str | None = None,
-        run_id: str | None = None,
+        context: ExecutionContext[PlaywrightPage] = DEFAULT_CONTEXT,
     ) -> str:
+        cache_key = context.cache_key
+        run_id = context.run_id
 
         # 1. Tier 1 Cache Check: Plan Repository
         plan_id: str = cache_key or task_prompt

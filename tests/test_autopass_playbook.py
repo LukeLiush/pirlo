@@ -44,8 +44,8 @@ async def test_run_autopass_use_case_cache_key():
 
     mock_runner = MagicMock()
     mock_runner.run = AsyncMock(
-        side_effect=lambda task_prompt, page, cache_key, run_id: (
-            f"result_for_{cache_key}"
+        side_effect=lambda task_prompt, context=None: (
+            f"result_for_{context.cache_key}" if context else "result"
         )
     )
 

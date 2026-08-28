@@ -1,24 +1,26 @@
 import logging
-from typing import Any
 
+from playwright.async_api import Page as PlaywrightPage
+
+from pirlo.core.models.execution_context import DEFAULT_CONTEXT, ExecutionContext
 from pirlo.core.repository.workflow_repository import WorkflowRepository
 from pirlo.core.services.workflow_runner import WorkflowRunner
 
 logger = logging.getLogger(__name__)
 
 
-class SelfHealingRunner(WorkflowRunner):
+class SelfHealingRunner(WorkflowRunner[PlaywrightPage]):
     """Composite/Orchestrator runner that coordinates cached replay and LLM fallback execution."""
 
-    replay_runner: WorkflowRunner
-    fallback_runner: WorkflowRunner
+    replay_runner: WorkflowRunner[PlaywrightPage]
+    fallback_runner: WorkflowRunner[PlaywrightPage]
     repository: WorkflowRepository
     cdp_url: str
 
     def __init__(
         self,
-        replay_runner: WorkflowRunner,
-        fallback_runner: WorkflowRunner,
+        replay_runner: WorkflowRunner[PlaywrightPage],
+        fallback_runner: WorkflowRunner[PlaywrightPage],
         repository: WorkflowRepository,
         cdp_url: str = "http://localhost:9222",
     ) -> None:
@@ -30,18 +32,10 @@ class SelfHealingRunner(WorkflowRunner):
     async def run(
         self,
         task_prompt: str,
-        page: Any | None = None,
-        cache_key: str | None = None,
-        run_id: str | None = None,
+        context: ExecutionContext[PlaywrightPage] = DEFAULT_CONTEXT,
     ) -> str:
-
-        kwargs: dict[str, Any] = {
-            "task_prompt": task_prompt,
-            "cache_key": cache_key,
-            "run_id": run_id,
-        }
-        if page is not None:
-            kwargs["page"] = page
+        page = context.page
+        cache_key = context.cache_key
 
         # 1. Attempt cached deterministic replay if present
         if cache_key and self.repository.exists(cache_key):
@@ -49,7 +43,7 @@ class SelfHealingRunner(WorkflowRunner):
                 f"Cached workflow '{cache_key}' found. Initiating deterministic replay..."
             )
             try:
-                result: str = await self.replay_runner.run(**kwargs)
+                result: str = await self.replay_runner.run(task_prompt, context=context)
                 logger.info("Deterministic replay completed successfully.")
                 return result
             except Exception as e:
@@ -76,7 +70,7 @@ class SelfHealingRunner(WorkflowRunner):
             )
 
         # 2. Execute fallback runner (runs browser-use agent and updates the repository cache)
-        return await self.fallback_runner.run(**kwargs)
+        return await self.fallback_runner.run(task_prompt, context=context)
 
     @staticmethod
     async def _reset_browser_session(cdp_url: str = "http://localhost:9222") -> None:

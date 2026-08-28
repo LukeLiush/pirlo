@@ -1,5 +1,4 @@
 import logging
-from typing import Any
 
 from playwright.async_api import Browser as PlaywrightBrowser
 from playwright.async_api import BrowserContext as PlaywrightContext
@@ -8,6 +7,7 @@ from playwright.async_api import async_playwright
 
 from pirlo.core.models.actions import Action, DoneAction
 from pirlo.core.models.browser_config import BrowserConfig
+from pirlo.core.models.execution_context import DEFAULT_CONTEXT, ExecutionContext
 from pirlo.core.models.link import LlmLink
 from pirlo.core.models.workflow import Workflow
 from pirlo.core.repository.run_history_repository import RunHistoryRepository
@@ -18,7 +18,7 @@ from pirlo.infrastructure.adapters.browser.playwright_adapter import PlaywrightA
 logger = logging.getLogger(__name__)
 
 
-class PlaywrightReplayRunner(WorkflowRunner):
+class PlaywrightReplayRunner(WorkflowRunner[PlaywrightPage]):
     """Executes a cached domain Workflow sequence deterministically using standard Playwright."""
 
     repository: WorkflowRepository
@@ -41,10 +41,11 @@ class PlaywrightReplayRunner(WorkflowRunner):
     async def run(
         self,
         task_prompt: str,
-        page: Any | None = None,
-        cache_key: str | None = None,
-        run_id: str | None = None,
+        context: ExecutionContext[PlaywrightPage] = DEFAULT_CONTEXT,
     ) -> str:
+        page = context.page
+        cache_key = context.cache_key
+        run_id = context.run_id
         workflow_id = cache_key
 
         # Load from repository boundary
@@ -93,16 +94,18 @@ class PlaywrightReplayRunner(WorkflowRunner):
                     browser: PlaywrightBrowser = await p.chromium.connect_over_cdp(
                         self.browser_config.cdp_url
                     )
-                    context: PlaywrightContext = browser.contexts[0]
+                    pw_context: PlaywrightContext = browser.contexts[0]
                     target_page: PlaywrightPage = (
-                        context.pages[0] if context.pages else await context.new_page()
+                        pw_context.pages[0]
+                        if pw_context.pages
+                        else await pw_context.new_page()
                     )
                 else:
                     browser = await p.chromium.launch(
                         headless=self.browser_config.headless
                     )
-                    context = await browser.new_context()
-                    target_page = await context.new_page()
+                    pw_context = await browser.new_context()
+                    target_page = await pw_context.new_page()
 
                 adapter = PlaywrightAdapter(target_page, self.link)
                 await adapter.execute_workflow(workflow, on_step_update=on_step_update)

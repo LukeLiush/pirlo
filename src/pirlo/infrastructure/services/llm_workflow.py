@@ -5,12 +5,13 @@ import subprocess
 import sys
 import time
 from datetime import UTC, datetime
-from typing import Any
 
 from browser_use import Agent, Browser
 from browser_use.agent.views import AgentHistoryList
+from playwright.async_api import Page as PlaywrightPage
 
 from pirlo.core.models.browser_config import BrowserConfig
+from pirlo.core.models.execution_context import DEFAULT_CONTEXT, ExecutionContext
 from pirlo.core.models.workflow import Workflow, WorkflowMetadata
 from pirlo.core.repository.run_history_repository import RunHistoryRepository
 from pirlo.core.repository.workflow_repository import WorkflowRepository
@@ -25,7 +26,7 @@ from pirlo.infrastructure.services.workflow_service import (
 logger = logging.getLogger(__name__)
 
 
-class LlmWorkflowRunner(WorkflowRunner):
+class LlmWorkflowRunner(WorkflowRunner[PlaywrightPage]):
     """Automates a web task via LLM-driven browser-use Agent and persists execution steps to cache."""
 
     agent_factory: BrowserAgentFactory
@@ -91,18 +92,22 @@ class LlmWorkflowRunner(WorkflowRunner):
     async def run(
         self,
         task_prompt: str,
-        page: Any | None = None,
-        cache_key: str | None = None,
-        run_id: str | None = None,
+        context: ExecutionContext[PlaywrightPage] = DEFAULT_CONTEXT,
     ) -> str:
+        page = context.page
+        cache_key = context.cache_key
+        run_id = context.run_id
         workflow_id = cache_key or hashlib.sha256(task_prompt.encode()).hexdigest()[:16]
 
-        # Launch browser-use agent
-        browser: Browser = Browser(
-            cdp_url=self.browser_config.cdp_url,
-            headless=self.browser_config.headless,
-        )
-        agent: Agent = self.agent_factory.create_agent(task_prompt, browser=browser)
+        if page is not None:
+            agent: Agent = self.agent_factory.create_agent(task_prompt)
+            browser: Browser | None = None
+        else:
+            browser = Browser(
+                cdp_url=self.browser_config.cdp_url,
+                headless=self.browser_config.headless,
+            )
+            agent = self.agent_factory.create_agent(task_prompt, browser=browser)
 
         started_dt = datetime.now(UTC)
         if run_id and self.run_history_repository:
@@ -183,4 +188,5 @@ class LlmWorkflowRunner(WorkflowRunner):
                 )
             raise
         finally:
-            await browser.close()
+            if browser is not None:
+                await browser.close()
