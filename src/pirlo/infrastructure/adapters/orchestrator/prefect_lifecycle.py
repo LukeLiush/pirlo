@@ -137,7 +137,7 @@ async def pirlo_decomposed_flow(
                 )
 
         # 3. Aggregate
-        result = await aggregate_subtask_results_task(
+        result: str = await aggregate_subtask_results_task(
             original_prompt=plan.original_prompt,
             aggregation_instruction=plan.aggregation_prompt,
             subtask_results=formatted_results,

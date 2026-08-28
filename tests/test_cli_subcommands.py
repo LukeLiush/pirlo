@@ -1,13 +1,13 @@
 import inspect
 import sys
-from typing import Annotated
+from typing import Annotated, Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from pirlo.core.decorators import playbook
 from pirlo.core.models.parameters import Parameter
-from pirlo.core.models.run_result import AutopassRunOutput, RunResult
+from pirlo.core.models.run_result import RunResult
 from pirlo.infrastructure.adapters.cli.terminal_pitch import TerminalPitch
 
 
@@ -20,10 +20,10 @@ class MockSubcommandSession(TerminalPitch):
         task: Annotated[str, Parameter(help="Task prompt")] = "Test Task",
         *args,
         **kwargs,
-    ) -> RunResult[AutopassRunOutput]:
+    ) -> RunResult[dict[str, Any]]:
         return RunResult(
             run_id=(await self.prepared_run()).run_id,
-            data=AutopassRunOutput(task_prompt=task, final_message="Done"),
+            data={"task_prompt": task, "final_message": "Done"},
         )
 
 

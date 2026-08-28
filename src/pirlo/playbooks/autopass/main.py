@@ -11,7 +11,8 @@ from pirlo.core.models.browser_config import BrowserConfig
 from pirlo.core.models.link import LlmLink
 from pirlo.core.models.parameters import LinkParameter, Parameter
 from pirlo.core.models.run import PreparedRun, RunStatus
-from pirlo.core.models.run_result import AutopassRunOutput, RunResult
+from pirlo.core.models.run_result import RunResult
+from pirlo.playbooks.autopass.models import AutopassRunOutput
 from pirlo.core.ports.browser_agent_factory import BrowserAgentFactory
 from pirlo.core.repository.workflow_repository import WorkflowRepository
 from pirlo.core.services.workflow_runner import WorkflowRunner
@@ -279,7 +280,7 @@ class AutopassSession(TerminalPitch):
                     run_id=prepared.run_id,
                 )
 
-            raw_output = await self.orchestrator.execute(
+            raw_output: Any = await self.orchestrator.execute(
                 prepared, run_use_case, task=task, schedule=schedule
             )
 
@@ -288,11 +289,13 @@ class AutopassSession(TerminalPitch):
             final_message=str(raw_output),
         )
 
-        return RunResult(
+        run_result: RunResult[AutopassRunOutput] = RunResult(
             run_id=prepared.run_id,
             status=RunStatus.COMPLETED,
             data=autopass_output,
         )
+
+        return run_result
 
 
 if __name__ == "__main__":

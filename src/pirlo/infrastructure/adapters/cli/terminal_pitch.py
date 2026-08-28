@@ -164,7 +164,12 @@ class TerminalPitch(Pitch, ABC):
         parameter_snapshot_writer.write(bound_pitch, prepared_run.parameter_file_path)
 
         async def _play() -> RunResult[Any]:
-            return await bound_pitch.play(**prepared_run.parameters)
+            run_result: RunResult[Any] = await bound_pitch.play(**prepared_run.parameters)
+            bound_pitch.goal(
+                message=f"Run '{prepared_run.run_id}' completed!",
+                detail=f"Result:\n{ run_result.data}",
+            )
+            return run_result
 
         try:
             loop: asyncio.AbstractEventLoop = asyncio.get_running_loop()
