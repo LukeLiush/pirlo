@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from pirlo.core.services.profile_manager import ProfileManager
 
 
-def profile_main():
+def profile_main() -> None:
     parser = argparse.ArgumentParser(
         description="Manage browser profiles.", prog="pirlo profile"
     )
@@ -50,7 +50,7 @@ def format_expires_in(expires_at_str: str) -> str:
         return "N/A"
 
 
-def run_list():
+def run_list() -> None:
     profiles = ProfileManager.list_profiles()
     if not profiles:
         print("No browser profiles found. Run 'pirlo login' to create one.")
@@ -79,7 +79,7 @@ def run_list():
     print()
 
 
-def run_delete(name: str):
+def run_delete(name: str) -> None:
     if ProfileManager.delete_profile(name):
         print(f"Successfully deleted profile '{name}'.")
     else:

@@ -12,6 +12,9 @@ from pirlo.core.models.link import LlmLink
 from pirlo.core.models.parameters import LinkParameter, Parameter
 from pirlo.core.models.run import RunStatus
 from pirlo.core.models.run_result import AutopassRunOutput, RunResult
+from pirlo.core.ports.browser_agent_factory import BrowserAgentFactory
+from pirlo.core.repository.workflow_repository import WorkflowRepository
+from pirlo.core.services.workflow_runner import WorkflowRunner
 from pirlo.infrastructure.adapters.browser.browser_agent_factory import (
     DefaultBrowserAgentFactory,
 )
@@ -226,30 +229,32 @@ class AutopassSession(TerminalPitch):
             ],
         )
 
-        workflows_dir = get_workspace_path() / ".pirlo" / "workflows"
-        workflow_repo = JsonFileWorkflowRepository(workflows_dir)
-        browser_config = BrowserConfig(cdp_url=CDP_URL, headless=headless)
+        workflows_dir: Path = get_workspace_path() / ".pirlo" / "workflows"
+        workflow_repo: WorkflowRepository = JsonFileWorkflowRepository(workflows_dir)
+        browser_config: BrowserConfig = BrowserConfig(
+            cdp_url=CDP_URL, headless=headless
+        )
 
-        agent_factory = DefaultBrowserAgentFactory(
+        agent_factory: BrowserAgentFactory = DefaultBrowserAgentFactory(
             link=playmaker,
             use_vision=use_vision,
             max_failures=max_failures,
             retry_delay=retry_delay,
         )
 
-        fallback_runner = LlmWorkflowRunner(
+        fallback_runner: WorkflowRunner = LlmWorkflowRunner(
             agent_factory=agent_factory,
             repository=workflow_repo,
             browser_config=browser_config,
         )
 
-        replay_runner = PlaywrightReplayRunner(
+        replay_runner: WorkflowRunner = PlaywrightReplayRunner(
             repository=workflow_repo,
             link=analyst,
             browser_config=browser_config,
         )
 
-        runner = SelfHealingRunner(
+        runner: WorkflowRunner = SelfHealingRunner(
             replay_runner=replay_runner,
             fallback_runner=fallback_runner,
             repository=workflow_repo,

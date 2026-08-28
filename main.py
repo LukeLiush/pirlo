@@ -1,7 +1,7 @@
 from pirlo import __version__
 
 
-def main():
+def main() -> None:
     print(f"Hello from pirlo v{__version__}!")
 
 

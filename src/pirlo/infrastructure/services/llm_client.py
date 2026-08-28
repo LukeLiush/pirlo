@@ -1,4 +1,5 @@
 import logging
+from typing import Any
 
 import litellm
 
@@ -18,7 +19,7 @@ class LlmClient:
         temperature: float = 0.0,
         max_tokens: int | None = None,
         timeout: float = 30.0,
-        **kwargs,
+        **kwargs: Any,
     ) -> str:
         """Synchronously invokes LiteLLM completion for text transformation/summarization."""
         messages = (
@@ -50,7 +51,7 @@ class LlmClient:
         temperature: float = 0.0,
         max_tokens: int | None = None,
         timeout: float = 30.0,
-        **kwargs,
+        **kwargs: Any,
     ) -> str:
         """Asynchronously invokes LiteLLM completion for text transformation/summarization."""
         messages = (

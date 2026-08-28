@@ -35,7 +35,7 @@ def load_playbooks() -> dict[str, str]:
     return playbooks
 
 
-def main():
+def main() -> None:
     src_dir = str(Path(__file__).resolve().parents[4])
     cwd_dir = str(Path(__file__).resolve().parents[5])
     if src_dir not in sys.path:

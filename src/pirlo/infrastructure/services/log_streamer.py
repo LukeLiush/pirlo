@@ -2,7 +2,7 @@ import logging
 import re
 import sys
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
@@ -55,22 +55,23 @@ class StdioTee:
                 self.log_file.write(formatted_prefix + line_content + "\n")
                 self.log_file.flush()
 
-    def write(self, data):
-        self.original_stream.write(data)
+    def write(self, data: str) -> int:
+        written = self.original_stream.write(data)
         if not data:
-            return
+            return written if isinstance(written, int) else 0
 
         self._buffer += data
         if "\n" not in self._buffer:
-            return
+            return written if isinstance(written, int) else len(data)
 
         lines = self._buffer.split("\n")
         self._buffer = lines.pop()
 
         for line in lines:
             self._process_line(line)
+        return written if isinstance(written, int) else len(data)
 
-    def flush(self):
+    def flush(self) -> None:
         self.original_stream.flush()
         if self._buffer:
             self._process_line(self._buffer)
@@ -97,7 +98,9 @@ class AnsiStrippingFormatter(logging.Formatter):
 
 
 @contextmanager
-def capture_run_logs(run_dir: Path, get_prefix_fn=None):
+def capture_run_logs(
+    run_dir: Path, get_prefix_fn: Callable[[], str] | None = None
+) -> Iterator[Path]:
     """Context manager capturing all stdout/stderr and logging module calls into run_dir/run.log without duplicating terminal output."""
     run_dir.mkdir(parents=True, exist_ok=True)
     log_path = run_dir / "run.log"

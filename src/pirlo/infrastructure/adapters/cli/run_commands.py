@@ -11,7 +11,7 @@ from pirlo.infrastructure.adapters.db.sqlite_run_history_repository import (
 )
 
 
-def run_main():
+def run_main() -> None:
     parser = argparse.ArgumentParser(
         description="Manage execution run history.", prog="pirlo run"
     )
@@ -104,7 +104,9 @@ def format_status_markup(status: RunStatus) -> str:
     return f"[dim]{text}[/dim]"
 
 
-def run_list(limit: int = 10, status: str | None = None, playbook: str | None = None):
+def run_list(
+    limit: int = 10, status: str | None = None, playbook: str | None = None
+) -> None:
     repo, _ = get_repository()
     runs = repo.list_runs(playbook=playbook, status=status, limit=limit)
 
@@ -150,7 +152,7 @@ def run_list(limit: int = 10, status: str | None = None, playbook: str | None = 
     console.print(table)
 
 
-def run_show(run_id: str):
+def run_show(run_id: str) -> None:
     repo, pirlo_workspace = get_repository()
     run = repo.get_by_id(run_id)
 

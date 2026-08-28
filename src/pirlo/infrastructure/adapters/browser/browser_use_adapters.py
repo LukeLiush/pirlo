@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from typing import Any, get_type_hints
 
 from browser_use.llm.base import BaseChatModel as BrowserUseChatModel
@@ -8,7 +9,9 @@ from pirlo.core.models.link import SUPPORTED_PROVIDERS, LlmLink
 _ADAPTER_REGISTRY: dict[str, type["BrowserUseChatModelAdapter"]] = {}
 
 
-def register_browser_use_adapter(*providers: str):
+def register_browser_use_adapter(
+    *providers: str,
+) -> Callable[[type["BrowserUseChatModelAdapter"]], type["BrowserUseChatModelAdapter"]]:
     """Decorator to register a BrowserUseChatModelAdapter for specified provider names.
 
     Enforces that:

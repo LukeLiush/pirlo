@@ -21,7 +21,7 @@ class HttpCdpConnectionChecker(CdpChecker):
             try:
                 loop = asyncio.get_running_loop()
 
-                def check():
+                def check() -> bool:
                     with urllib.request.urlopen(
                         f"{self.cdp_url}/json/version", timeout=2
                     ) as resp:

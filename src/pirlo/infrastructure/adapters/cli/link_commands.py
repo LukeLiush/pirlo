@@ -2,6 +2,7 @@ import argparse
 import getpass
 import sys
 from pathlib import Path
+from typing import Any
 
 from pirlo.core.models.link import SUPPORTED_PROVIDERS, LlmLink
 from pirlo.infrastructure.adapters.storage.json_link_repository import (
@@ -15,7 +16,7 @@ def get_repo() -> JsonLinkRepository:
     return JsonLinkRepository(filepath)
 
 
-def link_main(supported_providers: dict | None = None):
+def link_main(supported_providers: dict[str, Any] | None = None) -> None:
     if supported_providers is None:
         supported_providers = SUPPORTED_PROVIDERS
 
@@ -69,7 +70,7 @@ def link_main(supported_providers: dict | None = None):
         run_delete(repo, args.name)
 
 
-def run_list(repo: JsonLinkRepository, supported_providers: dict):
+def run_list(repo: JsonLinkRepository, supported_providers: dict[str, Any]) -> None:
     links = repo.list_all()
     if not links:
         print("No active LLM links registered. Run 'pirlo link create' to add one.")
@@ -101,8 +102,12 @@ def run_list(repo: JsonLinkRepository, supported_providers: dict):
     )
 
 
-def run_create(repo: JsonLinkRepository, args, supported_providers: dict):
-    name = args._name
+def run_create(
+    repo: JsonLinkRepository,
+    args: argparse.Namespace,
+    supported_providers: dict[str, Any],
+) -> None:
+    name = getattr(args, "name", None) or getattr(args, "_name", None)
     provider = args.provider
     model = args.model
     api_key = args.api_key
@@ -161,6 +166,9 @@ def run_create(repo: JsonLinkRepository, args, supported_providers: dict):
         test = test_input in ("", "y", "yes")
 
     else:
+        if not name:
+            print("Error: Link Name is required.")
+            sys.exit(1)
         if provider not in supported_providers:
             print(
                 f"Error: Invalid provider '{provider}'. Supported: {', '.join(supported_providers.keys())}"
@@ -170,6 +178,7 @@ def run_create(repo: JsonLinkRepository, args, supported_providers: dict):
             print("Error: Model Name is required via --model flag.")
             sys.exit(1)
 
+    assert name is not None
     link = LlmLink(
         name=name, provider=provider, model=model, api_key=api_key, base_url=base_url
     )
@@ -193,7 +202,9 @@ def run_create(repo: JsonLinkRepository, args, supported_providers: dict):
     print(f"\nSuccessfully saved link '{name}'!")
 
 
-def run_show(repo: JsonLinkRepository, name: str, supported_providers: dict):
+def run_show(
+    repo: JsonLinkRepository, name: str, supported_providers: dict[str, Any]
+) -> None:
     link = repo.get_by_name(name)
     if not link:
         print(f"Error: Link '{name}' not found.")
@@ -223,7 +234,7 @@ def run_show(repo: JsonLinkRepository, name: str, supported_providers: dict):
     print(f"  API Key:     {masked_key}")
 
 
-def run_test(repo: JsonLinkRepository, name: str):
+def run_test(repo: JsonLinkRepository, name: str) -> None:
     link = repo.get_by_name(name)
     if not link:
         print(f"Error: Link '{name}' not found.")
@@ -240,7 +251,7 @@ def run_test(repo: JsonLinkRepository, name: str):
         sys.exit(1)
 
 
-def run_delete(repo: JsonLinkRepository, name: str):
+def run_delete(repo: JsonLinkRepository, name: str) -> None:
     if repo.delete(name):
         print(f"Successfully deleted link '{name}'.")
     else:

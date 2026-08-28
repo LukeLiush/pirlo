@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import Any
 
 
 @dataclass
@@ -6,7 +7,7 @@ class Instruction:
     message: str
     detail: str | None = None
 
-    def format(self, **kwargs) -> "Instruction":
+    def format(self, **kwargs: Any) -> "Instruction":
         return Instruction(
             message=self.message.format(**kwargs),
             detail=self.detail.format(**kwargs) if self.detail else None,
