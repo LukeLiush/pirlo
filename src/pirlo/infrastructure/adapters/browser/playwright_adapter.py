@@ -285,7 +285,7 @@ class PlaywrightAdapter:
                         f"Here are the live results of the actions taken:\n"
                         f"{self.live_results}\n\n"
                         f"Current Page Content:\n{page_text}\n\n"
-                        f"Provide the final direct response/answer."
+                        f"Provide the final direct response/answer as plain text. Do NOT wrap your output in JSON, code blocks, or markdown formatting."
                     )
                     prompt_bytes = len(prompt.encode("utf-8"))
 

@@ -10,7 +10,7 @@ from pirlo.core.instructions import AutopassInstructions
 from pirlo.core.models.browser_config import BrowserConfig
 from pirlo.core.models.link import LlmLink
 from pirlo.core.models.parameters import LinkParameter, Parameter
-from pirlo.core.models.run import RunStatus
+from pirlo.core.models.run import PreparedRun, RunStatus
 from pirlo.core.models.run_result import AutopassRunOutput, RunResult
 from pirlo.core.ports.browser_agent_factory import BrowserAgentFactory
 from pirlo.core.repository.workflow_repository import WorkflowRepository
@@ -229,7 +229,7 @@ class AutopassSession(TerminalPitch):
             ],
         )
 
-        workflows_dir: Path = get_workspace_path() / ".pirlo" / "workflows"
+        workflows_dir: Path = get_workspace_path() / "workflows"
         workflow_repo: WorkflowRepository = JsonFileWorkflowRepository(workflows_dir)
         browser_config: BrowserConfig = BrowserConfig(
             cdp_url=CDP_URL, headless=headless
@@ -254,7 +254,7 @@ class AutopassSession(TerminalPitch):
             browser_config=browser_config,
         )
 
-        runner: WorkflowRunner = SelfHealingRunner(
+        self_healing_runner: WorkflowRunner = SelfHealingRunner(
             replay_runner=replay_runner,
             fallback_runner=fallback_runner,
             repository=workflow_repo,
@@ -265,14 +265,14 @@ class AutopassSession(TerminalPitch):
         run_autopass_use_case: RunAutopassUseCase = RunAutopassUseCase(
             browser_manager=browser_manager,
             cdp_checker=cdp_checker,
-            workflow_runner=runner,
+            workflow_runner=self_healing_runner,
         )
+        prepared: PreparedRun = await self.prepared_run()
 
         async def run_use_case(
             task_prompt: str | None = None, site: str | None = None, **kwargs: Any
         ) -> str:
             effective_task = task_prompt or task
-            prepared = await self.prepared_run()
             return await run_autopass_use_case.run(
                 task_prompt=effective_task,
                 profile_path=profile_path,
@@ -283,7 +283,6 @@ class AutopassSession(TerminalPitch):
                 run_id=prepared.run_id,
             )
 
-        prepared = await self.prepared_run()
         raw_output = await self.orchestrator.execute(
             prepared, run_use_case, task=task, schedule=schedule
         )

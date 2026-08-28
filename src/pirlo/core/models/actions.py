@@ -3,7 +3,7 @@ from enum import Enum
 from typing import TYPE_CHECKING, Annotated, Literal
 from urllib.parse import urlparse
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 if TYPE_CHECKING:
     from pirlo.core.models.specifications import SafetyCandidate
@@ -136,8 +136,17 @@ class ExtractContentAction(ActionBase):
 
 
 class DoneAction(ActionBase):
+    model_config = ConfigDict(validate_assignment=True)
+
     action_type: Literal["done"] = "done"
     text: str
+
+    @field_validator("text", mode="before")
+    @classmethod
+    def sanitize_text(cls, v: str) -> str:
+        from pirlo.core.utils.text_sanitizer import clean_llm_response
+
+        return clean_llm_response(v)
 
 
 # Discriminator mapping for loading JSON files
