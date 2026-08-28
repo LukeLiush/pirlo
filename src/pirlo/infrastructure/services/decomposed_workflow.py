@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from pirlo.core.models.link import LlmLink
+from pirlo.core.models.plan import DecomposerPlan
 from pirlo.core.ports.decomposer import DecomposerPort
 from pirlo.core.repository.plan_repository import PlanRepository
 from pirlo.core.services import WorkflowRunner
@@ -43,7 +44,7 @@ class DecomposedWorkflowRunner(WorkflowRunner):
     ) -> str:
         # 1. Tier 1 Cache Check: Plan Repository
         plan_id: str = cache_key or task_prompt
-        plan = None
+        plan: DecomposerPlan | None = None
         if self.plan_repository.exists(plan_id):
             try:
                 logger.info(
@@ -77,7 +78,7 @@ class DecomposedWorkflowRunner(WorkflowRunner):
             discover_prefect_server_url,
         )
 
-        active_api_url = discover_prefect_server_url()
+        active_api_url: str | None = discover_prefect_server_url()
         override_settings = (
             {PREFECT_API_URL: active_api_url}
             if active_api_url
