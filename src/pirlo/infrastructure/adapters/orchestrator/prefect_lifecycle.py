@@ -118,14 +118,14 @@ async def pirlo_decomposed_flow(
 
         # 2. Format results for the aggregator
         formatted_results: list[dict[str, Any]] = []
-        for spec, res in zip(plan.subtasks, subtask_results):
-            if isinstance(res, Exception):
+        for spec, subtask_result in zip(plan.subtasks, subtask_results):
+            if isinstance(subtask_result, Exception):
                 formatted_results.append(
-                    {"site": spec.target_site, "status": "FAILED", "error": str(res)}
+                    {"site": spec.target_site, "status": "FAILED", "error": str(subtask_result)}
                 )
             else:
                 formatted_results.append(
-                    {"site": spec.target_site, "status": "COMPLETED", "data": str(res)}
+                    {"site": spec.target_site, "status": "COMPLETED", "data": str(subtask_result)}
                 )
 
         # 3. Aggregate
