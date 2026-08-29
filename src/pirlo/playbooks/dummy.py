@@ -31,25 +31,24 @@ class DummySession(Pitch):
         )
 
         # 2. Print initial inputs
-        self.ui.status("[INFO] Starting dummy command...")
-        self.ui.status(f"[INFO] Target: {target}")
-        self.ui.status(f"[INFO] Retries set to: {retries}")
-        self.ui.status(f"[INFO] Verbose mode: {verbose}")
+        self.ui.commentary("[INFO] Starting dummy command...")
+        self.ui.commentary(f"[INFO] Target: {target}")
+        self.ui.commentary(f"[INFO] Retries set to: {retries}")
+        self.ui.commentary(f"[INFO] Verbose mode: {verbose}")
+        with self.ui.status("Initializing deployment..."):
+            await asyncio.sleep(1)
+            # 3. Simulate processing steps
+            for i in range(1, retries + 1):
+                self.ui.commentary(
+                    f"[INFO] Executing deployment steps (Attempt {i}/{retries})..."
+                )
+                await asyncio.sleep(0.6)
 
-        await asyncio.sleep(0.5)
+                if verbose:
+                    self.ui.commentary(f"[LOG] Processing details: {message}")
+                    await asyncio.sleep(0.4)
 
-        # 3. Simulate processing steps
-        for i in range(1, retries + 1):
-            self.ui.status(
-                f"[INFO] Executing deployment steps (Attempt {i}/{retries})..."
-            )
-            await asyncio.sleep(0.6)
-
-            if verbose:
-                self.ui.status(f"[LOG] Processing details: {message}")
-                await asyncio.sleep(0.4)
-
-        self.ui.status("[INFO] Verifying deployment... OK")
+        self.ui.commentary("[INFO] Verifying deployment... OK")
         await asyncio.sleep(0.5)
 
         # 4. Goal! (Success box)
