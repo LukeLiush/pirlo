@@ -68,10 +68,6 @@ class TerminalPitch(Pitch, ABC):
         assert self._orchestrator is not None
         return self._orchestrator
 
-    @orchestrator.setter
-    def orchestrator(self, value: TaskOrchestrator) -> None:
-        self._orchestrator = value
-
     async def prepared_run(self) -> PreparedRun:
         assert self._prepared_run is not None
         return self._prepared_run
@@ -149,7 +145,7 @@ class TerminalPitch(Pitch, ABC):
 
         # Step C: Instantiate pitch with injected prepared_run
         terminal_pitch: TerminalPitch = cls(
-            prepared_run=prepared_run,
+            prepared_run=prepared_run, orchestrator=orchestrator
         )
 
         parameter_provider: ParameterProvider = ParameterProvider(parameter_resolver)
@@ -160,7 +156,7 @@ class TerminalPitch(Pitch, ABC):
         bound_pitch: TerminalPitch = ParameterBinder.bind_values(
             terminal_pitch, prepared_run.parameters
         )
-        bound_pitch.orchestrator = orchestrator
+
         parameter_snapshot_writer.write(bound_pitch, prepared_run.parameter_file_path)
 
         async def _play() -> RunResult[Any]:
