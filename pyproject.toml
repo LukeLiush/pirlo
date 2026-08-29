@@ -50,9 +50,3 @@ module = "tests.*"
 disallow_untyped_defs = false
 disallow_incomplete_defs = false
 check_untyped_defs = false
-
-[tool.pirlo.playbooks]
-dummy = "pirlo.playbooks.dummy:DummySession"
-autopass = "pirlo.playbooks.autopass.main:AutopassSession"
-login = "pirlo.playbooks.login:LoginSession"
-
