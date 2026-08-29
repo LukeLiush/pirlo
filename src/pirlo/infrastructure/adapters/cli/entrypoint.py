@@ -44,7 +44,9 @@ def load_all_playbooks() -> dict[str, PlaybookSpec]:
     specs: dict[str, PlaybookSpec] = {}
 
     # 1. AST Auto-Scan built-in & local workspace playbooks
-    pkg_playbooks_dir: Path = Path(__file__).resolve().parents[3] / "playbooks"
+    import pirlo
+
+    pkg_playbooks_dir: Path = Path(pirlo.__file__).resolve().parent / "playbooks"
     specs.update(PlaybookScanner.scan_directory(pkg_playbooks_dir))
 
     cwd_playbooks_dir: Path = Path.cwd() / "playbooks"
