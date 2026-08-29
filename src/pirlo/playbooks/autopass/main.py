@@ -13,12 +13,12 @@ from pirlo.core.models.parameters import LinkParameter, Parameter
 from pirlo.core.models.run import PreparedRun, RunStatus
 from pirlo.core.models.run_result import RunResult
 from pirlo.core.ports.browser_agent_factory import BrowserAgentFactory
+from pirlo.core.ports.pitch import Pitch
 from pirlo.core.repository.workflow_repository import WorkflowRepository
 from pirlo.core.services.workflow_runner import WorkflowRunner
 from pirlo.infrastructure.adapters.browser.browser_agent_factory import (
     DefaultBrowserAgentFactory,
 )
-from pirlo.infrastructure.adapters.cli.terminal_pitch import TerminalPitch
 from pirlo.infrastructure.repository.json_file_workflow_repository import (
     JsonFileWorkflowRepository,
 )
@@ -61,7 +61,7 @@ class QuickProgressListener(ProgressListener):
 
 
 @playbook(name="autopass", description="Run self-healing browser automation workflows.")
-class AutopassSession(TerminalPitch):
+class AutopassSession(Pitch):
     """Run self-healing browser automation workflows."""
 
     async def play(
@@ -115,7 +115,7 @@ class AutopassSession(TerminalPitch):
         *args: Any,
         **kwargs: Any,
     ) -> RunResult[AutopassRunOutput]:
-        self.header(
+        self.ui.header(
             "Autopass Workflow Pitch",
             subtitle="Autonomous Browser Automation",
         )
@@ -133,7 +133,7 @@ class AutopassSession(TerminalPitch):
             instruction = AutopassInstructions.PROFILE_MISSING.format(
                 profile=profile, existing_info=profiles_info
             )
-            self.yellow_card(instruction)
+            self.ui.yellow_card(instruction)
             return RunResult(
                 run_id=(await self.prepared_run()).run_id,
                 status=RunStatus.FAILED,
@@ -157,7 +157,7 @@ class AutopassSession(TerminalPitch):
                 expires_at=exp_date,
                 authenticated_urls=urls_str,
             )
-            self.yellow_card(instruction)
+            self.ui.yellow_card(instruction)
             return RunResult(
                 run_id=(await self.prepared_run()).run_id,
                 status=RunStatus.FAILED,
@@ -167,7 +167,7 @@ class AutopassSession(TerminalPitch):
         profile_path: Path = ProfileManager.resolve_profile_path(profile)
 
         if not task:
-            self.yellow_card(AutopassInstructions.TASK_REQUIRED)
+            self.ui.yellow_card(AutopassInstructions.TASK_REQUIRED)
             return RunResult(
                 run_id=(await self.prepared_run()).run_id,
                 status=RunStatus.FAILED,
@@ -180,7 +180,7 @@ class AutopassSession(TerminalPitch):
                 "Please specify --playmaker and --analyst.\n"
                 "Run 'pirlo link list' to see available links, or 'pirlo link create' to register a new one."
             )
-            self.yellow_card(err_msg)
+            self.ui.yellow_card(err_msg)
             return RunResult(
                 run_id=(await self.prepared_run()).run_id,
                 status=RunStatus.FAILED,
@@ -190,7 +190,7 @@ class AutopassSession(TerminalPitch):
         pm_base_url = playmaker.base_url or "N/A"
         an_base_url = analyst.base_url or "N/A"
 
-        self.lineup(
+        self.ui.lineup(
             "Active Run Configuration",
             columns=["Setting", "Value"],
             rows=[

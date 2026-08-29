@@ -8,7 +8,7 @@ from pirlo.core.decorators import playbook
 from pirlo.core.models.parameters import Parameter
 from pirlo.core.models.run import RunStatus
 from pirlo.core.models.run_result import RunResult
-from pirlo.infrastructure.adapters.cli.terminal_pitch import TerminalPitch
+from pirlo.core.ports.pitch import Pitch
 from pirlo.infrastructure.services.profile_manager import ProfileManager
 
 
@@ -16,7 +16,7 @@ from pirlo.infrastructure.services.profile_manager import ProfileManager
     name="login",
     description="Launch a browser to authenticate and save persistent cookies.",
 )
-class LoginSession(TerminalPitch):
+class LoginSession(Pitch):
     """Launch a browser to authenticate and save persistent cookies."""
 
     async def play(
@@ -44,7 +44,7 @@ class LoginSession(TerminalPitch):
         **kwargs: Any,
     ) -> RunResult[Any]:
         # 1. Header (Banner)
-        self.header(
+        self.ui.header(
             "Pirlo Login Manager",
             subtitle=f"Manage persistent session cookies for profile '{profile}'",
         )
@@ -58,7 +58,7 @@ class LoginSession(TerminalPitch):
                     )
             else:
                 instruction = f"The specified file '{urls_file}' does not exist."
-                self.yellow_card(
+                self.ui.yellow_card(
                     "URLs file not found",
                     detail=instruction,
                 )
@@ -79,7 +79,7 @@ class LoginSession(TerminalPitch):
                 "Example:\n"
                 "  [cyan]pirlo login --profile work --urls https://github.com https://google.com[/cyan]"
             )
-            self.yellow_card(
+            self.ui.yellow_card(
                 "No URLs to open",
                 detail=no_urls_msg,
             )
@@ -91,7 +91,7 @@ class LoginSession(TerminalPitch):
 
         # 2. Status (Loading spinner)
         profile_path = ProfileManager.resolve_profile_path(profile)
-        with self.status(f"Launching browser session for profile '{profile}'..."):
+        with self.ui.status(f"Launching browser session for profile '{profile}'..."):
             ctx = await launch_persistent_context_async(
                 str(profile_path),
                 headless=False,
@@ -117,14 +117,14 @@ class LoginSession(TerminalPitch):
                     domain = url.split("://")[-1].split("/")[0].replace("www.", "")
                     rows.append([domain.capitalize(), url, "Manual Login"])
 
-                self.lineup(
+                self.ui.lineup(
                     "Target Portals",
                     columns=["Portal", "URL", "Required Action"],
                     rows=rows,
                 )
 
                 # 5. VAR Check (Interactive prompt)
-                await self.var_check(
+                await self.ui.var_check(
                     "Press [ENTER] once you are successfully logged in to save and exit"
                 )
 
@@ -136,7 +136,7 @@ class LoginSession(TerminalPitch):
                 )
 
                 # 6. Goal! (Success box)
-                self.goal(
+                self.ui.goal(
                     "Session Saved Successfully!",
                     detail=(
                         f"Browser cookies saved to: {profile_path.resolve()}\n"
