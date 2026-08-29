@@ -3,15 +3,20 @@ import sys
 import tomllib
 from pathlib import Path
 
+from pirlo.infrastructure.services.playbook_scanner import (
+    PlaybookScanner,
+    PlaybookSpec,
+)
 
-def load_playbooks() -> dict[str, str]:
+
+def load_pyproject_playbooks() -> dict[str, str]:
     """Loads playbooks registered in pyproject.toml under [tool.pirlo.playbooks]."""
     playbooks: dict[str, str] = {}
-    pyproject_path = Path.cwd() / "pyproject.toml"
+    pyproject_path: Path = Path.cwd() / "pyproject.toml"
     if not pyproject_path.exists():
-        current = Path(__file__).resolve().parent
+        current: Path = Path(__file__).resolve().parent
         for _ in range(6):
-            candidate = current / "pyproject.toml"
+            candidate: Path = current / "pyproject.toml"
             if candidate.exists():
                 pyproject_path = candidate
                 break
@@ -22,28 +27,57 @@ def load_playbooks() -> dict[str, str]:
 
     try:
         with open(pyproject_path, "rb") as f:
-            data = tomllib.load(f)
-        tool_data = data.get("tool", {})
-        pirlo_data = tool_data.get("pirlo", {})
+            data: dict = tomllib.load(f)
+        tool_data: dict = data.get("tool", {})
+        pirlo_data: dict = tool_data.get("pirlo", {})
         playbooks = pirlo_data.get("playbooks", {})
     except Exception as e:  # noqa: BLE001
-        print(
-            f"Warning: Failed to load playbooks from pyproject.toml: {e}",
-            file=sys.stderr,
+        sys.stderr.write(
+            f"Warning: Failed to load playbooks from pyproject.toml: {e}\n"
         )
 
     return playbooks
 
 
+def load_all_playbooks() -> dict[str, PlaybookSpec]:
+    """Discovers playbooks via AST scanning with pyproject.toml fallbacks."""
+    specs: dict[str, PlaybookSpec] = {}
+
+    # 1. AST Auto-Scan built-in & local workspace playbooks
+    pkg_playbooks_dir: Path = Path(__file__).resolve().parents[2] / "playbooks"
+    specs.update(PlaybookScanner.scan_directory(pkg_playbooks_dir))
+
+    cwd_playbooks_dir: Path = Path.cwd() / "playbooks"
+    if cwd_playbooks_dir.exists() and cwd_playbooks_dir != pkg_playbooks_dir:
+        specs.update(PlaybookScanner.scan_directory(cwd_playbooks_dir))
+
+    # 2. Fallback: Pyproject.toml overrides for 3rd-party installed playbooks
+    pyproject_playbooks: dict[str, str] = load_pyproject_playbooks()
+    for name, entrypoint in pyproject_playbooks.items():
+        if name not in specs:
+            module_name: str
+            class_name: str
+            module_name, class_name = entrypoint.split(":")
+            specs[name] = PlaybookSpec(
+                name=name,
+                description="",
+                module_path=module_name,
+                class_name=class_name,
+                file_path=Path(),
+            )
+
+    return specs
+
+
 def main() -> None:
-    src_dir = str(Path(__file__).resolve().parents[4])
-    cwd_dir = str(Path(__file__).resolve().parents[5])
+    src_dir: str = str(Path(__file__).resolve().parents[4])
+    cwd_dir: str = str(Path(__file__).resolve().parents[5])
     if src_dir not in sys.path:
         sys.path.insert(0, src_dir)
     if cwd_dir not in sys.path:
         sys.path.insert(0, cwd_dir)
 
-    playbooks: dict[str, str] = load_playbooks()
+    specs: dict[str, PlaybookSpec] = load_all_playbooks()
 
     if len(sys.argv) < 2 or sys.argv[1] in ("-h", "--help"):
         print("Usage: pirlo <command> [<args>]")
@@ -51,51 +85,22 @@ def main() -> None:
         print("  link          - Manage LLM links (API keys, base URLs)")
         print("  profile       - Manage browser profiles (list, delete)")
         print("  run           - Manage execution run history (list, show)")
-        if playbooks:
-            # To show a nice description, we can dynamically load the classes and show their docstrings!
-            for command, entrypoint in sorted(playbooks.items()):
-                description = ""
-                try:
-                    module_name, class_name = entrypoint.split(":")
-                    # Temporarily add src/ and current dir to path to find local modules
-                    src_dir = str(Path.cwd() / "src")
-                    cwd_dir = str(Path.cwd())
-                    sys_path_added = []
-                    if src_dir not in sys.path:
-                        sys.path.insert(0, src_dir)
-                        sys_path_added.append(src_dir)
-                    if cwd_dir not in sys.path:
-                        sys.path.insert(0, cwd_dir)
-                        sys_path_added.append(cwd_dir)
-
-                    module = importlib.import_module(module_name)
-                    cls = getattr(module, class_name)
-                    if cls.__doc__:
-                        description = cls.__doc__.strip().split("\n")[0]
-
-                    for path in sys_path_added:
-                        sys.path.remove(path)
-                except Exception:  # noqa: BLE001
-                    import traceback
-
-                    sys.stderr.write(f"Error loading playbook command '{command}':\n")
-                    traceback.print_exc()
-
-                desc_str = f" - {description}" if description else ""
-                print(f"  {command:<13}{desc_str}")
+        if specs:
+            command_name: str
+            spec: PlaybookSpec
+            for command_name, spec in sorted(specs.items()):
+                desc_str: str = f" - {spec.description}" if spec.description else ""
+                print(f"  {command_name:<13}{desc_str}")
         else:
-            print(
-                "\nNo playbooks registered. Register them in pyproject.toml under [tool.pirlo.playbooks]"
-            )
+            print("\nNo playbooks discovered.")
 
         print("\nFor help on a specific command, run:")
         print("  pirlo <command> --help")
         sys.exit(0)
 
-    command = sys.argv[1]
+    command: str = sys.argv[1]
 
-    # Quick dispatch for built-in non-playbook subcommands (e.g. link, profile, run)
-    # TODO, i need to turn it into config.
+    # Quick dispatch for built-in non-playbook subcommands
     if command in ("link", "profile", "run"):
         if command == "link":
             from pirlo.infrastructure.adapters.cli.link_commands import (
@@ -105,7 +110,7 @@ def main() -> None:
             try:
                 link_main()
             except Exception as e:  # noqa: BLE001
-                print(f"Error: {e}", file=sys.stderr)
+                sys.stderr.write(f"Error: {e}\n")
                 sys.exit(1)
             sys.exit(0)
 
@@ -117,7 +122,7 @@ def main() -> None:
             try:
                 profile_main()
             except Exception as e:  # noqa: BLE001
-                print(f"Error: {e}", file=sys.stderr)
+                sys.stderr.write(f"Error: {e}\n")
                 sys.exit(1)
             sys.exit(0)
 
@@ -129,49 +134,44 @@ def main() -> None:
             try:
                 run_main()
             except Exception as e:  # noqa: BLE001
-                print(f"Error: {e}", file=sys.stderr)
+                sys.stderr.write(f"Error: {e}\n")
                 sys.exit(1)
             sys.exit(0)
 
-    target_playbook = sys.argv[0].split(" ")[-1] if " " in sys.argv[0] else sys.argv[1]
+    target_playbook: str = (
+        sys.argv[0].split(" ")[-1] if " " in sys.argv[0] else sys.argv[1]
+    )
     if " " in sys.argv[0]:
         target_playbook = sys.argv[0].split(" ")[1]
 
-    if target_playbook in playbooks:
-        entrypoint = playbooks[target_playbook]
+    if target_playbook in specs:
+        target_spec: PlaybookSpec = specs[target_playbook]
         try:
-            module_name, class_name = entrypoint.split(":")
-            # Ensure src/ and current directory are in sys.path so the local playbook package can be resolved
-            src_dir = str(Path.cwd() / "src")
-            cwd_dir = str(Path.cwd())
-            if src_dir not in sys.path:
-                sys.path.insert(0, src_dir)
-            if cwd_dir not in sys.path:
-                sys.path.insert(0, cwd_dir)
+            local_src_dir: str = str(Path.cwd() / "src")
+            local_cwd_dir: str = str(Path.cwd())
+            if local_src_dir not in sys.path:
+                sys.path.insert(0, local_src_dir)
+            if local_cwd_dir not in sys.path:
+                sys.path.insert(0, local_cwd_dir)
 
-            module = importlib.import_module(module_name)
-            session_cls = getattr(module, class_name)
+            module = importlib.import_module(target_spec.module_path)
+            session_cls = getattr(module, target_spec.class_name)
 
-            # Call the TerminalPitch cli runner
             session_cls.cli(playbook_name=target_playbook)
 
         except Exception as e:  # noqa: BLE001
-            print(
-                f"Error: Failed to load playbook '{target_playbook}' ({entrypoint}): {e}",
-                file=sys.stderr,
+            sys.stderr.write(
+                f"Error: Failed to load playbook '{target_playbook}' ({target_spec.module_path}:{target_spec.class_name}): {e}\n"
             )
             import traceback
 
             traceback.print_exc()
             sys.exit(1)
     else:
-        print(f"Error: Unknown command '{command}'", file=sys.stderr)
-        print("Usage: pirlo <command> [<args>]", file=sys.stderr)
-        if playbooks:
-            print(
-                f"Available commands: {', '.join(sorted(playbooks.keys()))}",
-                file=sys.stderr,
-            )
+        sys.stderr.write(f"Error: Unknown command '{command}'\n")
+        sys.stderr.write("Usage: pirlo <command> [<args>]\n")
+        if specs:
+            sys.stderr.write(f"Available commands: {', '.join(sorted(specs.keys()))}\n")
         sys.exit(1)
 
 
