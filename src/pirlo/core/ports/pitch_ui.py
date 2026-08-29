@@ -19,6 +19,10 @@ class PitchUI(ABC):
         """Draw starting lineup table/data structure."""
 
     @abstractmethod
+    def commentary(self, message: str, detail: str | None = None) -> None:
+        """Draw standard informational log message / live match commentary."""
+
+    @abstractmethod
     async def var_check(self, message: str) -> None:
         """Halts play to pause and wait for user confirmation."""
 

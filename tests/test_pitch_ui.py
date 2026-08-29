@@ -40,6 +40,9 @@ class MockPitchUI(PitchUI):
     def yellow_card(self, message: str, detail: str | None = None) -> None:
         self.calls.append(f"yellow_card:{message}")
 
+    def commentary(self, message: str, detail: str | None = None) -> None:
+        self.calls.append(f"commentary:{message}")
+
 
 class CustomPitch(Pitch):
     async def play(self, *args, **kwargs):
@@ -54,12 +57,14 @@ def test_pitch_ui_delegation():
     pitch.ui.goal("Goal scored!")
     pitch.ui.red_card("Error!")
     pitch.ui.yellow_card("Warning!")
+    pitch.ui.commentary("Match commentary log")
     pitch.ui.lineup("Lineup", ["Col"], [["Val"]])
 
     assert "header:Test Header:Sub" in mock_ui.calls
     assert "goal:Goal scored!" in mock_ui.calls
     assert "red_card:Error!" in mock_ui.calls
     assert "yellow_card:Warning!" in mock_ui.calls
+    assert "commentary:Match commentary log" in mock_ui.calls
     assert "lineup:Lineup" in mock_ui.calls
 
 
@@ -85,9 +90,11 @@ def test_terminal_pitch_ui_console():
     ui.goal("Scored!")
     ui.red_card("Failed!")
     ui.yellow_card("Warning!")
+    ui.commentary("Match update in progress", detail="Sub detail")
 
     output = console.export_text()
     assert "Terminal Banner" in output
     assert "Scored!" in output
     assert "Failed!" in output
     assert "Warning!" in output
+    assert "Match update in progress" in output

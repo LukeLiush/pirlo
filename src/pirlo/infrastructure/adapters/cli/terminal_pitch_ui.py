@@ -43,6 +43,12 @@ class TerminalPitchUI(PitchUI):
             tbl.add_row(*row)
         self._console.print(tbl)
 
+    def commentary(self, message: str, detail: str | None = None) -> None:
+        text = f"[cyan]🎙️ {message}[/cyan]"
+        if detail:
+            text += f"\n  [dim]{detail}[/dim]"
+        self._console.print(text)
+
     async def var_check(self, message: str) -> None:
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(None, input, f"🔍 [VAR CHECK] {message}: ")
