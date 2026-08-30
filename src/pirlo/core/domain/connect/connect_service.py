@@ -6,6 +6,7 @@ from pirlo.core.models.link import LlmLink
 from pirlo.core.models.serve_manifest import ActiveSession, ServeManifest
 from pirlo.core.ports.health_checker import (
     CompositeHealthChecker,
+    HealthStatus,
     OllamaHealthChecker,
     PrefectHealthChecker,
     ServiceHealthChecker,
@@ -138,3 +139,11 @@ class ConnectService:
         if self.connect_dir.exists():
             shutil.rmtree(self.connect_dir)
         print("[pirlo connect] Connection closed cleanly.")
+
+    def get_status(self) -> tuple[ActiveSession | None, HealthStatus | None]:
+        session_file: Path = self.connect_dir / "session.json"
+        session: ActiveSession | None = ActiveSession.load_active(session_file)
+        if not session:
+            return None, None
+        status = self.health_checker.check_health(session)
+        return session, status
