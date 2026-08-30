@@ -134,7 +134,9 @@ class ServeSession(Pitch):
                 f"Prefect API: http://0.0.0.0:{resolved_prefect_port}/api\n"
                 f"Ollama Base: http://0.0.0.0:{resolved_ollama_port}\n"
                 f"Served Models: {', '.join(model_list)}\n"
-                f"Manifest written to {serve_dir / 'serve.json'}"
+                f"Manifest written to {serve_dir / 'serve.json'}\n\n"
+                f"💡 To shut down the Docker stack, run:\n"
+                f"   docker compose -f {compose_file} down"
             ),
         )
 
