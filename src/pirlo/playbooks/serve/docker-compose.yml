@@ -30,7 +30,7 @@ services:
       ollama:
         condition: service_healthy
     environment:
-      - OLLAMA_MODELS=${OLLAMA_MODELS:-qwen3.2}
+      - OLLAMA_MODELS=${OLLAMA_MODELS:-qwen2.5}
 
 
     entrypoint: ["/bin/sh", "-c"]
@@ -41,7 +41,7 @@ services:
         for model in $$OLLAMA_MODELS; do
           model_trimmed=$$(echo "$$model" | xargs)
           echo "[pirlo serve] Ensuring model '$$model_trimmed' is pulled..."
-          curl -s -X POST http://ollama:11434/api/pull -d "{\"name\": \"$$model_trimmed\"}"
+          curl -sf -X POST http://ollama:11434/api/pull -d "{\"name\": \"$$model_trimmed\", \"stream\": false}"
         done
         echo "[pirlo serve] All models pre-pulled and ready!"
 

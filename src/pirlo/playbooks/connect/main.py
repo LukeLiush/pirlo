@@ -1,5 +1,6 @@
 import asyncio
 import getpass
+import sys
 from typing import Annotated, Any
 
 from tenacity import (
@@ -158,23 +159,43 @@ class ConnectSession(Pitch):
                 ssh_port=ssh_port,
             )
 
-        except Exception as e:  # noqa: BLE001
-            self.ui.commentary(
-                f"[ERROR] Failed to establish connection to {remote_host}.\nDetails: {e}\n"
-            )
-            self.ui.commentary(
-                "💡 Troubleshooting Steps:\n"
-                f"   1. Ensure SSH server (sshd) is running on {host_target} (port {ssh_port}):\n"
-                "      • macOS: Enable System Settings > Sharing > Remote Login\n"
-                "      • Linux: Ensure 'sudo systemctl status ssh' is active\n"
-                "   2. Verify your SSH credentials and identity key (~/.ssh/id_rsa or id_ed25519):\n"
-                f"      • Test manually in terminal: ssh {remote_host}\n"
-            )
-            return RunResult(
-                run_id=run_id_val,
-                status=RunStatus.FAILED,
-                error=f"Connection to {remote_host} failed: {e}",
-            )
+        except Exception:  # noqa: BLE001
+            # Fallback: If initial SSH key auth fails and in interactive TTY, prompt for password
+            if sys.stdin.isatty():
+                try:
+                    ssh_pass = await self.ui.prompt_password(
+                        f"Enter SSH password for {ssh_user}@{host_target}"
+                    )
+                    if ssh_pass:
+                        session = service.connect(
+                            remote_host=host_target,
+                            ssh_user=ssh_user,
+                            ssh_port=ssh_port,
+                            ssh_password=ssh_pass,
+                        )
+                        self.ui.commentary(
+                            "🔑 SSH key copied to remote host! Future connections will be passwordless.\n"
+                        )
+                except Exception as retry_err:  # noqa: BLE001
+                    e = retry_err
+
+            if not session:
+                self.ui.commentary(
+                    f"[ERROR] Failed to establish connection to {remote_host}.\nDetails: {e}\n"
+                )
+                self.ui.commentary(
+                    "💡 Troubleshooting Steps:\n"
+                    f"   1. Ensure SSH server (sshd) is running on {host_target} (port {ssh_port}):\n"
+                    "      • macOS: Enable System Settings > Sharing > Remote Login\n"
+                    "      • Linux: Ensure 'sudo systemctl status ssh' is active\n"
+                    "   2. Verify your SSH credentials and identity key (~/.ssh/id_rsa or id_ed25519):\n"
+                    f"      • Test manually in terminal: ssh {remote_host}\n"
+                )
+                return RunResult(
+                    run_id=run_id_val,
+                    status=RunStatus.FAILED,
+                    error=f"Connection to {remote_host} failed: {e}",
+                )
 
         if not session:
             self.ui.commentary(

@@ -29,12 +29,15 @@ class SshTunnelManager(TunnelManager):
             "ssh_username": config.ssh_user,
         }
 
-        # Auto-detect default SSH key files if present in ~/.ssh/
-        for key_name in ("id_ed25519", "id_rsa", "id_ecdsa"):
-            key_path = Path(f"~/.ssh/{key_name}").expanduser()
-            if key_path.exists():
-                kwargs["ssh_pkey"] = str(key_path)
-                break
+        if config.ssh_password:
+            kwargs["ssh_password"] = config.ssh_password
+        else:
+            # Auto-detect default SSH key files if present in ~/.ssh/
+            for key_name in ("id_ed25519", "id_rsa", "id_ecdsa"):
+                key_path = Path(f"~/.ssh/{key_name}").expanduser()
+                if key_path.exists():
+                    kwargs["ssh_pkey"] = str(key_path)
+                    break
 
         try:
             self._prefect_tunnel = SSHTunnelForwarder(

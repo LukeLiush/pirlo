@@ -14,13 +14,18 @@ from pirlo.playbooks.connect.ports.tunnel_manager import (
 
 class MockProber(RemoteManifestProber):
     def fetch_manifest(
-        self, remote_host: str, ssh_user: str = "ubuntu", ssh_port: int = 22
+        self,
+        remote_host: str,
+        ssh_user: str = "ubuntu",
+        ssh_port: int = 22,
+        ssh_password: str | None = None,
     ) -> ServeManifest:
+        self.last_ssh_password = ssh_password
         return ServeManifest(
             default_prefect_port=4200,
             default_ollama_port=11434,
-            default_model="qwen3.2",
-            models=["qwen3.2", "deepseek-r1:8b"],
+            default_model="qwen2.5",
+            models=["qwen2.5", "deepseek-r1:8b"],
         )
 
 
@@ -91,8 +96,8 @@ def test_connect_service_local_autodiscovery(tmp_path: Path, monkeypatch):
     manifest = ServeManifest(
         default_prefect_port=4200,
         default_ollama_port=11434,
-        default_model="qwen3.2",
-        models=["qwen3.2"],
+        default_model="qwen2.5",
+        models=["qwen2.5"],
     )
     manifest.save(serve_dir / "serve.json")
 
@@ -136,3 +141,25 @@ def test_connect_service_replaces_previous(tmp_path: Path):
         session2 = service.connect(remote_host="gpu-node.internal", ssh_user="ubuntu")
         assert session2 is not None
         assert tunnel_mgr.closed
+
+
+def test_connect_service_with_password(tmp_path: Path):
+    connect_dir = tmp_path / "connect"
+    prober = MockProber()
+    tunnel_mgr = MockTunnelManager()
+    health_checker = MockHealthyServiceChecker()
+
+    service = ConnectService(
+        prober=prober,
+        tunnel_manager=tunnel_mgr,
+        health_checker=health_checker,
+        connect_dir=connect_dir,
+    )
+
+    session = service.connect(
+        remote_host="gpu-node.internal",
+        ssh_user="ubuntu",
+        ssh_password="secretpassword123",
+    )
+    assert session is not None
+    assert prober.last_ssh_password == "secretpassword123"

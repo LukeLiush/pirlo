@@ -12,7 +12,11 @@ class LocalManifestProber(RemoteManifestProber):
         self.serve_dir = serve_dir or (get_workspace_path() / "serve")
 
     def fetch_manifest(
-        self, remote_host: str, ssh_user: str = "ubuntu", ssh_port: int = 22
+        self,
+        remote_host: str,
+        ssh_user: str = "ubuntu",
+        ssh_port: int = 22,
+        ssh_password: str | None = None,
     ) -> ServeManifest:
         manifest_path = self.serve_dir / "serve.json"
         if manifest_path.exists():

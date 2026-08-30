@@ -31,6 +31,10 @@ class MockPitchUI(PitchUI):
     async def var_check(self, message: str) -> None:
         self.calls.append(f"var_check:{message}")
 
+    async def prompt_password(self, prompt_message: str) -> str:
+        self.calls.append(f"prompt_password:{prompt_message}")
+        return "secret123"
+
     def goal(self, message: str, detail: str | None = None) -> None:
         self.calls.append(f"goal:{message}")
 

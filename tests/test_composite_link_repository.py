@@ -34,7 +34,7 @@ def test_composite_link_repository_overlay_precedence(tmp_path: Path):
     connect_link = LlmLink(
         name="serve-ollama",
         provider="ollama",
-        model="qwen3.2",
+        model="qwen2.5",
         api_key="ollama",
         base_url="http://127.0.0.1:11435/v1",
         source="pirlo-connect",
@@ -44,7 +44,7 @@ def test_composite_link_repository_overlay_precedence(tmp_path: Path):
     # 4. Get link should return dynamic connect overlay
     fetched_overlay = repo.get_by_name("serve-ollama")
     assert fetched_overlay is not None
-    assert fetched_overlay.model == "qwen3.2"
+    assert fetched_overlay.model == "qwen2.5"
     assert fetched_overlay.source == "pirlo-connect"
     assert fetched_overlay.base_url == "http://127.0.0.1:11435/v1"
 

@@ -27,6 +27,10 @@ class PitchUI(ABC):
         """Halts play to pause and wait for user confirmation."""
 
     @abstractmethod
+    async def prompt_password(self, prompt_message: str) -> str:
+        """Prompt user securely for password / hidden text input."""
+
+    @abstractmethod
     def goal(self, message: str, detail: str | None = None) -> None:
         """Draw success panel/message (Scoring a goal!)."""
 

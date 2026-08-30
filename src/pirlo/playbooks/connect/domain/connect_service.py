@@ -74,6 +74,7 @@ class ConnectService:
         remote_host: str = "localhost",
         ssh_user: str = "ubuntu",
         ssh_port: int = 22,
+        ssh_password: str | None = None,
     ) -> ActiveSession | None:
         from pirlo.playbooks.connect.adapters.local_manifest_prober import (
             LocalManifestProber,
@@ -115,7 +116,10 @@ class ConnectService:
         else:
             # 2. Probe Remote Manifest via Injected Prober Port
             manifest = self.prober.fetch_manifest(
-                target_host, ssh_user=ssh_user, ssh_port=ssh_port
+                target_host,
+                ssh_user=ssh_user,
+                ssh_port=ssh_port,
+                ssh_password=ssh_password,
             )
 
             # 3. Open SSH Tunnels via Injected TunnelManager Port
@@ -125,6 +129,7 @@ class ConnectService:
                 ssh_port=ssh_port,
                 remote_prefect_port=manifest.default_prefect_port,
                 remote_ollama_port=manifest.default_ollama_port,
+                ssh_password=ssh_password,
             )
             tunnel = self.tunnel_manager.open_tunnel(config)
 

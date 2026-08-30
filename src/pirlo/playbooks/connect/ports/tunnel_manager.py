@@ -9,6 +9,7 @@ class TunnelConfig:
     ssh_port: int
     remote_prefect_port: int
     remote_ollama_port: int
+    ssh_password: str | None = None
 
 
 @dataclass

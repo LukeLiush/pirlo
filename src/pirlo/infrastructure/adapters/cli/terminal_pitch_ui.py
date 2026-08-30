@@ -1,4 +1,5 @@
 import asyncio
+import getpass
 from contextlib import AbstractContextManager
 from typing import Any
 
@@ -52,6 +53,12 @@ class TerminalPitchUI(PitchUI):
     async def var_check(self, message: str) -> None:
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(None, input, f"🔍 [VAR CHECK] {message}: ")
+
+    async def prompt_password(self, prompt_message: str) -> str:
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(
+            None, getpass.getpass, f"🔑 {prompt_message}: "
+        )
 
     def goal(self, message: str, detail: str | None = None) -> None:
         text = f"⚽ [bold green]GOAL! {message}[/bold green]"
