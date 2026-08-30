@@ -47,10 +47,18 @@ class DockerComposeManager:
         except Exception as e:  # noqa: BLE001
             return False, str(e)
 
-    def down(self, remove_volumes: bool = False) -> tuple[bool, str]:
+    def down(
+        self, remove_volumes: bool = False, remove_images: str | None = None
+    ) -> tuple[bool, str]:
         """Tears down the docker-compose.yml stack."""
         try:
-            self.docker.compose.down(volumes=remove_volumes)
+            kwargs: dict[str, Any] = {}
+            if remove_volumes:
+                kwargs["volumes"] = True
+            if remove_images:
+                kwargs["remove_images"] = remove_images
+
+            self.docker.compose.down(**kwargs)
             return True, "Stack stopped successfully."
         except Exception as e:  # noqa: BLE001
             return False, str(e)

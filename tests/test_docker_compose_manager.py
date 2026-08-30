@@ -31,3 +31,15 @@ def test_docker_compose_manager_up_success(tmp_path: Path):
 
     assert success
     mock_docker.compose.up.assert_called_once_with(detach=True)
+
+
+def test_docker_compose_manager_down_options(tmp_path: Path):
+    compose_file = tmp_path / "docker-compose.yml"
+    compose_file.write_text("version: '3.8'\nservices: {}\n")
+
+    mock_docker = MagicMock()
+    manager = DockerComposeManager(compose_file=compose_file, client=mock_docker)
+
+    success, _msg = manager.down(remove_volumes=True, remove_images="all")
+    assert success
+    mock_docker.compose.down.assert_called_once_with(volumes=True, remove_images="all")

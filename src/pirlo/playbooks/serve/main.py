@@ -38,13 +38,21 @@ class ServeSession(Pitch):
 
     async def play(
         self,
+        stop: Annotated[
+            bool,
+            Parameter(help="Stop active pirlo serve containers", short="-s"),
+        ] = False,
         down: Annotated[
             bool,
-            Parameter(help="Stop and tear down active pirlo serve stack", short="-d"),
+            Parameter(help="Alias for --stop", short="-d"),
         ] = False,
-        volumes: Annotated[
+        purge: Annotated[
             bool,
-            Parameter(help="Also remove persistent volumes when stopping stack"),
+            Parameter(help="Stop containers and delete persistent volumes", short="-p"),
+        ] = False,
+        purge_all: Annotated[
+            bool,
+            Parameter(help="Stop containers, delete volumes, and remove Docker images"),
         ] = False,
         prefect_port: Annotated[
             int, Parameter(help="Host port for Prefect dev server")
@@ -67,13 +75,30 @@ class ServeSession(Pitch):
             (await self.prepared_run()).run_id if self._prepared_run else "serve-run"
         )
 
-        if down:
-            self.ui.header("Pirlo Serve Engine", subtitle="Stopping Docker Serve Stack")
-            success, msg = compose_manager.down(remove_volumes=volumes)
+        is_teardown = stop or down or purge or purge_all
+
+        if is_teardown:
+            self.ui.header(
+                "Pirlo Serve Engine", subtitle="Cleaning Up Docker Serve Stack"
+            )
+            remove_vols = purge or purge_all
+            remove_imgs = "all" if purge_all else None
+
+            success, msg = compose_manager.down(
+                remove_volumes=remove_vols, remove_images=remove_imgs
+            )
+
             if success:
+                tier_msg = (
+                    "Containers, volumes, and images purged."
+                    if purge_all
+                    else "Containers and persistent volumes purged."
+                    if purge
+                    else "Containers stopped."
+                )
                 self.ui.goal(
-                    "pirlo serve stack stopped!",
-                    detail="Docker Compose stack stopped successfully.",
+                    "pirlo serve stack cleanup complete!",
+                    detail=f"{tier_msg}\n{msg}",
                 )
                 return RunResult(
                     run_id=run_id_val,
@@ -169,8 +194,10 @@ class ServeSession(Pitch):
                 f"Manifest written to {serve_dir / 'serve.json'}\n\n"
                 f"💡 How to Connect from Another Machine:\n"
                 f"   Run 'pirlo connect {current_user}@{hostname}' (or <user>@<remote_ip>)\n\n"
-                f"💡 To shut down the serve engine stack at any time, run:\n"
-                f"   pirlo serve --down"
+                f"💡 To shut down or purge the serve stack at any time, run:\n"
+                f"   • Stop containers:            pirlo serve --stop\n"
+                f"   • Stop & delete volumes:      pirlo serve --purge\n"
+                f"   • Stop, delete & purge images: pirlo serve --purge-all"
             ),
         )
 
