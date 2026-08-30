@@ -48,7 +48,15 @@ async def test_pydantic_ai_decomposer_mocked():
         mock_agent.run.return_value = mock_run_result
         mock_get_agent.return_value = mock_agent
 
-        decomposer = PydanticAiDecomposer(model_name="google-gla:gemini-1.5-flash")
+        from pirlo.core.models.link import LlmLink
+
+        link = LlmLink(
+            name="test-link",
+            provider="gemini",
+            model="gemini-2.5-flash",
+            api_key="test",
+        )
+        decomposer = PydanticAiDecomposer(link=link)
         prompt = "Compare CD rates on Chase and Bank of America"
         plan = await decomposer.decompose(prompt)
 

@@ -30,7 +30,15 @@ async def test_smart_prefect_orchestrator_execution(tmp_path, monkeypatch):
     run_dir = tmp_path / "autopass" / "runs" / "test-run-12345"
     run_dir.mkdir(parents=True, exist_ok=True)
 
-    orchestrator = SmartPrefectTaskOrchestrator()
+    from pirlo.core.models.link import LlmLink
+
+    test_link = LlmLink(
+        name="test-link",
+        provider="gemini",
+        model="gemini-2.5-flash",
+        api_key="test",
+    )
+    orchestrator = SmartPrefectTaskOrchestrator(decomposer_link=test_link)
     prepared_run = PreparedRun(
         playbook_name="autopass",
         run_name="test-run-12345",
@@ -78,3 +86,15 @@ def test_parse_cli_options_direct_contract():
 
     assert orchestrator.server_url == "http://localhost:4200/api"
     assert orchestrator.work_pool == "my-pool"
+
+
+def test_orchestrator_fails_loud_without_decomposer_link():
+    orchestrator = SmartPrefectTaskOrchestrator()
+    with (
+        patch(
+            "pirlo.infrastructure.adapters.storage.composite_link_repository.CompositeLinkRepository.get_by_name",
+            return_value=None,
+        ),
+        pytest.raises(ValueError, match="No decomposer link provided"),
+    ):
+        orchestrator._build_decomposer()

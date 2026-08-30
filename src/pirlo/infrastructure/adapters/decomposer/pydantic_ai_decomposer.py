@@ -1,13 +1,16 @@
 import hashlib
 import logging
-from typing import Any
 
 from duckduckgo_search import DDGS
 from prefect import task
 from pydantic_ai import Agent, RunContext
 
+from pirlo.core.models.link import LlmLink
 from pirlo.core.models.plan import DecomposerPlan
 from pirlo.core.ports.decomposer import DecomposerPort
+from pirlo.infrastructure.adapters.decomposer.pydantic_ai_adapters import (
+    PydanticAiAdapterRegistry,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -27,30 +30,10 @@ You are Pirlo's Task Decomposer Engine, an expert at breaking down multi-source 
 
 
 def get_decomposer_agent(
-    model_name: str = "google-gla:gemini-1.5-flash",
-    api_key: str | None = None,
-    base_url: str | None = None,
+    link: LlmLink,
 ) -> Agent[None, DecomposerPlan]:
     """Create and return a PydanticAI Agent with tools and system prompt."""
-    import os
-
-    if base_url:
-        from pydantic_ai.models.openai import OpenAIModel
-        from pydantic_ai.providers.openai import OpenAIProvider
-
-        endpoint = base_url.rstrip("/")
-        if not endpoint.endswith("/v1"):
-            endpoint = f"{endpoint}/v1"
-
-        provider = OpenAIProvider(base_url=endpoint, api_key=api_key or "ollama")
-        model: Any = OpenAIModel(model_name, provider=provider)
-    else:
-        if api_key:
-            os.environ["GOOGLE_API_KEY"] = api_key
-            os.environ["GEMINI_API_KEY"] = api_key
-        elif "GEMINI_API_KEY" in os.environ and "GOOGLE_API_KEY" not in os.environ:
-            os.environ["GOOGLE_API_KEY"] = os.environ["GEMINI_API_KEY"]
-        model = model_name or "google-gla:gemini-1.5-flash"
+    model = PydanticAiAdapterRegistry.to_model(link)
 
     agent: Agent[None, DecomposerPlan] = Agent[None, DecomposerPlan](
         model=model,
@@ -73,84 +56,30 @@ def get_decomposer_agent(
     return agent
 
 
-async def _fallback_llm_client_decompose(
-    user_prompt: str,
-    model_name: str,
-    api_key: str | None = None,
-    base_url: str | None = None,
-) -> DecomposerPlan:
-    """Fallback JSON decomposition using LlmClient for models incompatible with PydanticAI schema tools."""
-    from pirlo.core.models.link import LlmLink
-    from pirlo.core.utils.text_sanitizer import clean_llm_response
-    from pirlo.infrastructure.services.llm_client import LlmClient
-
-    link = LlmLink(
-        name="decomposer-fallback",
-        provider="ollama" if base_url else "openai",
-        model=model_name,
-        api_key=api_key or "",
-        base_url=base_url,
-    )
-
-    prompt = (
-        f"{DECOMPOSER_SYSTEM_PROMPT}\n\n"
-        f"User Request: {user_prompt}\n\n"
-        "Return ONLY a valid JSON object matching the DecomposerPlan structure:\n"
-        "{\n"
-        '  "subtasks": [\n'
-        "    {\n"
-        '      "subtask_id": "subtask_1",\n'
-        '      "target_site": "Gemini",\n'
-        '      "target_url": "https://gemini.google.com/app",\n'
-        '      "task_prompt": "Ask what is the capital of UK",\n'
-        '      "extraction_targets": ["capital of UK"]\n'
-        "    }\n"
-        "  ],\n"
-        '  "aggregation_prompt": "Combine the answers"\n'
-        "}\n"
-    )
-
-    raw_response = await LlmClient.acompletion(
-        link=link, prompt=prompt, temperature=0.0
-    )
-    cleaned_json = clean_llm_response(raw_response)
-    return DecomposerPlan.model_validate_json(cleaned_json)
-
-
 @task(name="Run PydanticAI Decomposer Task")
 async def run_decomposer_pydantic_ai_task(
     user_prompt: str,
-    model_name: str = "google-gla:gemini-1.5-flash",
-    api_key: str | None = None,
-    base_url: str | None = None,
+    link: LlmLink,
 ) -> DecomposerPlan:
     """Prefect Task wrapper executing PydanticAI Agent with full Prefect tracking & logging."""
     plan_id = hashlib.sha256(user_prompt.encode()).hexdigest()[:16]
-    try:
-        agent = get_decomposer_agent(model_name, api_key=api_key, base_url=base_url)
-        result = await agent.run(f"Decompose this multi-source request: {user_prompt}")
+    agent = get_decomposer_agent(link=link)
 
-        data = getattr(result, "data", None)
-        if data is None:
-            data = getattr(result, "output", None)
+    result = await agent.run(f"Decompose this multi-source request: {user_prompt}")
 
-        if isinstance(data, DecomposerPlan):
-            plan = data
-        elif isinstance(data, dict):
-            plan = DecomposerPlan.model_validate(data)
-        elif isinstance(data, str):
-            plan = DecomposerPlan.model_validate_json(data)
-        else:
-            raise TypeError(
-                f"Unexpected result from PydanticAI decomposer agent: {type(data or result)}"
-            )
-    except Exception as e:  # noqa: BLE001
-        logger.warning(
-            "PydanticAI agent decomposition failed (%s). Falling back to LlmClient JSON decomposition...",
-            e,
-        )
-        plan = await _fallback_llm_client_decompose(
-            user_prompt, model_name=model_name, api_key=api_key, base_url=base_url
+    data = getattr(result, "data", None)
+    if data is None:
+        data = getattr(result, "output", None)
+
+    if isinstance(data, DecomposerPlan):
+        plan = data
+    elif isinstance(data, dict):
+        plan = DecomposerPlan.model_validate(data)
+    elif isinstance(data, str):
+        plan = DecomposerPlan.model_validate_json(data)
+    else:
+        raise TypeError(
+            f"Unexpected result from PydanticAI decomposer agent: {type(data or result)}"
         )
 
     plan.plan_id = plan_id
@@ -161,20 +90,8 @@ async def run_decomposer_pydantic_ai_task(
 class PydanticAiDecomposer(DecomposerPort):
     """Decomposer Adapter delegating to Prefect-wrapped PydanticAI Agent."""
 
-    def __init__(
-        self,
-        model_name: str = "google-gla:gemini-1.5-flash",
-        api_key: str | None = None,
-        base_url: str | None = None,
-    ) -> None:
-        self.model_name = model_name
-        self.api_key = api_key
-        self.base_url = base_url
+    def __init__(self, link: LlmLink) -> None:
+        self.link = link
 
     async def decompose(self, user_prompt: str) -> DecomposerPlan:
-        return await run_decomposer_pydantic_ai_task(
-            user_prompt,
-            model_name=self.model_name,
-            api_key=self.api_key,
-            base_url=self.base_url,
-        )
+        return await run_decomposer_pydantic_ai_task(user_prompt, link=self.link)

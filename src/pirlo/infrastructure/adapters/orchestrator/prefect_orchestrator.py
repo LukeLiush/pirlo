@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import contextlib
-import os
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Annotated, Any
@@ -161,53 +160,32 @@ class SmartPrefectTaskOrchestrator(TaskOrchestrator):
             CompositeLinkRepository,
         )
 
+        repo = CompositeLinkRepository()
+
         if self.decomposer_link:
             if isinstance(self.decomposer_link, LlmLink):
                 return self.decomposer_link
 
-            repo = CompositeLinkRepository()
             link_name = getattr(
                 self.decomposer_link, "_name", str(self.decomposer_link)
             )
             link = repo.get_by_name(link_name)
             if link:
                 return link
+            raise ValueError(f"Specified decomposer link '{link_name}' not found.")
 
-        # Fall back to serve-ollama from composite repo if active connect session exists
-        repo = CompositeLinkRepository()
+        # Default to serve-ollama from composite repo if active
         serve_link = repo.get_by_name("serve-ollama")
         if serve_link:
             return serve_link
 
-        # Check if environment variable API keys exist for cloud providers
-        api_key = (
-            os.environ.get("PIRLO_DECOMPOSER_API_KEY")
-            or os.environ.get("GEMINI_API_KEY")
-            or os.environ.get("GOOGLE_API_KEY")
-        )
-        if api_key:
-            return LlmLink(
-                name="cloud-env-link",
-                provider="gemini",
-                model="google-gla:gemini-1.5-flash",
-                api_key=api_key,
-            )
-
-        # Fallback default link if no link or env key provided
-        return LlmLink(
-            name="default-gemini",
-            provider="gemini",
-            model="google-gla:gemini-1.5-flash",
-            api_key="",
+        raise ValueError(
+            "No decomposer link provided (`--decomposer-link`) and active 'serve-ollama' link was not found. "
+            "Please specify an active LLM link via --decomposer-link or connect to Ollama via `pirlo connect`."
         )
 
     def _build_decomposer(self) -> PydanticAiDecomposer:
-        link = self._get_resolved_link()
-        return PydanticAiDecomposer(
-            model_name=link.model,
-            api_key=link.api_key,
-            base_url=link.base_url,
-        )
+        return PydanticAiDecomposer(link=self._get_resolved_link())
 
     # ---- scheduled deployment ------------------------------------------
 
