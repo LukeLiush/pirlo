@@ -25,9 +25,6 @@ from pirlo.infrastructure.adapters.cli.parameter_sources import (
 from pirlo.infrastructure.adapters.orchestrator.prefect_orchestrator import (
     SmartPrefectTaskOrchestrator,
 )
-from pirlo.infrastructure.adapters.storage.json_link_repository import (
-    JsonLinkRepository,
-)
 from pirlo.infrastructure.services.parameter_resolution import ParameterResolver
 
 
@@ -131,14 +128,17 @@ class OrchestratorFactory:
         toml_opts: dict[str, Any],
         overrides: dict[str, Any],
     ) -> ParameterResolver:
+        from pirlo.infrastructure.adapters.storage.composite_link_repository import (
+            CompositeLinkRepository,
+        )
+
         converter = ValueConverter()
         sources: list[ParameterSource] = [
             TomlSource(toml_opts, converter),
             EnvironmentSource(converter),
             OverrideSource(overrides, converter),
         ]
-        links_file = get_workspace_path() / "links.json"
-        link_repository: LinkRepository = JsonLinkRepository(links_file)
+        link_repository: LinkRepository = CompositeLinkRepository()
         return ParameterResolver(sources, link_repository)
 
     # --- config resolution ------------------------------------------------

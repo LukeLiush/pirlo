@@ -58,9 +58,8 @@ class ParameterResolver:
         pirlo_workspace: Path,
         toml_config: dict[str, Any] | None = None,
     ) -> ParameterResolver:
-        """Wire the default precedence sources and JSON-backed link repo."""
-        from pirlo.infrastructure.adapters.storage.json_link_repository import (
-            JsonLinkRepository,
+        from pirlo.infrastructure.adapters.storage.composite_link_repository import (
+            CompositeLinkRepository,
         )
 
         parsed_args = playbook_parser.parse_args(playbook_invocation.playbook_args)
@@ -72,8 +71,7 @@ class ParameterResolver:
             ArgumentSource(parsed_args, converter),
         ]
 
-        links_file = (pirlo_workspace / "links.json").expanduser()
-        link_repository: LinkRepository = JsonLinkRepository(links_file)
+        link_repository: LinkRepository = CompositeLinkRepository()
         return cls(sources, link_repository)
 
     # --- public API -------------------------------------------------------
