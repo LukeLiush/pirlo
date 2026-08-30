@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Any
 
 import psutil
@@ -17,23 +18,46 @@ class SshTunnelManager(TunnelManager):
         self._ollama_tunnel: Any | None = None
 
     def open_tunnel(self, config: TunnelConfig) -> ActiveTunnel:
+        import paramiko
+
+        if not hasattr(paramiko, "DSSKey"):
+            paramiko.DSSKey = paramiko.PKey
+
         from sshtunnel import SSHTunnelForwarder
 
-        self._prefect_tunnel = SSHTunnelForwarder(
-            (config.remote_host, config.ssh_port),
-            ssh_username=config.ssh_user,
-            remote_bind_address=("127.0.0.1", config.remote_prefect_port),
-            local_bind_address=("127.0.0.1", 0),
-        )
-        self._prefect_tunnel.start()
+        kwargs: dict[str, Any] = {
+            "ssh_username": config.ssh_user,
+        }
 
-        self._ollama_tunnel = SSHTunnelForwarder(
-            (config.remote_host, config.ssh_port),
-            ssh_username=config.ssh_user,
-            remote_bind_address=("127.0.0.1", config.remote_ollama_port),
-            local_bind_address=("127.0.0.1", 0),
-        )
-        self._ollama_tunnel.start()
+        # Auto-detect default SSH key files if present in ~/.ssh/
+        for key_name in ("id_ed25519", "id_rsa", "id_ecdsa"):
+            key_path = Path(f"~/.ssh/{key_name}").expanduser()
+            if key_path.exists():
+                kwargs["ssh_pkey"] = str(key_path)
+                break
+
+        try:
+            self._prefect_tunnel = SSHTunnelForwarder(
+                (config.remote_host, config.ssh_port),
+                remote_bind_address=("127.0.0.1", config.remote_prefect_port),
+                local_bind_address=("127.0.0.1", 0),
+                **kwargs,
+            )
+            self._prefect_tunnel.start()
+
+            self._ollama_tunnel = SSHTunnelForwarder(
+                (config.remote_host, config.ssh_port),
+                remote_bind_address=("127.0.0.1", config.remote_ollama_port),
+                local_bind_address=("127.0.0.1", 0),
+                **kwargs,
+            )
+            self._ollama_tunnel.start()
+        except Exception as e:
+            print(
+                f"[pirlo connect] [ERROR] Failed to open SSH tunnel to {config.remote_host}: {e}"
+            )
+            self.close_tunnel()
+            raise RuntimeError(f"SSH Tunnel failed to {config.remote_host}: {e}") from e
 
         return ActiveTunnel(
             local_prefect_port=self._prefect_tunnel.local_bind_port,

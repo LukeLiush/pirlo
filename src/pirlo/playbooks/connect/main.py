@@ -106,13 +106,36 @@ class ConnectSession(Pitch):
         if "@" in remote_host:
             ssh_user, host_target = remote_host.split("@", 1)
 
-        session = service.connect(
-            remote_host=host_target, ssh_user=ssh_user, ssh_port=ssh_port
-        )
+        try:
+            session = service.connect(
+                remote_host=host_target, ssh_user=ssh_user, ssh_port=ssh_port
+            )
+        except Exception as e:  # noqa: BLE001
+            self.ui.commentary(
+                f"[ERROR] Failed to establish connection to {remote_host}.\nDetails: {e}\n"
+            )
+            self.ui.commentary(
+                "💡 Troubleshooting Steps:\n"
+                f"   1. Ensure SSH server (sshd) is running on {host_target} (port {ssh_port}):\n"
+                "      • macOS: Enable System Settings > Sharing > Remote Login\n"
+                "      • Linux: Ensure 'sudo systemctl status ssh' is active\n"
+                "   2. Verify your SSH credentials and identity key (~/.ssh/id_rsa or id_ed25519):\n"
+                f"      • Test manually in terminal: ssh {remote_host}\n"
+            )
+            return RunResult(
+                run_id=run_id_val,
+                status=RunStatus.FAILED,
+                error=f"Connection to {remote_host} failed: {e}",
+            )
 
         if not session:
             self.ui.commentary(
                 f"[ERROR] Failed to establish connection to {remote_host}"
+            )
+            self.ui.commentary(
+                "💡 Troubleshooting Steps:\n"
+                "   1. Ensure 'pirlo serve' is active on the remote host.\n"
+                f'   2. Verify remote manifest file by running: ssh {remote_host} "cat ~/.pirlo-pitch/serve/serve.json"\n'
             )
             return RunResult(
                 run_id=run_id_val,
