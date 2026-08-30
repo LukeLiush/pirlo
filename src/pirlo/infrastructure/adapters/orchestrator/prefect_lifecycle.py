@@ -123,6 +123,12 @@ async def aggregate_subtask_results_task(
     if link is None:
         return f"Aggregator unable to process prompt: {prompt}"
 
+    logger.info(
+        "📊 Synthesizing final summary using Link '%s' (Provider: %s, Model: %s)...",
+        link.name,
+        link.provider,
+        link.model,
+    )
     return await LlmClient.acompletion(
         link=link,
         prompt=prompt,

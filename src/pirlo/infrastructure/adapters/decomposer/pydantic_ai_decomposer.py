@@ -63,6 +63,13 @@ async def run_decomposer_pydantic_ai_task(
 ) -> DecomposerPlan:
     """Prefect Task wrapper executing PydanticAI Agent with full Prefect tracking & logging."""
     plan_id = hashlib.sha256(user_prompt.encode()).hexdigest()[:16]
+    logger.info(
+        "🧩 Decomposing task using Link '%s' (Provider: %s, Model: %s, Base URL: %s)...",
+        link.name,
+        link.provider,
+        link.model,
+        link.base_url or "Default API",
+    )
     agent = get_decomposer_agent(link=link)
 
     result = await agent.run(f"Decompose this multi-source request: {user_prompt}")
