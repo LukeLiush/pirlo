@@ -1,5 +1,14 @@
+import asyncio
 import getpass
 from typing import Annotated, Any
+
+from tenacity import (
+    AsyncRetrying,
+    RetryError,
+    retry_if_result,
+    stop_after_attempt,
+    wait_fixed,
+)
 
 from pirlo.core.decorators import playbook
 from pirlo.core.domain.connect.connect_service import ConnectService
@@ -10,6 +19,9 @@ from pirlo.core.models.serve_manifest import ActiveSession
 from pirlo.core.ports.health_checker import HealthStatus
 from pirlo.core.ports.pitch import Pitch
 
+HEALTH_CHECK_INTERVAL_SECONDS: float = 15.0
+MAX_CONSECUTIVE_FAILURES: int = 3
+
 
 @playbook(
     name="connect",
@@ -17,6 +29,30 @@ from pirlo.core.ports.pitch import Pitch
 )
 class ConnectSession(Pitch):
     """Connect playbook that establishes SSH tunnels and registers link overlays."""
+
+    def _on_retry_sleep(self, retry_state: Any) -> None:
+        attempt_num: int = retry_state.attempt_number
+        self.ui.commentary(
+            f"[WARN] Health check failed ({attempt_num}/{MAX_CONSECUTIVE_FAILURES}). "
+            f"Retrying in {HEALTH_CHECK_INTERVAL_SECONDS:.0f} seconds...\n"
+        )
+
+    async def _monitor_health_loop(
+        self, session: ActiveSession, service: ConnectService
+    ) -> HealthStatus:
+        """Runs periodic health probes using tenacity declarative retries."""
+        async for attempt in AsyncRetrying(
+            stop=stop_after_attempt(MAX_CONSECUTIVE_FAILURES),
+            wait=wait_fixed(HEALTH_CHECK_INTERVAL_SECONDS),
+            retry=retry_if_result(lambda status: not status.is_healthy),
+            before_sleep=self._on_retry_sleep,
+            reraise=True,
+        ):
+            with attempt:
+                status: HealthStatus = service.health_checker.check_health(session)
+                if not status.is_healthy:
+                    return status
+        return HealthStatus(is_healthy=True, service_name="all", message="Healthy")
 
     async def play(
         self,
@@ -147,15 +183,42 @@ class ConnectSession(Pitch):
             )
 
         self.ui.goal(
-            "Connected to remote pirlo serve successfully!",
+            "Connected to pirlo serve successfully!",
             detail=(
                 f"Remote Host: {session.remote_host}\n"
                 f"Local Prefect Tunnel: {session.prefect_api_url}\n"
                 f"Local Ollama Tunnel: {session.ollama_base_url}\n\n"
-                f"💡 To disconnect at any time, run:\n"
-                f"   pirlo connect --down"
+                f"💡 Press Ctrl+C at any time to disconnect cleanly."
             ),
         )
+
+        try:
+            await self._monitor_health_loop(session, service)
+        except RetryError:
+            total_seconds: float = (
+                MAX_CONSECUTIVE_FAILURES * HEALTH_CHECK_INTERVAL_SECONDS
+            )
+            self.ui.commentary(
+                f"\n[ERROR] Connection failed {MAX_CONSECUTIVE_FAILURES} consecutive times "
+                f"({total_seconds:.0f}s). Closing session and exiting."
+            )
+            service.disconnect()
+            return RunResult(
+                run_id=run_id_val,
+                status=RunStatus.FAILED,
+                error=f"Connection failed after {MAX_CONSECUTIVE_FAILURES} consecutive health check failures.",
+            )
+        except (KeyboardInterrupt, asyncio.CancelledError):
+            self.ui.commentary(
+                "\n[pirlo connect] Interrupt received. Closing connection and cleaning session..."
+            )
+            service.disconnect()
+            self.ui.goal("Disconnected cleanly.")
+            return RunResult(
+                run_id=run_id_val,
+                status=RunStatus.COMPLETED,
+                data={"status": "disconnected"},
+            )
 
         return RunResult(
             run_id=run_id_val,

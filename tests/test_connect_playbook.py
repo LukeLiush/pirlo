@@ -1,4 +1,4 @@
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -20,9 +20,12 @@ async def test_connect_session_playbook_connect_success(tmp_path):
         remote_ollama_port=11434,
     )
 
-    with patch(
-        "pirlo.playbooks.connect.main.ConnectService.create_default",
-        return_value=mock_service,
+    with (
+        patch(
+            "pirlo.playbooks.connect.main.ConnectService.create_default",
+            return_value=mock_service,
+        ),
+        patch.object(session, "_monitor_health_loop", new_callable=AsyncMock),
     ):
         result = await session.play(remote_host="ubuntu@gpu-server.local")
         assert result.status.name == "COMPLETED"
@@ -72,3 +75,32 @@ async def test_connect_session_playbook_status(tmp_path):
         assert result.status.name == "COMPLETED"
         assert result.data["active"]
         assert result.data["remote_host"] == "gpu-server.local"
+
+
+@pytest.mark.anyio
+async def test_connect_session_playbook_circuit_breaker(tmp_path):
+    session = ConnectSession()
+
+    mock_service = MagicMock()
+    mock_service.connect.return_value = ActiveSession(
+        remote_host="gpu-server.local",
+        local_prefect_port=4201,
+        local_ollama_port=11435,
+        remote_prefect_port=4200,
+        remote_ollama_port=11434,
+    )
+    mock_service.health_checker.check_health.return_value = HealthStatus(
+        is_healthy=False, service_name="test", message="Degraded"
+    )
+
+    with (
+        patch(
+            "pirlo.playbooks.connect.main.ConnectService.create_default",
+            return_value=mock_service,
+        ),
+        patch("pirlo.playbooks.connect.main.HEALTH_CHECK_INTERVAL_SECONDS", 0.01),
+    ):
+        result = await session.play(remote_host="ubuntu@gpu-server.local")
+        assert result.status.name == "FAILED"
+        assert "3 consecutive health check failures" in result.error
+        mock_service.disconnect.assert_called_once()
