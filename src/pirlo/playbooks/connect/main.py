@@ -5,7 +5,6 @@ from typing import Annotated, Any
 from tenacity import (
     AsyncRetrying,
     RetryError,
-    retry_if_result,
     stop_after_attempt,
     wait_fixed,
 )
@@ -21,6 +20,14 @@ from pirlo.core.ports.pitch import Pitch
 
 HEALTH_CHECK_INTERVAL_SECONDS: float = 15.0
 MAX_CONSECUTIVE_FAILURES: int = 3
+
+
+class UnhealthyServiceError(Exception):
+    """Raised inside health monitor loop to trigger tenacity retries."""
+
+    def __init__(self, status: HealthStatus) -> None:
+        self.status = status
+        super().__init__(status.message)
 
 
 @playbook(
@@ -39,20 +46,18 @@ class ConnectSession(Pitch):
 
     async def _monitor_health_loop(
         self, session: ActiveSession, service: ConnectService
-    ) -> HealthStatus:
+    ) -> None:
         """Runs periodic health probes using tenacity declarative retries."""
         async for attempt in AsyncRetrying(
             stop=stop_after_attempt(MAX_CONSECUTIVE_FAILURES),
             wait=wait_fixed(HEALTH_CHECK_INTERVAL_SECONDS),
-            retry=retry_if_result(lambda status: not status.is_healthy),
             before_sleep=self._on_retry_sleep,
             reraise=True,
         ):
             with attempt:
                 status: HealthStatus = service.health_checker.check_health(session)
                 if not status.is_healthy:
-                    return status
-        return HealthStatus(is_healthy=True, service_name="all", message="Healthy")
+                    raise UnhealthyServiceError(status)
 
     async def play(
         self,
@@ -194,7 +199,7 @@ class ConnectSession(Pitch):
 
         try:
             await self._monitor_health_loop(session, service)
-        except RetryError:
+        except (RetryError, UnhealthyServiceError):
             total_seconds: float = (
                 MAX_CONSECUTIVE_FAILURES * HEALTH_CHECK_INTERVAL_SECONDS
             )
