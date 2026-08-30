@@ -15,7 +15,7 @@ def get_workspace_path() -> Path:
 
 DEFAULT_PREFECT_PORT: int = 4200
 DEFAULT_OLLAMA_PORT: int = 11434
-DEFAULT_OLLAMA_MODEL: str = "qwen2.5"
+DEFAULT_OLLAMA_MODEL: str = "qwen2.5:3b"
 
 
 SERVE_MANIFEST_FILENAME: str = "serve.json"

@@ -24,14 +24,14 @@ services:
       retries: 10
 
   ollama-init:
-    image: curlimages/curl:latest
+    image: ollama/ollama:latest
     container_name: pirlo-ollama-init
     depends_on:
       ollama:
         condition: service_healthy
     environment:
-      - OLLAMA_MODELS=${OLLAMA_MODELS:-qwen2.5}
-
+      - OLLAMA_HOST=http://ollama:11434
+      - OLLAMA_MODELS=${OLLAMA_MODELS:-qwen2.5:3b}
 
     entrypoint: ["/bin/sh", "-c"]
     command:
@@ -41,7 +41,7 @@ services:
         for model in $$OLLAMA_MODELS; do
           model_trimmed=$$(echo "$$model" | xargs)
           echo "[pirlo serve] Ensuring model '$$model_trimmed' is pulled..."
-          curl -sf -X POST http://ollama:11434/api/pull -d "{\"name\": \"$$model_trimmed\", \"stream\": false}"
+          ollama pull "$$model_trimmed"
         done
         echo "[pirlo serve] All models pre-pulled and ready!"
 
