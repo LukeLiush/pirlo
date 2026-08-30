@@ -73,6 +73,50 @@ def get_decomposer_agent(
     return agent
 
 
+async def _fallback_llm_client_decompose(
+    user_prompt: str,
+    model_name: str,
+    api_key: str | None = None,
+    base_url: str | None = None,
+) -> DecomposerPlan:
+    """Fallback JSON decomposition using LlmClient for models incompatible with PydanticAI schema tools."""
+    from pirlo.core.models.link import LlmLink
+    from pirlo.core.utils.text_sanitizer import clean_llm_response
+    from pirlo.infrastructure.services.llm_client import LlmClient
+
+    link = LlmLink(
+        name="decomposer-fallback",
+        provider="ollama" if base_url else "openai",
+        model=model_name,
+        api_key=api_key or "",
+        base_url=base_url,
+    )
+
+    prompt = (
+        f"{DECOMPOSER_SYSTEM_PROMPT}\n\n"
+        f"User Request: {user_prompt}\n\n"
+        "Return ONLY a valid JSON object matching the DecomposerPlan structure:\n"
+        "{\n"
+        '  "subtasks": [\n'
+        "    {\n"
+        '      "subtask_id": "subtask_1",\n'
+        '      "target_site": "Gemini",\n'
+        '      "target_url": "https://gemini.google.com/app",\n'
+        '      "task_prompt": "Ask what is the capital of UK",\n'
+        '      "extraction_targets": ["capital of UK"]\n'
+        "    }\n"
+        "  ],\n"
+        '  "aggregation_prompt": "Combine the answers"\n'
+        "}\n"
+    )
+
+    raw_response = await LlmClient.acompletion(
+        link=link, prompt=prompt, temperature=0.0
+    )
+    cleaned_json = clean_llm_response(raw_response)
+    return DecomposerPlan.model_validate_json(cleaned_json)
+
+
 @task(name="Run PydanticAI Decomposer Task")
 async def run_decomposer_pydantic_ai_task(
     user_prompt: str,
@@ -82,23 +126,31 @@ async def run_decomposer_pydantic_ai_task(
 ) -> DecomposerPlan:
     """Prefect Task wrapper executing PydanticAI Agent with full Prefect tracking & logging."""
     plan_id = hashlib.sha256(user_prompt.encode()).hexdigest()[:16]
-    agent = get_decomposer_agent(model_name, api_key=api_key, base_url=base_url)
+    try:
+        agent = get_decomposer_agent(model_name, api_key=api_key, base_url=base_url)
+        result = await agent.run(f"Decompose this multi-source request: {user_prompt}")
 
-    result = await agent.run(f"Decompose this multi-source request: {user_prompt}")
+        data = getattr(result, "data", None)
+        if data is None:
+            data = getattr(result, "output", None)
 
-    data = getattr(result, "data", None)
-    if data is None:
-        data = getattr(result, "output", None)
-
-    if isinstance(data, DecomposerPlan):
-        plan = data
-    elif isinstance(data, dict):
-        plan = DecomposerPlan.model_validate(data)
-    elif isinstance(data, str):
-        plan = DecomposerPlan.model_validate_json(data)
-    else:
-        raise TypeError(
-            f"Unexpected result from PydanticAI decomposer agent: {type(data or result)}"
+        if isinstance(data, DecomposerPlan):
+            plan = data
+        elif isinstance(data, dict):
+            plan = DecomposerPlan.model_validate(data)
+        elif isinstance(data, str):
+            plan = DecomposerPlan.model_validate_json(data)
+        else:
+            raise TypeError(
+                f"Unexpected result from PydanticAI decomposer agent: {type(data or result)}"
+            )
+    except Exception as e:  # noqa: BLE001
+        logger.warning(
+            "PydanticAI agent decomposition failed (%s). Falling back to LlmClient JSON decomposition...",
+            e,
+        )
+        plan = await _fallback_llm_client_decompose(
+            user_prompt, model_name=model_name, api_key=api_key, base_url=base_url
         )
 
     plan.plan_id = plan_id
