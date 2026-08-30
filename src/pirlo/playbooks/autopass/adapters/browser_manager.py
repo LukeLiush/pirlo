@@ -7,6 +7,9 @@ from typing import Any
 
 from cloakbrowser import launch_persistent_context_async
 
+from pirlo.playbooks.autopass.adapters.profile_lock_patcher import (
+    ChromiumProfileLockPatcher,
+)
 from pirlo.playbooks.autopass.core.ports import BrowserManager as BaseBrowserManager
 
 
@@ -24,12 +27,15 @@ class CloakBrowserManager(BaseBrowserManager):
     @asynccontextmanager
     async def session(self) -> AsyncIterator[CloakBrowserManager]:
         """Launches the persistent CloakBrowser context on enter, and closes it on exit."""
+        ChromiumProfileLockPatcher.patch(self.profile_path)
+
         self._ctx = await launch_persistent_context_async(
             str(self.profile_path),
             headless=self.headless,
             humanize=False,
             args=[f"--remote-debugging-port={self.cdp_port}"],
         )
+
         try:
             yield self
         finally:
