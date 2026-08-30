@@ -8,7 +8,6 @@ from playwright.async_api import async_playwright
 from pirlo.core.models.actions import Action, DoneAction
 from pirlo.core.models.browser_config import BrowserConfig
 from pirlo.core.models.execution_context import DEFAULT_CONTEXT, ExecutionContext
-from pirlo.core.models.link import LlmLink
 from pirlo.core.models.workflow import Workflow
 from pirlo.core.repository.run_history_repository import RunHistoryRepository
 from pirlo.core.repository.workflow_repository import WorkflowRepository
@@ -22,19 +21,16 @@ class PlaywrightReplayRunner(WorkflowRunner[PlaywrightPage]):
     """Executes a cached domain Workflow sequence deterministically using standard Playwright."""
 
     repository: WorkflowRepository
-    link: LlmLink | None
     browser_config: BrowserConfig
     run_history_repository: RunHistoryRepository | None
 
     def __init__(
         self,
         repository: WorkflowRepository,
-        link: LlmLink | None = None,
         browser_config: BrowserConfig | None = None,
         run_history_repository: RunHistoryRepository | None = None,
     ) -> None:
         self.repository = repository
-        self.link = link
         self.browser_config = browser_config or BrowserConfig()
         self.run_history_repository = run_history_repository
 

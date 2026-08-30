@@ -66,14 +66,13 @@ Removes a link configuration from the storage registry.
 
 ## 3. Running Autopass Playbooks
 
-To execute a playbook, specify the playmaker and analyst link names.
+To execute a playbook, specify the playmaker link name.
 
 ### Example Run:
 ```bash
 pirlo autopass \
   --task "Navigate to booking.com, search for hotels in Munich, and filter by rating > 4" \
   --playmaker gemini-flash \
-  --analyst qwen-flash \
   --headless
 ```
 
@@ -82,9 +81,8 @@ If you run without setting up any links, you can reference the standard provider
 ```bash
 # Works without links.json configuration
 export GEMINI_API_KEY="AIzaSy..."
-export DASHSCOPE_API_KEY="sk-..."
 pirlo autopass \
   --task "Search Google" \
-  --playmaker gemini-default \
-  --analyst dashscope-default
+  --playmaker gemini-default
 ```
+

@@ -446,7 +446,6 @@ class TestRunHistoryAndMVC(unittest.TestCase):
 
             runner = PlaywrightReplayRunner(
                 repository=repo,
-                link=None,
                 browser_config=BrowserConfig(cdp_url=None),
             )
 

@@ -85,13 +85,6 @@ class AutopassSession(Pitch):
                 help="Link name for Playmaker (decision brain)", env_name="PLAYMAKER"
             ),
         ] = None,
-        analyst: Annotated[
-            LlmLink | None,
-            LinkParameter(
-                help="Link name for Analyst (DOM summary / selector healer)",
-                env_name="ANALYST",
-            ),
-        ] = None,
         use_vision: Annotated[
             bool, Parameter(help="Enable vision for the Agent", env_name="USE_VISION")
         ] = False,
@@ -174,10 +167,10 @@ class AutopassSession(Pitch):
                 error=str(AutopassInstructions.TASK_REQUIRED),
             )
 
-        if playmaker is None or analyst is None:
+        if playmaker is None:
             err_msg = (
-                "Error: Playmaker and Analyst links are required.\n"
-                "Please specify --playmaker and --analyst.\n"
+                "Error: Playmaker link is required.\n"
+                "Please specify --playmaker.\n"
                 "Run 'pirlo link list' to see available links, or 'pirlo link create' to register a new one."
             )
             self.ui.yellow_card(err_msg)
@@ -188,7 +181,6 @@ class AutopassSession(Pitch):
             )
 
         pm_base_url = playmaker.base_url or "N/A"
-        an_base_url = analyst.base_url or "N/A"
 
         self.ui.lineup(
             "Active Run Configuration",
@@ -203,12 +195,6 @@ class AutopassSession(Pitch):
                 ],
                 ["Playmaker Model", playmaker.model],
                 ["Playmaker Base URL", pm_base_url or "N/A"],
-                [
-                    "Analyst Link (Provider)",
-                    f"{analyst} ({analyst.provider})",
-                ],
-                ["Analyst Model", analyst.model],
-                ["Analyst Base URL", an_base_url or "N/A"],
                 ["Vision Enabled", str(use_vision)],
                 ["Max Failures / Delay", f"{max_failures} / {retry_delay}s"],
                 [
@@ -246,7 +232,6 @@ class AutopassSession(Pitch):
 
         replay_runner: WorkflowRunner = PlaywrightReplayRunner(
             repository=workflow_repo,
-            link=analyst,
             browser_config=browser_config,
         )
 
