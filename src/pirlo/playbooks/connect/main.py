@@ -3,10 +3,7 @@ import getpass
 from typing import Annotated, Any
 
 from tenacity import (
-    AsyncRetrying,
     RetryError,
-    stop_after_attempt,
-    wait_fixed,
 )
 
 from pirlo.core.decorators import playbook
@@ -37,26 +34,28 @@ class UnhealthyServiceError(Exception):
 class ConnectSession(Pitch):
     """Connect playbook that establishes SSH tunnels and registers link overlays."""
 
-    def _on_retry_sleep(self, retry_state: Any) -> None:
-        attempt_num: int = retry_state.attempt_number
-        self.ui.commentary(
-            f"[WARN] Health check failed ({attempt_num}/{MAX_CONSECUTIVE_FAILURES}). "
-            f"Retrying in {HEALTH_CHECK_INTERVAL_SECONDS:.0f} seconds...\n"
-        )
-
     async def _monitor_health_loop(
         self, session: ActiveSession, service: ConnectService
     ) -> None:
-        """Runs periodic health probes using tenacity declarative retries."""
-        async for attempt in AsyncRetrying(
-            stop=stop_after_attempt(MAX_CONSECUTIVE_FAILURES),
-            wait=wait_fixed(HEALTH_CHECK_INTERVAL_SECONDS),
-            before_sleep=self._on_retry_sleep,
-            reraise=True,
-        ):
-            with attempt:
-                status: HealthStatus = service.health_checker.check_health(session)
-                if not status.is_healthy:
+        """Runs continuously in a while True loop, stopping only on N consecutive failures."""
+        consecutive_failures: int = 0
+        while True:
+            await asyncio.sleep(HEALTH_CHECK_INTERVAL_SECONDS)
+            status: HealthStatus = service.health_checker.check_health(session)
+
+            if status.is_healthy:
+                if consecutive_failures > 0:
+                    self.ui.commentary(
+                        f"[PASS] Connection health recovered on {session.remote_host}!\n"
+                    )
+                consecutive_failures = 0
+            else:
+                consecutive_failures += 1
+                self.ui.commentary(
+                    f"[WARN] Health check failed ({consecutive_failures}/{MAX_CONSECUTIVE_FAILURES}) "
+                    f"on {session.remote_host}: {status.message}\n"
+                )
+                if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
                     raise UnhealthyServiceError(status)
 
     async def play(
