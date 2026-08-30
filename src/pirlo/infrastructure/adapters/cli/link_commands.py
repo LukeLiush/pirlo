@@ -1,19 +1,18 @@
 import argparse
 import getpass
 import sys
-from pathlib import Path
 from typing import Any
 
 from pirlo.core.models.link import SUPPORTED_PROVIDERS, LlmLink
-from pirlo.infrastructure.adapters.storage.json_link_repository import (
-    JsonLinkRepository,
+from pirlo.core.ports.link_repository import LinkRepository
+from pirlo.infrastructure.adapters.storage.composite_link_repository import (
+    CompositeLinkRepository,
 )
 from pirlo.infrastructure.services.link_tester import LinkTester
 
 
-def get_repo() -> JsonLinkRepository:
-    filepath = Path("~/.pirlo-pitch/links.json").expanduser()
-    return JsonLinkRepository(filepath)
+def get_repo() -> LinkRepository:
+    return CompositeLinkRepository()
 
 
 def link_main(supported_providers: dict[str, Any] | None = None) -> None:
@@ -70,16 +69,17 @@ def link_main(supported_providers: dict[str, Any] | None = None) -> None:
         run_delete(repo, args.name)
 
 
-def run_list(repo: JsonLinkRepository, supported_providers: dict[str, Any]) -> None:
+def run_list(repo: LinkRepository, supported_providers: dict[str, Any]) -> None:
     links = repo.list_all()
     if not links:
         print("No active LLM links registered. Run 'pirlo link create' to add one.")
         return
 
     print("Active LLM Links:\n")
-    print(f"{'Name':<20} {'Provider':<12} {'Model':<20} {'Base URL'}")
-    print("─" * 90)
+    print(f"{'Name':<22} {'Provider':<12} {'Model':<20} {'Source':<15} {'Base URL'}")
+    print("─" * 105)
     for link in links:
+        source_tag = getattr(link, "source", None) or "User Static"
         if link.base_url:
             base_url_str = link.base_url
         else:
@@ -91,7 +91,9 @@ def run_list(repo: JsonLinkRepository, supported_providers: dict[str, Any]) -> N
 
         if len(base_url_str) > 36:
             base_url_str = base_url_str[:33] + "..."
-        print(f"{link.name:<20} {link.provider:<12} {link.model:<20} {base_url_str}")
+        print(
+            f"{link.name:<22} {link.provider:<12} {link.model:<20} {source_tag:<15} {base_url_str}"
+        )
 
     print("\n💡 Base URL Guide:")
     print(
@@ -103,7 +105,7 @@ def run_list(repo: JsonLinkRepository, supported_providers: dict[str, Any]) -> N
 
 
 def run_create(
-    repo: JsonLinkRepository,
+    repo: LinkRepository,
     args: argparse.Namespace,
     supported_providers: dict[str, Any],
 ) -> None:
@@ -203,7 +205,7 @@ def run_create(
 
 
 def run_show(
-    repo: JsonLinkRepository, name: str, supported_providers: dict[str, Any]
+    repo: LinkRepository, name: str, supported_providers: dict[str, Any]
 ) -> None:
     link = repo.get_by_name(name)
     if not link:
@@ -234,7 +236,7 @@ def run_show(
     print(f"  API Key:     {masked_key}")
 
 
-def run_test(repo: JsonLinkRepository, name: str) -> None:
+def run_test(repo: LinkRepository, name: str) -> None:
     link = repo.get_by_name(name)
     if not link:
         print(f"Error: Link '{name}' not found.")
@@ -251,7 +253,13 @@ def run_test(repo: JsonLinkRepository, name: str) -> None:
         sys.exit(1)
 
 
-def run_delete(repo: JsonLinkRepository, name: str) -> None:
+def run_delete(repo: LinkRepository, name: str) -> None:
+    if repo.delete(name):
+        print(f"Successfully deleted link '{name}'.")
+    else:
+        print(f"Error: Link '{name}' not found.")
+        sys.exit(1)
+
     if repo.delete(name):
         print(f"Successfully deleted link '{name}'.")
     else:
