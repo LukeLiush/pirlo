@@ -1,5 +1,8 @@
+import os
 import shutil
 from pathlib import Path
+
+import psutil
 
 from pirlo.core.config import get_workspace_path
 from pirlo.core.models.link import LlmLink
@@ -52,6 +55,20 @@ class ConnectService:
             connect_dir=connect_dir,
         )
 
+    def _terminate_process(self, pid: int | None) -> None:
+        """Gracefully terminates a previous pirlo connect process PID."""
+        if not pid or pid == os.getpid():
+            return
+        try:
+            proc = psutil.Process(pid)
+            proc.terminate()
+            proc.wait(timeout=3.0)
+        except (psutil.NoSuchProcess, psutil.TimeoutExpired):
+            try:
+                psutil.Process(pid).kill()
+            except Exception:  # noqa: BLE001, S110
+                pass
+
     def connect(
         self,
         remote_host: str = "localhost",
@@ -69,18 +86,14 @@ class ConnectService:
         session_file: Path = self.connect_dir / "session.json"
         existing_session: ActiveSession | None = ActiveSession.load_active(session_file)
 
-        # 1. Same-Host Liveness Check
+        # 1. Terminate & replace any existing connection process
         if existing_session and existing_session.is_alive():
-            if existing_session.is_same_host(target_host):
-                print(
-                    f"[pirlo connect] Already connected to {target_host}. Reusing active session."
-                )
-                return existing_session
-            else:
-                print(
-                    f"[pirlo connect] Closing existing connection to {existing_session.remote_host}..."
-                )
-                self.disconnect()
+            print(
+                f"[pirlo connect] Terminating previous connection process "
+                f"(PID {existing_session.cli_pid or 'active'})..."
+            )
+            self._terminate_process(existing_session.cli_pid)
+            self.disconnect()
 
         if is_local:
             print("[pirlo connect] Auto-detecting local pirlo serve instance...")
@@ -97,7 +110,7 @@ class ConnectService:
                 local_ollama_port=manifest.default_ollama_port,
                 remote_prefect_port=manifest.default_prefect_port,
                 remote_ollama_port=manifest.default_ollama_port,
-                tunnel_pid=None,
+                cli_pid=os.getpid(),
             )
         else:
             # 2. Probe Remote Manifest via Injected Prober Port
@@ -121,7 +134,7 @@ class ConnectService:
                 local_ollama_port=tunnel.local_ollama_port,
                 remote_prefect_port=manifest.default_prefect_port,
                 remote_ollama_port=manifest.default_ollama_port,
-                tunnel_pid=tunnel.pid,
+                cli_pid=os.getpid(),
             )
 
         # 4. Health Check Verification via Injected ServiceHealthChecker Port

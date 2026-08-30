@@ -114,6 +114,7 @@ class ConnectSession(Pitch):
                 f"Remote Host: {active_session.remote_host}\n"
                 f"Prefect API: {active_session.prefect_api_url}\n"
                 f"Ollama Base: {active_session.ollama_base_url}\n"
+                f"CLI Process PID: {active_session.cli_pid or 'N/A'}\n"
                 f"Health: {'HEALTHY' if health_status and health_status.is_healthy else 'UNHEALTHY'}\n"
                 f"{health_status.message if health_status else ''}"
             )
@@ -124,6 +125,7 @@ class ConnectSession(Pitch):
                 data={
                     "active": True,
                     "remote_host": active_session.remote_host,
+                    "cli_pid": active_session.cli_pid,
                 },
             )
 
@@ -151,8 +153,11 @@ class ConnectSession(Pitch):
         session: ActiveSession | None = None
         try:
             session = service.connect(
-                remote_host=host_target, ssh_user=ssh_user, ssh_port=ssh_port
+                remote_host=host_target,
+                ssh_user=ssh_user,
+                ssh_port=ssh_port,
             )
+
         except Exception as e:  # noqa: BLE001
             self.ui.commentary(
                 f"[ERROR] Failed to establish connection to {remote_host}.\nDetails: {e}\n"

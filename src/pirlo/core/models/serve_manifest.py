@@ -44,7 +44,7 @@ class ActiveSession:
     local_ollama_port: int
     remote_prefect_port: int
     remote_ollama_port: int
-    tunnel_pid: int | None = None
+    cli_pid: int | None = None
 
     def is_same_host(self, target_host: str) -> bool:
         """Encapsulates host string comparison logic."""
@@ -52,9 +52,9 @@ class ActiveSession:
 
     def is_alive(self) -> bool:
         """2-Tier validation: Checks local OS PID existence & local socket ping."""
-        if self.tunnel_pid is not None:
+        if self.cli_pid is not None:
             try:
-                os.kill(self.tunnel_pid, 0)
+                os.kill(self.cli_pid, 0)
             except OSError:
                 return False
 

@@ -1,4 +1,5 @@
 from pathlib import Path
+from unittest.mock import patch
 
 from pirlo.core.models.serve_manifest import ActiveSession, ServeManifest
 from pirlo.core.ports.health_checker import HealthStatus, ServiceHealthChecker
@@ -113,3 +114,25 @@ def test_connect_service_local_autodiscovery(tmp_path: Path, monkeypatch):
     assert session.local_prefect_port == 4200
     assert session.local_ollama_port == 11434
     assert not tunnel_mgr.opened  # Local connect bypasses SSH tunnel!
+
+
+def test_connect_service_replaces_previous(tmp_path: Path):
+    connect_dir = tmp_path / "connect"
+    prober = MockProber()
+    tunnel_mgr = MockTunnelManager()
+    health_checker = MockHealthyServiceChecker()
+
+    service = ConnectService(
+        prober=prober,
+        tunnel_manager=tunnel_mgr,
+        health_checker=health_checker,
+        connect_dir=connect_dir,
+    )
+
+    session1 = service.connect(remote_host="gpu-node.internal", ssh_user="ubuntu")
+    assert session1 is not None
+
+    with patch.object(ActiveSession, "is_alive", return_value=True):
+        session2 = service.connect(remote_host="gpu-node.internal", ssh_user="ubuntu")
+        assert session2 is not None
+        assert tunnel_mgr.closed

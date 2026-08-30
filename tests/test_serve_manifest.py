@@ -29,7 +29,7 @@ def test_active_session_properties_and_host_matching(tmp_path: Path):
         local_ollama_port=11435,
         remote_prefect_port=4200,
         remote_ollama_port=11434,
-        tunnel_pid=12345,
+        cli_pid=12345,
     )
 
     assert session.prefect_api_url == "http://127.0.0.1:4201/api"
