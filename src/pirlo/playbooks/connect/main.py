@@ -5,6 +5,8 @@ from pirlo.core.domain.connect.connect_service import ConnectService
 from pirlo.core.models.parameters import Parameter
 from pirlo.core.models.run import RunStatus
 from pirlo.core.models.run_result import RunResult
+from pirlo.core.models.serve_manifest import ActiveSession
+from pirlo.core.ports.health_checker import HealthStatus
 from pirlo.core.ports.pitch import Pitch
 
 
@@ -34,10 +36,10 @@ class ConnectSession(Pitch):
         *args: Any,
         **kwargs: Any,
     ) -> RunResult[Any]:
-        run_id_val = (
+        run_id_val: str = (
             (await self.prepared_run()).run_id if self._prepared_run else "connect-run"
         )
-        service = ConnectService.create_default()
+        service: ConnectService = ConnectService.create_default()
 
         # 1. Disconnect Handler (pirlo connect --down / --disconnect)
         if down or disconnect:
@@ -55,7 +57,10 @@ class ConnectSession(Pitch):
         # 2. Status Handler (pirlo connect --status)
         if status:
             self.ui.header("Pirlo Connect Engine", subtitle="Active Session Status")
+            active_session: ActiveSession | None
+            health_status: HealthStatus | None
             active_session, health_status = service.get_status()
+
             if not active_session:
                 self.ui.commentary("No active pirlo connect session.")
                 return RunResult(
@@ -64,7 +69,7 @@ class ConnectSession(Pitch):
                     data={"active": False},
                 )
 
-            detail_msg = (
+            detail_msg: str = (
                 f"Remote Host: {active_session.remote_host}\n"
                 f"Prefect API: {active_session.prefect_api_url}\n"
                 f"Ollama Base: {active_session.ollama_base_url}\n"
@@ -82,21 +87,22 @@ class ConnectSession(Pitch):
             )
 
         # 3. Connect Handler (pirlo connect [remote_host])
-        target = remote_host.strip() if remote_host else "localhost"
-        is_local = target.lower() in ("localhost", "127.0.0.1", "local")
+        target: str = remote_host.strip() if remote_host else "localhost"
+        is_local: bool = target.lower() in ("localhost", "127.0.0.1", "local")
 
-        subtitle_str = (
+        subtitle_str: str = (
             "Auto-detecting local pirlo serve instance"
             if is_local
             else f"Connecting to remote host: {target}"
         )
         self.ui.header("Pirlo Connect Engine", subtitle=subtitle_str)
 
-        ssh_user = "ubuntu"
-        host_target = target
+        ssh_user: str = "ubuntu"
+        host_target: str = target
         if "@" in target:
             ssh_user, host_target = target.split("@", 1)
 
+        session: ActiveSession | None = None
         try:
             session = service.connect(
                 remote_host=host_target, ssh_user=ssh_user, ssh_port=ssh_port
