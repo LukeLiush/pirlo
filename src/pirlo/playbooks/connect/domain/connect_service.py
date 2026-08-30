@@ -11,15 +11,15 @@ from pirlo.core.ports.health_checker import (
     PrefectHealthChecker,
     ServiceHealthChecker,
 )
-from pirlo.core.ports.remote_manifest_prober import RemoteManifestProber
-from pirlo.core.ports.tunnel_manager import TunnelConfig, TunnelManager
-from pirlo.infrastructure.adapters.ssh.paramiko_manifest_prober import (
-    ParamikoManifestProber,
-)
-from pirlo.infrastructure.adapters.ssh.sshtunnel_manager import SshTunnelManager
 from pirlo.infrastructure.adapters.storage.json_link_repository import (
     JsonLinkRepository,
 )
+from pirlo.playbooks.connect.adapters.paramiko_manifest_prober import (
+    ParamikoManifestProber,
+)
+from pirlo.playbooks.connect.adapters.sshtunnel_manager import SshTunnelManager
+from pirlo.playbooks.connect.ports.remote_manifest_prober import RemoteManifestProber
+from pirlo.playbooks.connect.ports.tunnel_manager import TunnelConfig, TunnelManager
 
 
 class ConnectService:
@@ -58,8 +58,7 @@ class ConnectService:
         ssh_user: str = "ubuntu",
         ssh_port: int = 22,
     ) -> ActiveSession | None:
-
-        from pirlo.infrastructure.adapters.storage.local_manifest_prober import (
+        from pirlo.playbooks.connect.adapters.local_manifest_prober import (
             LocalManifestProber,
         )
 
@@ -100,7 +99,6 @@ class ConnectService:
                 remote_ollama_port=manifest.default_ollama_port,
                 tunnel_pid=None,
             )
-
         else:
             # 2. Probe Remote Manifest via Injected Prober Port
             manifest = self.prober.fetch_manifest(

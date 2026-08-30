@@ -2,7 +2,7 @@ from pathlib import Path
 
 from pirlo.core.config import get_workspace_path
 from pirlo.core.models.serve_manifest import ServeManifest
-from pirlo.core.ports.remote_manifest_prober import RemoteManifestProber
+from pirlo.playbooks.connect.ports.remote_manifest_prober import RemoteManifestProber
 
 
 class LocalManifestProber(RemoteManifestProber):

@@ -1,10 +1,14 @@
 from pathlib import Path
 
-from pirlo.core.domain.connect.connect_service import ConnectService
 from pirlo.core.models.serve_manifest import ActiveSession, ServeManifest
 from pirlo.core.ports.health_checker import HealthStatus, ServiceHealthChecker
-from pirlo.core.ports.remote_manifest_prober import RemoteManifestProber
-from pirlo.core.ports.tunnel_manager import ActiveTunnel, TunnelConfig, TunnelManager
+from pirlo.playbooks.connect.domain.connect_service import ConnectService
+from pirlo.playbooks.connect.ports.remote_manifest_prober import RemoteManifestProber
+from pirlo.playbooks.connect.ports.tunnel_manager import (
+    ActiveTunnel,
+    TunnelConfig,
+    TunnelManager,
+)
 
 
 class MockProber(RemoteManifestProber):

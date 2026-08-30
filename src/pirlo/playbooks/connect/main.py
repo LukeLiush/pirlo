@@ -7,13 +7,13 @@ from tenacity import (
 )
 
 from pirlo.core.decorators import playbook
-from pirlo.core.domain.connect.connect_service import ConnectService
 from pirlo.core.models.parameters import Parameter
 from pirlo.core.models.run import RunStatus
 from pirlo.core.models.run_result import RunResult
 from pirlo.core.models.serve_manifest import ActiveSession
 from pirlo.core.ports.health_checker import HealthStatus
 from pirlo.core.ports.pitch import Pitch
+from pirlo.playbooks.connect.domain.connect_service import ConnectService
 
 HEALTH_CHECK_INTERVAL_SECONDS: float = 15.0
 MAX_CONSECUTIVE_FAILURES: int = 3

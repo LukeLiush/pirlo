@@ -3,7 +3,7 @@ from typing import Any
 
 import psutil
 
-from pirlo.core.ports.tunnel_manager import (
+from pirlo.playbooks.connect.ports.tunnel_manager import (
     ActiveTunnel,
     TunnelConfig,
     TunnelManager,
