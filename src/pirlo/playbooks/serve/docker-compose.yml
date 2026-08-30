@@ -1,0 +1,48 @@
+services:
+  prefect:
+    image: prefecthq/prefect:3-python3.12
+    container_name: pirlo-prefect-server
+    restart: unless-stopped
+    command: prefect server start --host 0.0.0.0 --port 4200
+    ports:
+      - "${PREFECT_PORT:-4200}:4200"
+    volumes:
+      - prefect_data:/root/.prefect
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: pirlo-ollama-server
+    restart: unless-stopped
+    ports:
+      - "${OLLAMA_PORT:-11434}:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 3s
+      timeout: 5s
+      retries: 10
+
+  ollama-init:
+    image: curlimages/curl:latest
+    container_name: pirlo-ollama-init
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      - OLLAMA_MODELS=${OLLAMA_MODELS:-qwen3.2}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        echo "[pirlo serve] Checking and pre-pulling configured Ollama models..."
+        IFS=','
+        for model in $$OLLAMA_MODELS; do
+          model_trimmed=$$(echo "$$model" | xargs)
+          echo "[pirlo serve] Ensuring model '$$model_trimmed' is pulled..."
+          curl -s -X POST http://ollama:11434/api/pull -d "{\"name\": \"$$model_trimmed\"}"
+        done
+        echo "[pirlo serve] All models pre-pulled and ready!"
+
+volumes:
+  prefect_data:
+  ollama_data:

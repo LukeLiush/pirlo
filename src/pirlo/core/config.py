@@ -11,3 +11,10 @@ def get_workspace_path() -> Path:
     path = Path(env_path).expanduser()
     path.mkdir(parents=True, exist_ok=True)
     return path
+
+
+DEFAULT_PREFECT_PORT: int = 4200
+DEFAULT_OLLAMA_PORT: int = 11434
+DEFAULT_OLLAMA_MODEL: str = "qwen3.2"
+SERVE_MANIFEST_FILENAME: str = "serve.json"
+ACTIVE_SESSION_FILENAME: str = "session.json"

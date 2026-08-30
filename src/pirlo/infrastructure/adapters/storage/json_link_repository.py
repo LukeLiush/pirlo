@@ -22,8 +22,10 @@ class JsonLinkRepository(LinkRepository):
 
     def _save_data(self, data: dict) -> None:
         self.filepath.parent.mkdir(parents=True, exist_ok=True)
-        with open(self.filepath, "w", encoding="utf-8") as f:
+        temp_file = self.filepath.with_suffix(".tmp")
+        with open(temp_file, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=4)
+        temp_file.replace(self.filepath)
 
     def save(self, link: LlmLink) -> None:
         data = self._load_data()

@@ -87,6 +87,9 @@ def main() -> None:
         print("  link          - Manage LLM links (API keys, base URLs)")
         print("  profile       - Manage browser profiles (list, delete)")
         print("  run           - Manage execution run history (list, show)")
+        print("  connect       - Connect to remote pirlo serve instance")
+        print("  disconnect    - Disconnect active remote pirlo serve session")
+        print("  status        - Show active remote session health and links")
         if specs:
             command_name: str
             spec: PlaybookSpec
@@ -103,7 +106,7 @@ def main() -> None:
     command: str = sys.argv[1]
 
     # Quick dispatch for built-in non-playbook subcommands
-    if command in ("link", "profile", "run"):
+    if command in ("link", "profile", "run", "connect", "disconnect", "status"):
         if command == "link":
             from pirlo.infrastructure.adapters.cli.link_commands import (
                 link_main,
@@ -135,6 +138,25 @@ def main() -> None:
 
             try:
                 run_main()
+            except Exception as e:  # noqa: BLE001
+                sys.stderr.write(f"Error: {e}\n")
+                sys.exit(1)
+            sys.exit(0)
+
+        if command in ("connect", "disconnect", "status"):
+            from pirlo.infrastructure.adapters.cli.connect_commands import (
+                connect_main,
+                disconnect_main,
+                status_main,
+            )
+
+            try:
+                if command == "connect":
+                    connect_main()
+                elif command == "disconnect":
+                    disconnect_main()
+                elif command == "status":
+                    status_main()
             except Exception as e:  # noqa: BLE001
                 sys.stderr.write(f"Error: {e}\n")
                 sys.exit(1)

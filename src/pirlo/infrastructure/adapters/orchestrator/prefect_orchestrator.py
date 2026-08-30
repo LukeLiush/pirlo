@@ -24,9 +24,6 @@ from pirlo.infrastructure.adapters.orchestrator.prefect_lifecycle import (
 from pirlo.infrastructure.adapters.orchestrator.prefect_settings import (
     PrefectServerSettings,
 )
-from pirlo.infrastructure.adapters.storage.json_link_repository import (
-    JsonLinkRepository,
-)
 from pirlo.infrastructure.repository.json_file_plan_repository import (
     JsonFilePlanRepository,
 )
@@ -87,6 +84,16 @@ class SmartPrefectTaskOrchestrator(TaskOrchestrator):
 
         task_str: str = task or str(prepared_run.parameters.get("task", ""))
         schedule_str: str | None = schedule or prepared_run.parameters.get("schedule")
+
+        # Auto-detect active pirlo connect session for server_url if not explicitly provided
+        if not self.server_url:
+            from pirlo.core.models.serve_manifest import ActiveSession
+
+            connect_session = ActiveSession.load_active(
+                get_workspace_path() / "connect" / "session.json"
+            )
+            if connect_session:
+                self.server_url = connect_session.prefect_api_url
 
         settings: PrefectServerSettings = PrefectServerSettings.resolve(self.server_url)
 
@@ -150,17 +157,27 @@ class SmartPrefectTaskOrchestrator(TaskOrchestrator):
         )
 
     def _get_resolved_link(self) -> LlmLink:
+        from pirlo.infrastructure.adapters.storage.composite_link_repository import (
+            CompositeLinkRepository,
+        )
+
         if self.decomposer_link:
             if isinstance(self.decomposer_link, LlmLink):
                 return self.decomposer_link
 
-            repo = JsonLinkRepository(Path("~/.pirlo-pitch/links.json").expanduser())
+            repo = CompositeLinkRepository()
             link_name = getattr(
                 self.decomposer_link, "_name", str(self.decomposer_link)
             )
             link = repo.get_by_name(link_name)
             if link:
                 return link
+
+        # Fall back to serve-ollama from composite repo if active connect session exists
+        repo = CompositeLinkRepository()
+        serve_link = repo.get_by_name("serve-ollama")
+        if serve_link:
+            return serve_link
 
         # Check if environment variable API keys exist for cloud providers
         api_key = (

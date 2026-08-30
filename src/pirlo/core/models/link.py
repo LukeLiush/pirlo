@@ -18,6 +18,10 @@ SUPPORTED_PROVIDERS: dict[str, dict[str, Any]] = {
         "env_names": ["ANTHROPIC_API_KEY"],
         "default_base_url": None,
     },
+    "ollama": {
+        "env_names": ["OLLAMA_HOST"],
+        "default_base_url": "http://localhost:11434/v1",
+    },
 }
 
 
@@ -38,6 +42,7 @@ class LlmLink:
     model: str
     api_key: str
     base_url: str | None = None
+    source: str | None = None
 
     @property
     def masked_api_key(self) -> str:
@@ -49,19 +54,22 @@ class LlmLink:
 
     def __str__(self) -> str:
         base_url_str = f", base_url='{self.base_url}'" if self.base_url else ""
+        source_str = f", source='{self.source}'" if self.source else ""
         return (
             f"LlmLink(name='{self.name}', provider='{self.provider}', "
-            f"model='{self.model}', api_key='{self.masked_api_key}'{base_url_str})"
+            f"model='{self.model}', api_key='{self.masked_api_key}'{base_url_str}{source_str})"
         )
 
     def to_dict(self) -> dict:
-        data: dict[str, str] = {
+        data: dict[str, Any] = {
             "provider": self.provider,
             "model": self.model,
             "api_key": self.api_key,
         }
         if self.base_url:
             data["base_url"] = self.base_url
+        if self.source:
+            data["source"] = self.source
         return data
 
     @classmethod
@@ -72,4 +80,5 @@ class LlmLink:
             model=data.get("model", ""),
             api_key=data.get("api_key", ""),
             base_url=data.get("base_url"),
+            source=data.get("source"),
         )

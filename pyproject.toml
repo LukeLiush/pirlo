@@ -17,12 +17,16 @@ dependencies = [
     "litellm>=1.40.0",
     "ollama>=0.4.0",
     "openai>=2.16.0",
+    "paramiko>=3.4.0",
     "playwright>=1.61.0",
     "prefect>=3.0.0",
     "pydantic>=2.12.5",
     "pydantic-ai>=0.0.35",
+    "python-on-whales>=0.70.0",
+    "sshtunnel>=0.4.0",
     "typing-extensions>=4.15.0",
 ]
+
 
 [project.scripts]
 pirlo = "pirlo.infrastructure.adapters.cli.entrypoint:main"
