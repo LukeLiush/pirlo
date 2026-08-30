@@ -31,6 +31,8 @@ services:
         condition: service_healthy
     environment:
       - OLLAMA_MODELS=${OLLAMA_MODELS:-qwen3.2}
+
+
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |

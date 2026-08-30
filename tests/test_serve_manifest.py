@@ -33,7 +33,7 @@ def test_active_session_properties_and_host_matching(tmp_path: Path):
     )
 
     assert session.prefect_api_url == "http://127.0.0.1:4201/api"
-    assert session.ollama_base_url == "http://127.0.0.1:11435/v1"
+    assert session.ollama_base_url == "http://127.0.0.1:11435"
 
     assert session.is_same_host("user@gpu-server.local")
     assert session.is_same_host("USER@GPU-SERVER.LOCAL")

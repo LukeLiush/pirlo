@@ -74,4 +74,5 @@ class LlmClient:
             timeout=timeout,
             **kwargs,
         )
+
         return response.choices[0].message.content or ""

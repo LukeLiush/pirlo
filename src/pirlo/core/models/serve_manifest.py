@@ -72,7 +72,7 @@ class ActiveSession:
 
     @property
     def ollama_base_url(self) -> str:
-        return f"http://127.0.0.1:{self.local_ollama_port}/v1"
+        return f"http://127.0.0.1:{self.local_ollama_port}"
 
     def save(self, filepath: Path) -> None:
         filepath.parent.mkdir(parents=True, exist_ok=True)
