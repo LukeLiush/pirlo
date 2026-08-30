@@ -38,6 +38,14 @@ class ServeSession(Pitch):
 
     async def play(
         self,
+        down: Annotated[
+            bool,
+            Parameter(help="Stop and tear down active pirlo serve stack", short="-d"),
+        ] = False,
+        volumes: Annotated[
+            bool,
+            Parameter(help="Also remove persistent volumes when stopping stack"),
+        ] = False,
         prefect_port: Annotated[
             int, Parameter(help="Host port for Prefect dev server")
         ] = DEFAULT_PREFECT_PORT,
@@ -53,6 +61,32 @@ class ServeSession(Pitch):
         *args: Any,
         **kwargs: Any,
     ) -> RunResult[Any]:
+        compose_file = Path(__file__).parent / "docker-compose.yml"
+        compose_manager = DockerComposeManager(compose_file=compose_file)
+        run_id_val = (
+            (await self.prepared_run()).run_id if self._prepared_run else "serve-run"
+        )
+
+        if down:
+            self.ui.header("Pirlo Serve Engine", subtitle="Stopping Docker Serve Stack")
+            success, msg = compose_manager.down(remove_volumes=volumes)
+            if success:
+                self.ui.goal(
+                    "pirlo serve stack stopped!",
+                    detail="Docker Compose stack stopped successfully.",
+                )
+                return RunResult(
+                    run_id=run_id_val,
+                    status=RunStatus.COMPLETED,
+                    data={"status": "stopped"},
+                )
+            self.ui.commentary(f"[ERROR] Failed to stop Docker Compose stack: {msg}")
+            return RunResult(
+                run_id=run_id_val,
+                status=RunStatus.FAILED,
+                error=msg,
+            )
+
         self.ui.header(
             "Pirlo Serve Engine",
             subtitle="Launching Prefect Dev Server & Ollama Multi-Model Docker Stack",
@@ -77,14 +111,7 @@ class ServeSession(Pitch):
         )
         manifest.save(serve_dir / "serve.json")
 
-        compose_file = Path(__file__).parent / "docker-compose.yml"
-        compose_manager = DockerComposeManager(compose_file=compose_file)
-
         ready, ready_msg = compose_manager.is_docker_ready()
-        run_id_val = (
-            (await self.prepared_run()).run_id if self._prepared_run else "serve-run"
-        )
-
         if not ready:
             self.ui.commentary(f"[ERROR] Docker daemon is unreachable: {ready_msg}\n")
             self.ui.commentary(
@@ -128,6 +155,11 @@ class ServeSession(Pitch):
                 error=f"Docker Compose failed: {msg}",
             )
 
+        import getpass
+
+        current_user = getpass.getuser()
+        hostname = socket.gethostname()
+
         self.ui.goal(
             "pirlo serve started successfully!",
             detail=(
@@ -135,8 +167,10 @@ class ServeSession(Pitch):
                 f"Ollama Base: http://0.0.0.0:{resolved_ollama_port}\n"
                 f"Served Models: {', '.join(model_list)}\n"
                 f"Manifest written to {serve_dir / 'serve.json'}\n\n"
-                f"💡 To shut down the Docker stack, run:\n"
-                f"   docker compose -f {compose_file} down"
+                f"💡 How to Connect from Another Machine:\n"
+                f"   Run 'pirlo connect {current_user}@{hostname}' (or <user>@<remote_ip>)\n\n"
+                f"💡 To shut down the serve engine stack at any time, run:\n"
+                f"   pirlo serve --down"
             ),
         )
 
