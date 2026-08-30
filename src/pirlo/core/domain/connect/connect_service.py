@@ -53,17 +53,28 @@ class ConnectService:
         )
 
     def connect(
-        self, remote_host: str, ssh_user: str = "ubuntu", ssh_port: int = 22
+        self,
+        remote_host: str = "localhost",
+        ssh_user: str = "ubuntu",
+        ssh_port: int = 22,
     ) -> ActiveSession | None:
+
+        from pirlo.infrastructure.adapters.storage.local_manifest_prober import (
+            LocalManifestProber,
+        )
+
+        target_host = remote_host.strip() if remote_host else "localhost"
+        is_local = target_host.lower() in ("localhost", "127.0.0.1", "local")
+
         self.connect_dir.mkdir(parents=True, exist_ok=True)
         session_file: Path = self.connect_dir / "session.json"
         existing_session: ActiveSession | None = ActiveSession.load_active(session_file)
 
         # 1. Same-Host Liveness Check
         if existing_session and existing_session.is_alive():
-            if existing_session.is_same_host(remote_host):
+            if existing_session.is_same_host(target_host):
                 print(
-                    f"[pirlo connect] Already connected to {remote_host}. Reusing active tunnel."
+                    f"[pirlo connect] Already connected to {target_host}. Reusing active session."
                 )
                 return existing_session
             else:
@@ -72,45 +83,63 @@ class ConnectService:
                 )
                 self.disconnect()
 
-        # 2. Probe Remote Manifest via Injected Prober Port
-        remote_manifest: ServeManifest = self.prober.fetch_manifest(
-            remote_host, ssh_user=ssh_user, ssh_port=ssh_port
-        )
+        if is_local:
+            print("[pirlo connect] Auto-detecting local pirlo serve instance...")
+            manifest: ServeManifest = LocalManifestProber().fetch_manifest("localhost")
+            if not manifest.default_prefect_port:
+                print(
+                    "[pirlo connect] [ERROR] No local pirlo serve instance found. Run 'pirlo serve' first."
+                )
+                return None
 
-        # 3. Open SSH Tunnels via Injected TunnelManager Port
-        config = TunnelConfig(
-            remote_host=remote_host,
-            ssh_user=ssh_user,
-            ssh_port=ssh_port,
-            remote_prefect_port=remote_manifest.default_prefect_port,
-            remote_ollama_port=remote_manifest.default_ollama_port,
-        )
-        tunnel = self.tunnel_manager.open_tunnel(config)
+            session = ActiveSession(
+                remote_host="localhost",
+                local_prefect_port=manifest.default_prefect_port,
+                local_ollama_port=manifest.default_ollama_port,
+                remote_prefect_port=manifest.default_prefect_port,
+                remote_ollama_port=manifest.default_ollama_port,
+                tunnel_pid=None,
+            )
 
-        session = ActiveSession(
-            remote_host=remote_host,
-            local_prefect_port=tunnel.local_prefect_port,
-            local_ollama_port=tunnel.local_ollama_port,
-            remote_prefect_port=remote_manifest.default_prefect_port,
-            remote_ollama_port=remote_manifest.default_ollama_port,
-            tunnel_pid=tunnel.pid,
-        )
+        else:
+            # 2. Probe Remote Manifest via Injected Prober Port
+            manifest = self.prober.fetch_manifest(
+                target_host, ssh_user=ssh_user, ssh_port=ssh_port
+            )
+
+            # 3. Open SSH Tunnels via Injected TunnelManager Port
+            config = TunnelConfig(
+                remote_host=target_host,
+                ssh_user=ssh_user,
+                ssh_port=ssh_port,
+                remote_prefect_port=manifest.default_prefect_port,
+                remote_ollama_port=manifest.default_ollama_port,
+            )
+            tunnel = self.tunnel_manager.open_tunnel(config)
+
+            session = ActiveSession(
+                remote_host=target_host,
+                local_prefect_port=tunnel.local_prefect_port,
+                local_ollama_port=tunnel.local_ollama_port,
+                remote_prefect_port=manifest.default_prefect_port,
+                remote_ollama_port=manifest.default_ollama_port,
+                tunnel_pid=tunnel.pid,
+            )
 
         # 4. Health Check Verification via Injected ServiceHealthChecker Port
-        print("[pirlo connect] Verifying remote service health over tunnel...")
+        print(f"[pirlo connect] Verifying service health for {session.remote_host}...")
         status = self.health_checker.check_health(session)
         print(status.message)
 
         if not status.is_healthy:
-            print(f"[pirlo connect] [ERROR] Health check failed on {remote_host}.")
-            self.tunnel_manager.close_tunnel()
+            print(f"[pirlo connect] [ERROR] Health check failed on {target_host}.")
+            if not is_local:
+                self.tunnel_manager.close_tunnel()
             return None
 
         # 5. Save ActiveSession state & register overlay links
         session.save(session_file)
-        self._register_overlay_links(
-            session, remote_manifest.models, remote_manifest.default_model
-        )
+        self._register_overlay_links(session, manifest.models, manifest.default_model)
         return session
 
     def _register_overlay_links(

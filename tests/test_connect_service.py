@@ -76,3 +76,36 @@ def test_connect_service_successful_connection(tmp_path: Path):
     service.disconnect()
     assert tunnel_mgr.closed
     assert not connect_dir.exists()
+
+
+def test_connect_service_local_autodiscovery(tmp_path: Path, monkeypatch):
+    monkeypatch.setenv("PIRLO_WORKSPACE", str(tmp_path))
+    serve_dir = tmp_path / "serve"
+    serve_dir.mkdir(parents=True, exist_ok=True)
+
+    manifest = ServeManifest(
+        default_prefect_port=4200,
+        default_ollama_port=11434,
+        default_model="qwen3.2",
+        models=["qwen3.2"],
+    )
+    manifest.save(serve_dir / "serve.json")
+
+    connect_dir = tmp_path / "connect"
+    prober = MockProber()
+    tunnel_mgr = MockTunnelManager()
+    health_checker = MockHealthyServiceChecker()
+
+    service = ConnectService(
+        prober=prober,
+        tunnel_manager=tunnel_mgr,
+        health_checker=health_checker,
+        connect_dir=connect_dir,
+    )
+
+    session = service.connect(remote_host="localhost")
+    assert session is not None
+    assert session.remote_host == "localhost"
+    assert session.local_prefect_port == 4200
+    assert session.local_ollama_port == 11434
+    assert not tunnel_mgr.opened  # Local connect bypasses SSH tunnel!

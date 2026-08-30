@@ -81,30 +81,21 @@ class ConnectSession(Pitch):
                 },
             )
 
-        # 3. Connect Handler (pirlo connect <remote_host>)
-        if not remote_host:
-            self.ui.commentary("[ERROR] Missing required argument: remote_host\n")
-            self.ui.commentary(
-                "💡 Usage Examples:\n"
-                "   • Connect to remote serve:  pirlo connect ubuntu@gpu-server.local\n"
-                "   • Disconnect active session: pirlo connect --down\n"
-                "   • Show session status:       pirlo connect --status\n"
-            )
-            return RunResult(
-                run_id=run_id_val,
-                status=RunStatus.FAILED,
-                error="Missing required remote_host argument",
-            )
+        # 3. Connect Handler (pirlo connect [remote_host])
+        target = remote_host.strip() if remote_host else "localhost"
+        is_local = target.lower() in ("localhost", "127.0.0.1", "local")
 
-        self.ui.header(
-            "Pirlo Connect Engine",
-            subtitle=f"Connecting to remote host: {remote_host}",
+        subtitle_str = (
+            "Auto-detecting local pirlo serve instance"
+            if is_local
+            else f"Connecting to remote host: {target}"
         )
+        self.ui.header("Pirlo Connect Engine", subtitle=subtitle_str)
 
         ssh_user = "ubuntu"
-        host_target = remote_host
-        if "@" in remote_host:
-            ssh_user, host_target = remote_host.split("@", 1)
+        host_target = target
+        if "@" in target:
+            ssh_user, host_target = target.split("@", 1)
 
         try:
             session = service.connect(
