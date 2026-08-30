@@ -1,3 +1,4 @@
+import getpass
 from typing import Annotated, Any
 
 from pirlo.core.decorators import playbook
@@ -97,10 +98,15 @@ class ConnectSession(Pitch):
         )
         self.ui.header("Pirlo Connect Engine", subtitle=subtitle_str)
 
-        ssh_user: str = "ubuntu"
+        ssh_user: str = getpass.getuser()
         host_target: str = target
         if "@" in target:
             ssh_user, host_target = target.split("@", 1)
+        elif not is_local:
+            self.ui.commentary(
+                f"[INFO] No SSH username specified for '{target}'. Defaulting to current OS user '{ssh_user}'. "
+                "(Use 'user@host' to override).\n"
+            )
 
         session: ActiveSession | None = None
         try:
