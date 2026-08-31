@@ -82,6 +82,15 @@ def test_connect_service_successful_connection(tmp_path: Path):
     overlay_links_file = connect_dir / "links.json"
     assert overlay_links_file.exists()
 
+    from pirlo.infrastructure.adapters.storage.json_link_repository import (
+        JsonLinkRepository,
+    )
+
+    repo = JsonLinkRepository(overlay_links_file)
+    default_link = repo.get_by_name("serve-ollama")
+    assert default_link is not None
+    assert default_link.is_default is True
+
     # Test disconnect
     service.disconnect()
     assert tunnel_mgr.closed

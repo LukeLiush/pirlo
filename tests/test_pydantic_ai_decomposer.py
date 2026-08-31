@@ -65,3 +65,25 @@ async def test_pydantic_ai_decomposer_mocked():
         assert plan.subtasks[0].target_site == "Chase"
         assert plan.subtasks[1].target_site == "Bank of America"
         mock_agent.run.assert_called_once()
+
+
+def test_pydantic_ai_adapter_registry_to_model():
+    from pirlo.core.models.link import LlmLink
+    from pirlo.infrastructure.adapters.decomposer.pydantic_ai_adapters import (
+        PydanticAiAdapterRegistry,
+    )
+
+    gemini_link = LlmLink(
+        name="g-link", provider="gemini", model="gemini-2.5-flash", api_key="key"
+    )
+    gemini_model = PydanticAiAdapterRegistry.to_model(gemini_link)
+    assert type(gemini_model).__name__ == "GoogleModel"
+
+    anthropic_link = LlmLink(
+        name="a-link",
+        provider="anthropic",
+        model="claude-3-5-sonnet-latest",
+        api_key="key",
+    )
+    anthropic_model = PydanticAiAdapterRegistry.to_model(anthropic_link)
+    assert type(anthropic_model).__name__ == "AnthropicModel"

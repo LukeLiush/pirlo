@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import contextlib
+import logging
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Annotated, Any
+
+logger = logging.getLogger(__name__)
 
 from prefect.settings import temporary_settings
 
@@ -146,46 +149,78 @@ class SmartPrefectTaskOrchestrator(TaskOrchestrator):
         prepared_run: PreparedRun,
     ) -> WorkflowRunner:
         workspace: Path = get_workspace_path()
+        decomposer_link = self._get_decomposer_link(prepared_run)
+        aggregator_link = self._get_aggregator_link(prepared_run)
         return DecomposedWorkflowRunner(
             plan_repository=JsonFilePlanRepository(workspace / "plans"),
-            decomposer=self._build_decomposer(),
+            decomposer=self._build_decomposer(decomposer_link),
             subtask_runner_fn=worker_fn,
-            aggregator_link=self._get_resolved_link(),
+            aggregator_link=aggregator_link,
             workspace=workspace,
             playbook=prepared_run.playbook_name,
         )
 
-    def _get_resolved_link(self) -> LlmLink:
+    def _build_decomposer(self, link: LlmLink) -> PydanticAiDecomposer:
+        return PydanticAiDecomposer(link=link)
+
+    def _get_decomposer_link(self, prepared_run: PreparedRun | None = None) -> LlmLink:
         from pirlo.infrastructure.adapters.storage.composite_link_repository import (
             CompositeLinkRepository,
         )
 
         repo = CompositeLinkRepository()
 
+        # 1. Explicit orchestrator override: --decomposer-link
         if self.decomposer_link:
             if isinstance(self.decomposer_link, LlmLink):
                 return self.decomposer_link
 
-            link_name = getattr(
-                self.decomposer_link, "_name", str(self.decomposer_link)
-            )
+            link_name = str(self.decomposer_link)
             link = repo.get_by_name(link_name)
             if link:
                 return link
-            raise ValueError(f"Specified decomposer link '{link_name}' not found.")
+            raise ValueError(
+                f"Specified decomposer link '{link_name}' not found in link repository."
+            )
 
-        # Default to serve-ollama from composite repo if active
-        serve_link = repo.get_by_name("serve-ollama")
-        if serve_link:
-            return serve_link
+        # 2. Dynamic scanning: Pick the first LlmLink present in prepared_run parameters
+        if prepared_run and prepared_run.parameters:
+            for param_name, param_val in prepared_run.parameters.items():
+                if isinstance(param_val, LlmLink):
+                    logger.info(
+                        "🧩 Decomposer automatically using '%s' link '%s' (Provider: %s, Model: %s) for task breakdown.",
+                        param_name,
+                        param_val.name,
+                        param_val.provider,
+                        param_val.model,
+                    )
+                    return param_val
 
+        # 3. If no LlmLink is found in playbook params, --decomposer-link is required
         raise ValueError(
-            "No decomposer link provided (`--decomposer-link`) and active 'serve-ollama' link was not found. "
-            "Please specify an active LLM link via --decomposer-link or connect to Ollama via `pirlo connect`."
+            "No active LLM link found in playbook parameters and no --decomposer-link was specified. "
+            "Please specify --decomposer-link <link_name> or pass a valid LlmLink parameter in your playbook."
         )
 
-    def _build_decomposer(self) -> PydanticAiDecomposer:
-        return PydanticAiDecomposer(link=self._get_resolved_link())
+    def _get_aggregator_link(self, prepared_run: PreparedRun | None = None) -> LlmLink:
+        from pirlo.infrastructure.adapters.storage.composite_link_repository import (
+            CompositeLinkRepository,
+        )
+
+        repo = CompositeLinkRepository()
+
+        # 1. Query default link via is_default indicator (e.g. serve-ollama)
+        default_link = repo.get_default_link()
+        if default_link:
+            logger.info(
+                " Synthesis aggregator using default local link '%s' (%s).",
+                default_link.name,
+                default_link.model,
+            )
+            return default_link
+
+        # 2. Fallback to decomposer link if no default local link is active
+        return self._get_decomposer_link(prepared_run)
 
     # ---- scheduled deployment ------------------------------------------
 

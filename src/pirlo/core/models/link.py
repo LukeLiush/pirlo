@@ -43,6 +43,7 @@ class LlmLink:
     api_key: str
     base_url: str | None = None
     source: str | None = None
+    is_default: bool = False
 
     @property
     def masked_api_key(self) -> str:
@@ -70,6 +71,8 @@ class LlmLink:
             data["base_url"] = self.base_url
         if self.source:
             data["source"] = self.source
+        if self.is_default:
+            data["is_default"] = self.is_default
         return data
 
     @classmethod
@@ -81,4 +84,5 @@ class LlmLink:
             api_key=data.get("api_key", ""),
             base_url=data.get("base_url"),
             source=data.get("source"),
+            is_default=data.get("is_default", False),
         )

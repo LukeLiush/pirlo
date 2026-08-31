@@ -207,6 +207,7 @@ class ConnectService:
                 api_key="ollama",
                 base_url=session.ollama_base_url,
                 source="pirlo-connect",
+                is_default=(model == selected_default),
             )
             connect_repo.save(link)
 

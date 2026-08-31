@@ -22,11 +22,11 @@ class PydanticAiAdapterRegistry:
 
         provider_name = link.provider.lower()
         if provider_name in ("google", "gemini"):
-            from pydantic_ai.models.gemini import GeminiModel
+            from pydantic_ai.models.google import GoogleModel
             from pydantic_ai.providers.google import GoogleProvider
 
             google_provider: Any = GoogleProvider(api_key=link.api_key or None)
-            return GeminiModel(link.model, provider=google_provider)
+            return GoogleModel(link.model, provider=google_provider)
 
         if provider_name == "openai":
             from pydantic_ai.models.openai import OpenAIModel
@@ -34,6 +34,13 @@ class PydanticAiAdapterRegistry:
 
             openai_provider = OpenAIProvider(api_key=link.api_key or None)
             return OpenAIModel(link.model, provider=openai_provider)
+
+        if provider_name == "anthropic":
+            from pydantic_ai.models.anthropic import AnthropicModel
+            from pydantic_ai.providers.anthropic import AnthropicProvider
+
+            anthropic_provider = AnthropicProvider(api_key=link.api_key or None)
+            return AnthropicModel(link.model, provider=anthropic_provider)
 
         from pydantic_ai.models import infer_model
 

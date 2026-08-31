@@ -95,6 +95,50 @@ def test_orchestrator_fails_loud_without_decomposer_link():
             "pirlo.infrastructure.adapters.storage.composite_link_repository.CompositeLinkRepository.get_by_name",
             return_value=None,
         ),
-        pytest.raises(ValueError, match="No decomposer link provided"),
+        pytest.raises(
+            ValueError, match="No active LLM link found in playbook parameters"
+        ),
     ):
-        orchestrator._build_decomposer()
+        orchestrator._get_decomposer_link(PreparedRun(playbook_name="autopass"))
+
+
+def test_orchestrator_auto_detects_playmaker_link(tmp_path):
+    from pirlo.core.models.link import LlmLink
+
+    playmaker_link = LlmLink(
+        name="my-playmaker",
+        provider="openai",
+        model="gpt-4o",
+        api_key="test",
+    )
+    orchestrator = SmartPrefectTaskOrchestrator()
+    prepared_run = PreparedRun(
+        playbook_name="autopass",
+        parameters={"playmaker": playmaker_link},
+    )
+
+    resolved = orchestrator._get_decomposer_link(prepared_run)
+    assert resolved.name == "my-playmaker"
+    assert resolved.model == "gpt-4o"
+
+
+def test_orchestrator_aggregator_link_uses_default_link(tmp_path):
+    from pirlo.core.models.link import LlmLink
+
+    default_ollama_link = LlmLink(
+        name="serve-ollama",
+        provider="ollama",
+        model="llama3.1:8b",
+        api_key="ollama",
+        base_url="http://127.0.0.1:11434",
+        is_default=True,
+    )
+    orchestrator = SmartPrefectTaskOrchestrator()
+
+    with patch(
+        "pirlo.infrastructure.adapters.storage.composite_link_repository.CompositeLinkRepository.get_default_link",
+        return_value=default_ollama_link,
+    ):
+        agg_link = orchestrator._get_aggregator_link()
+        assert agg_link.name == "serve-ollama"
+        assert agg_link.is_default is True
