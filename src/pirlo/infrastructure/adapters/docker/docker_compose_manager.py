@@ -79,6 +79,17 @@ class DockerComposeManager:
         self, model_name: str, container_name: str = "pirlo-ollama-server"
     ) -> Any:
         """Streams output lines from 'ollama pull' inside target container via python-on-whales."""
-        return self.docker.container.execute(
+        stream = self.docker.container.execute(
             container_name, ["ollama", "pull", model_name], stream=True
         )
+        for item in stream:
+            if isinstance(item, tuple):
+                _stream_type, data = item
+                if isinstance(data, bytes):
+                    yield data.decode("utf-8", errors="ignore")
+                else:
+                    yield str(data)
+            elif isinstance(item, bytes):
+                yield item.decode("utf-8", errors="ignore")
+            else:
+                yield str(item)

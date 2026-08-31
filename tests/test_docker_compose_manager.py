@@ -50,11 +50,11 @@ def test_docker_compose_manager_pull_ollama_model_stream(tmp_path: Path):
     compose_file.write_text("version: '3.8'\nservices: {}\n")
 
     mock_docker = MagicMock()
-    mock_docker.container.execute.return_value = ["pulling manifest", "pulling 10%"]
+    mock_docker.container.execute.return_value = [("stdout", b"pulling manifest\n"), ("stdout", b"pulling 10%\n")]
     manager = DockerComposeManager(compose_file=compose_file, client=mock_docker)
 
     lines = list(manager.pull_ollama_model_stream("llama3.1:8b"))
-    assert lines == ["pulling manifest", "pulling 10%"]
+    assert lines == ["pulling manifest\n", "pulling 10%\n"]
     mock_docker.container.execute.assert_called_once_with(
         "pirlo-ollama-server", ["ollama", "pull", "llama3.1:8b"], stream=True
     )
