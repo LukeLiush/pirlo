@@ -4,6 +4,8 @@ services:
     container_name: pirlo-prefect-server
     restart: unless-stopped
     command: prefect server start --host 0.0.0.0 --port 4200
+    environment:
+      - PREFECT_UI_API_URL=/api
     ports:
       - "${PREFECT_PORT:-4200}:4200"
     volumes:

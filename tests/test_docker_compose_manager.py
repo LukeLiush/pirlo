@@ -50,7 +50,10 @@ def test_docker_compose_manager_pull_ollama_model_stream(tmp_path: Path):
     compose_file.write_text("version: '3.8'\nservices: {}\n")
 
     mock_docker = MagicMock()
-    mock_docker.container.execute.return_value = [("stdout", b"pulling manifest\n"), ("stdout", b"pulling 10%\n")]
+    mock_docker.container.execute.return_value = [
+        ("stdout", b"pulling manifest\n"),
+        ("stdout", b"pulling 10%\n"),
+    ]
     manager = DockerComposeManager(compose_file=compose_file, client=mock_docker)
 
     lines = list(manager.pull_ollama_model_stream("llama3.1:8b"))

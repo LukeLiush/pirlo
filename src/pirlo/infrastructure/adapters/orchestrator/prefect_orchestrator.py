@@ -87,16 +87,6 @@ class SmartPrefectTaskOrchestrator(TaskOrchestrator):
         task_str: str = task or str(prepared_run.parameters.get("task", ""))
         schedule_str: str | None = schedule or prepared_run.parameters.get("schedule")
 
-        # Auto-detect active pirlo connect session for server_url if not explicitly provided
-        if not self.server_url:
-            from pirlo.core.models.serve_manifest import ActiveSession
-
-            connect_session = ActiveSession.load_active(
-                get_workspace_path() / "connect" / "session.json"
-            )
-            if connect_session:
-                self.server_url = connect_session.prefect_api_url
-
         settings: PrefectServerSettings = PrefectServerSettings.resolve(self.server_url)
 
         with capture_run_logs(

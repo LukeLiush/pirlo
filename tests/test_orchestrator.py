@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
@@ -99,7 +100,15 @@ def test_orchestrator_fails_loud_without_decomposer_link():
             ValueError, match="No active LLM link found in playbook parameters"
         ),
     ):
-        orchestrator._get_decomposer_link(PreparedRun(playbook_name="autopass"))
+        orchestrator._get_decomposer_link(
+            PreparedRun(
+                run_name="test",
+                run_id="test-id",
+                playbook_name="autopass",
+                workspace=Path("/tmp"),
+                parameters={},
+            )
+        )
 
 
 def test_orchestrator_auto_detects_playmaker_link(tmp_path):
@@ -113,7 +122,10 @@ def test_orchestrator_auto_detects_playmaker_link(tmp_path):
     )
     orchestrator = SmartPrefectTaskOrchestrator()
     prepared_run = PreparedRun(
+        run_name="test",
+        run_id="test-id",
         playbook_name="autopass",
+        workspace=tmp_path,
         parameters={"playmaker": playmaker_link},
     )
 

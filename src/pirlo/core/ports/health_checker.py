@@ -3,6 +3,8 @@ import urllib.request
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
+import httpx
+
 from pirlo.core.models.serve_manifest import ActiveSession
 
 
@@ -33,30 +35,30 @@ class PrefectHealthChecker(ServiceHealthChecker):
     def service_name(self) -> str:
         return "prefect"
 
+    @staticmethod
+    def check_url(url: str, timeout_seconds: float = 0.3) -> bool:
+        """Fast endpoint health probe for any Prefect server API URL."""
+        endpoint = f"{url.rstrip('/')}/health"
+        try:
+            res = httpx.get(endpoint, timeout=timeout_seconds)
+            return res.status_code == 200
+        except Exception:  # noqa: BLE001
+            return False
+
     def check_health(
         self, session: ActiveSession, timeout_seconds: float = 2.0
     ) -> HealthStatus:
-        endpoint = f"{session.prefect_api_url.rstrip('/')}/health"
-        try:
-            req = urllib.request.Request(endpoint, headers={"User-Agent": "Pirlo/1.0"})
-            with urllib.request.urlopen(req, timeout=timeout_seconds) as resp:
-                if resp.status == 200:
-                    return HealthStatus(
-                        is_healthy=True,
-                        service_name=self.service_name,
-                        message="Prefect API is healthy",
-                    )
-                return HealthStatus(
-                    is_healthy=False,
-                    service_name=self.service_name,
-                    message=f"HTTP {resp.status}",
-                )
-        except Exception as e:  # noqa: BLE001
+        if self.check_url(session.prefect_api_url, timeout_seconds=timeout_seconds):
             return HealthStatus(
-                is_healthy=False,
+                is_healthy=True,
                 service_name=self.service_name,
-                message=f"Unreachable: {e}",
+                message="Prefect API is healthy",
             )
+        return HealthStatus(
+            is_healthy=False,
+            service_name=self.service_name,
+            message="Prefect API is unreachable or unhealthy",
+        )
 
 
 class OllamaHealthChecker(ServiceHealthChecker):

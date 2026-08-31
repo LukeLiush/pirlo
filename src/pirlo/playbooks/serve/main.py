@@ -211,9 +211,11 @@ class ServeSession(Pitch):
                 ) as status_ctx:
                     try:
                         for line in compose_manager.pull_ollama_model_stream(model):
-                            cleaned = ANSI_VT100_RE.sub(
-                                "", Text.from_ansi(line).plain
-                            ).replace("\r", "").strip()
+                            cleaned = (
+                                ANSI_VT100_RE.sub("", Text.from_ansi(line).plain)
+                                .replace("\r", "")
+                                .strip()
+                            )
                             if cleaned and hasattr(status_ctx, "update"):
                                 status_ctx.update(
                                     f"[bold green]Pulling '{model}': {cleaned}[/bold green]"
