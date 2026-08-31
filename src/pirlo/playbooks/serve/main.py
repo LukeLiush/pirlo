@@ -198,7 +198,7 @@ class ServeSession(Pitch):
             )
             if not is_pulled:
                 self.ui.commentary(
-                    f"[pirlo serve] Pulling Ollama model '{model}' into pirlo-ollama-server via python-on-whales..."
+                    f"[pirlo serve] Pulling Ollama model '{model}' into pirlo-ollama-server..."
                 )
                 pull_ok, pull_msg = compose_manager.pull_ollama_model(model)
                 if not pull_ok:
