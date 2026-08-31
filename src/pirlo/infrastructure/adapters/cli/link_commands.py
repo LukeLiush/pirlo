@@ -79,6 +79,8 @@ def run_list(repo: LinkRepository, supported_providers: dict[str, Any]) -> None:
     print(f"{'Name':<22} {'Provider':<12} {'Model':<20} {'Source':<15} {'Base URL'}")
     print("─" * 105)
     for link in links:
+        is_def = getattr(link, "is_default", False) or link.name == "serve-ollama"
+        display_name = f"{link.name} (Default)" if is_def else link.name
         source_tag = getattr(link, "source", None) or "User Static"
         if link.base_url:
             base_url_str = link.base_url
@@ -92,7 +94,7 @@ def run_list(repo: LinkRepository, supported_providers: dict[str, Any]) -> None:
         if len(base_url_str) > 36:
             base_url_str = base_url_str[:33] + "..."
         print(
-            f"{link.name:<22} {link.provider:<12} {link.model:<20} {source_tag:<15} {base_url_str}"
+            f"{display_name:<24} {link.provider:<12} {link.model:<20} {source_tag:<15} {base_url_str}"
         )
 
     print("\n💡 Base URL Guide:")
