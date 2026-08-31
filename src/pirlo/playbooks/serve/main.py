@@ -1,9 +1,16 @@
 import os
+import re
 import socket
 from pathlib import Path
 from typing import Annotated, Any
 
 from rich.text import Text
+
+ANSI_VT100_RE = re.compile(
+    r"\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])|"
+    r"\[\?[0-9]+[a-zA-Z]|"
+    r"\[[0-9]*[a-zA-Z]"
+)
 
 from pirlo.core.config import (
     DEFAULT_OLLAMA_MODEL,
@@ -204,9 +211,9 @@ class ServeSession(Pitch):
                 ) as status_ctx:
                     try:
                         for line in compose_manager.pull_ollama_model_stream(model):
-                            cleaned = (
-                                Text.from_ansi(line).plain.replace("\r", "").strip()
-                            )
+                            cleaned = ANSI_VT100_RE.sub(
+                                "", Text.from_ansi(line).plain
+                            ).replace("\r", "").strip()
                             if cleaned and hasattr(status_ctx, "update"):
                                 status_ctx.update(
                                     f"[bold green]Pulling '{model}': {cleaned}[/bold green]"
