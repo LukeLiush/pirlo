@@ -3,6 +3,8 @@ import socket
 from pathlib import Path
 from typing import Annotated, Any
 
+from rich.text import Text
+
 from pirlo.core.config import (
     DEFAULT_OLLAMA_MODEL,
     DEFAULT_OLLAMA_PORT,
@@ -197,18 +199,25 @@ class ServeSession(Pitch):
                 model == lm or lm.startswith(f"{model}:") for lm in live_models
             )
             if not is_pulled:
-                self.ui.commentary(
-                    f"[pirlo serve] Pulling Ollama model '{model}' into pirlo-ollama-server..."
-                )
-                pull_ok, pull_msg = compose_manager.pull_ollama_model(model)
-                if not pull_ok:
-                    self.ui.commentary(
-                        f"[WARNING] Failed to pull model '{model}': {pull_msg}"
-                    )
-                else:
-                    self.ui.commentary(
-                        f"[pirlo serve] Model '{model}' pulled successfully!"
-                    )
+                with self.ui.status(
+                    f"Pulling Ollama model '{model}' into pirlo-ollama-server..."
+                ) as status_ctx:
+                    try:
+                        for line in compose_manager.pull_ollama_model_stream(model):
+                            cleaned = (
+                                Text.from_ansi(line).plain.replace("\r", "").strip()
+                            )
+                            if cleaned and hasattr(status_ctx, "update"):
+                                status_ctx.update(
+                                    f"[bold green]Pulling '{model}': {cleaned}[/bold green]"
+                                )
+                        self.ui.commentary(
+                            f"[pirlo serve] Model '{model}' pulled successfully!"
+                        )
+                    except Exception as e:  # noqa: BLE001
+                        self.ui.commentary(
+                            f"[WARNING] Failed to pull model '{model}': {e}"
+                        )
 
         # Re-probe live tags for 100% verified models
         verified_models = _get_live_ollama_models(resolved_ollama_port)

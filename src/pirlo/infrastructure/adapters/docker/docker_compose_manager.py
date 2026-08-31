@@ -74,3 +74,11 @@ class DockerComposeManager:
             return True, output or f"Successfully pulled {model_name}"
         except Exception as e:  # noqa: BLE001
             return False, str(e)
+
+    def pull_ollama_model_stream(
+        self, model_name: str, container_name: str = "pirlo-ollama-server"
+    ) -> Any:
+        """Streams output lines from 'ollama pull' inside target container via python-on-whales."""
+        return self.docker.container.execute(
+            container_name, ["ollama", "pull", model_name], stream=True
+        )
