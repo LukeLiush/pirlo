@@ -62,3 +62,15 @@ class DockerComposeManager:
             return True, "Stack stopped successfully."
         except Exception as e:  # noqa: BLE001
             return False, str(e)
+
+    def pull_ollama_model(
+        self, model_name: str, container_name: str = "pirlo-ollama-server"
+    ) -> tuple[bool, str]:
+        """Executes 'ollama pull <model_name>' inside target container via python-on-whales."""
+        try:
+            output = self.docker.container.execute(
+                container_name, ["ollama", "pull", model_name]
+            )
+            return True, output or f"Successfully pulled {model_name}"
+        except Exception as e:  # noqa: BLE001
+            return False, str(e)

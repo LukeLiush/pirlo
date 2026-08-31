@@ -20,6 +20,24 @@ from pirlo.infrastructure.adapters.docker.docker_compose_manager import (
 )
 
 
+def _get_live_ollama_models(ollama_port: int) -> list[str]:
+    """Queries live Ollama tags via GET /api/tags."""
+    import json
+    import urllib.request
+
+    url = f"http://127.0.0.1:{ollama_port}/api/tags"
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "pirlo"})
+        with urllib.request.urlopen(req, timeout=3.0) as resp:
+            if resp.status == 200:
+                data = json.loads(resp.read().decode("utf-8"))
+                models_info = data.get("models", [])
+                return [m.get("name", "") for m in models_info if m.get("name")]
+    except Exception:  # noqa: BLE001, S110
+        pass
+    return []
+
+
 @playbook(
     name="serve",
     description="Starts Pirlo serve (Prefect dev server + Ollama multi-model) using Docker.",
@@ -128,14 +146,6 @@ class ServeSession(Pitch):
         serve_dir: Path = get_workspace_path() / "serve"
         serve_dir.mkdir(parents=True, exist_ok=True)
 
-        manifest = ServeManifest(
-            default_prefect_port=resolved_prefect_port,
-            default_ollama_port=resolved_ollama_port,
-            default_model=default_model,
-            models=model_list,
-        )
-        manifest.save(serve_dir / "serve.json")
-
         ready, ready_msg = compose_manager.is_docker_ready()
         if not ready:
             self.ui.commentary(f"[ERROR] Docker daemon is unreachable: {ready_msg}\n")
@@ -180,6 +190,43 @@ class ServeSession(Pitch):
                 error=f"Docker Compose failed: {msg}",
             )
 
+        # Synchronously pull missing models via python-on-whales
+        live_models = _get_live_ollama_models(resolved_ollama_port)
+        for model in model_list:
+            is_pulled = any(
+                model == lm or lm.startswith(f"{model}:") for lm in live_models
+            )
+            if not is_pulled:
+                self.ui.commentary(
+                    f"[pirlo serve] Pulling Ollama model '{model}' into pirlo-ollama-server via python-on-whales..."
+                )
+                pull_ok, pull_msg = compose_manager.pull_ollama_model(model)
+                if not pull_ok:
+                    self.ui.commentary(
+                        f"[WARNING] Failed to pull model '{model}': {pull_msg}"
+                    )
+                else:
+                    self.ui.commentary(
+                        f"[pirlo serve] Model '{model}' pulled successfully!"
+                    )
+
+        # Re-probe live tags for 100% verified models
+        verified_models = _get_live_ollama_models(resolved_ollama_port)
+        if not verified_models:
+            verified_models = model_list
+
+        selected_default = (
+            default_model if default_model in verified_models else verified_models[0]
+        )
+
+        manifest = ServeManifest(
+            default_prefect_port=resolved_prefect_port,
+            default_ollama_port=resolved_ollama_port,
+            default_model=selected_default,
+            models=verified_models,
+        )
+        manifest.save(serve_dir / "serve.json")
+
         import getpass
 
         current_user = getpass.getuser()
@@ -190,7 +237,7 @@ class ServeSession(Pitch):
             detail=(
                 f"Prefect API: http://0.0.0.0:{resolved_prefect_port}/api\n"
                 f"Ollama Base: http://0.0.0.0:{resolved_ollama_port}\n"
-                f"Served Models: {', '.join(model_list)}\n"
+                f"Served Models: {', '.join(verified_models)}\n"
                 f"Manifest written to {serve_dir / 'serve.json'}\n\n"
                 f"💡 How to Connect from Another Machine:\n"
                 f"   Run 'pirlo connect {current_user}@{hostname}' (or <user>@<remote_ip>)\n\n"
@@ -207,7 +254,7 @@ class ServeSession(Pitch):
             data={
                 "prefect_port": resolved_prefect_port,
                 "ollama_port": resolved_ollama_port,
-                "models": model_list,
+                "models": verified_models,
                 "manifest_path": str(serve_dir / "serve.json"),
             },
         )

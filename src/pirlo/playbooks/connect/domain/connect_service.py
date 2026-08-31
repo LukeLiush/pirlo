@@ -25,6 +25,24 @@ from pirlo.playbooks.connect.ports.remote_manifest_prober import RemoteManifestP
 from pirlo.playbooks.connect.ports.tunnel_manager import TunnelConfig, TunnelManager
 
 
+def _fetch_live_models_over_tunnel(ollama_base_url: str) -> list[str]:
+    """Queries live Ollama models over established tunnel (http://127.0.0.1:<local_ollama_port>/api/tags)."""
+    import json
+    import urllib.request
+
+    url = f"{ollama_base_url}/api/tags"
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "pirlo"})
+        with urllib.request.urlopen(req, timeout=3.0) as resp:
+            if resp.status == 200:
+                data = json.loads(resp.read().decode("utf-8"))
+                models_info = data.get("models", [])
+                return [m.get("name", "") for m in models_info if m.get("name")]
+    except Exception:  # noqa: BLE001, S110
+        pass
+    return []
+
+
 class ConnectService:
     """Domain Application Service orchestrating connection via pure dependency injection."""
 
@@ -162,8 +180,21 @@ class ConnectService:
         self, session: ActiveSession, models: list[str], default_model: str
     ) -> None:
         connect_repo = JsonLinkRepository(self.connect_dir / "links.json")
-        for model in models:
-            if model == default_model:
+
+        live_models = _fetch_live_models_over_tunnel(session.ollama_base_url)
+        models_to_link = live_models if live_models else models
+
+        if not live_models:
+            print(
+                "[pirlo connect] [WARNING] No live models found in Ollama daemon via tunnel. Using manifest fallback."
+            )
+
+        selected_default = (
+            default_model if default_model in models_to_link else models_to_link[0]
+        )
+
+        for model in models_to_link:
+            if model == selected_default:
                 link_name = "serve-ollama"
             else:
                 sanitized_model = model.replace(":", "-").replace(".", "-")
