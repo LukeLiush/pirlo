@@ -203,14 +203,23 @@ class SmartPrefectTaskOrchestrator(TaskOrchestrator):
         default_link = repo.get_default_link()
         if default_link:
             logger.info(
-                " Synthesis aggregator using default local link '%s' (%s).",
+                "⚙️ Synthesis aggregator using default local link '%s' (Provider: %s, Model: %s).",
                 default_link.name,
+                default_link.provider,
                 default_link.model,
             )
             return default_link
 
         # 2. Fallback to decomposer link if no default local link is active
-        return self._get_decomposer_link(prepared_run)
+        decomposer_link = self._get_decomposer_link(prepared_run)
+        logger.info(
+            "🔍 No active default local link found (e.g., 'serve-ollama'). "
+            "Falling back to decomposer link '%s' (Provider: %s, Model: %s) for synthesis.",
+            decomposer_link.name,
+            decomposer_link.provider,
+            decomposer_link.model,
+        )
+        return decomposer_link
 
     # ---- scheduled deployment ------------------------------------------
 
