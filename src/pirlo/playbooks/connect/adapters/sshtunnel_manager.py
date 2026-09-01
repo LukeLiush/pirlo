@@ -21,7 +21,12 @@ class SshTunnelManager(TunnelManager):
         import paramiko
 
         if not hasattr(paramiko, "DSSKey"):
-            paramiko.DSSKey = paramiko.PKey
+
+            class DummyDSSKey(paramiko.PKey):
+                def __init__(self, *args: Any, **kwargs: Any) -> None:
+                    raise paramiko.SSHException("DSSKey is deprecated and unsupported")
+
+            paramiko.DSSKey = DummyDSSKey
 
         from sshtunnel import SSHTunnelForwarder
 

@@ -159,7 +159,8 @@ class ConnectSession(Pitch):
                 ssh_port=ssh_port,
             )
 
-        except Exception:  # noqa: BLE001
+        except Exception as initial_err:  # noqa: BLE001
+            e: Exception = initial_err
             # Fallback: If initial SSH key auth fails and in interactive TTY, prompt for password
             if sys.stdin.isatty():
                 try:
@@ -173,9 +174,10 @@ class ConnectSession(Pitch):
                             ssh_port=ssh_port,
                             ssh_password=ssh_pass,
                         )
-                        self.ui.commentary(
-                            "🔑 SSH key copied to remote host! Future connections will be passwordless.\n"
-                        )
+                        if session:
+                            self.ui.commentary(
+                                "🔑 Connected using password. Installed local SSH key to remote host for future passwordless sessions.\n"
+                            )
                 except Exception as retry_err:  # noqa: BLE001
                     e = retry_err
 
