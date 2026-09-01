@@ -2,22 +2,36 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
-from typing import TYPE_CHECKING, Any
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any, ClassVar, Self
 
+from pirlo.core.decorators import orchestrator
 from pirlo.core.models.run_result import RunResult
 
 if TYPE_CHECKING:
     from pirlo.core.models.run import PreparedRun
 
 
+@dataclass(frozen=True)
+class OrchestratorInfo:
+    """Structured metadata for an orchestrator backend engine."""
+
+    name: str
+    description: str = ""
+    extra: dict[str, Any] = field(default_factory=dict)
+
+
 class TaskOrchestrator(ABC):
     """Abstract port definition for execution engine backends (Prefect, Local, etc.)."""
 
-    orchestrator_name: str = ""
+    info: ClassVar[OrchestratorInfo]
 
-    @classmethod
-    def get_name(cls) -> str:
-        return getattr(cls, "orchestrator_name", cls.__name__.lower())
+    def __new__(cls, *args: Any, **kwargs: Any) -> Self:
+        if not hasattr(cls, "info"):
+            raise TypeError(
+                f"Orchestrator class '{cls.__name__}' is missing the @{orchestrator.__name__} decorator."
+            )
+        return super().__new__(cls)
 
     @abstractmethod
     async def execute(

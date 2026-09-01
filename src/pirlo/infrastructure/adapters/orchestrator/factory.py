@@ -62,11 +62,11 @@ class OrchestratorFactory:
         orchestrator_cls = cls._require_orchestrator(name)
 
         builder = ArgumentParserBuilder(orchestrator_cls.execute)
-        program_header = f"pirlo {playbook_name} -- {orchestrator_cls.get_name()}"
+        program_header = f"pirlo {playbook_name} -- {orchestrator_cls.info.name}"
         parser = builder.build_parser(program_header)
 
         flags = list(orchestrator_flags)
-        if flags and flags[0].lower() == orchestrator_cls.get_name().lower():
+        if flags and flags[0].lower() == orchestrator_cls.info.name.lower():
             flags = flags[1:]
 
         parsed_args = parser.parse_args(flags)

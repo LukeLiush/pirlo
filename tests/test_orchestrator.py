@@ -154,3 +154,30 @@ def test_orchestrator_aggregator_link_uses_default_link(tmp_path):
         agg_link = orchestrator._get_aggregator_link()
         assert agg_link.name == "serve-ollama"
         assert agg_link.is_default is True
+
+
+def test_orchestrator_decorator_enforcement():
+    from pirlo.core.decorators import orchestrator
+    from pirlo.core.ports.orchestrator import TaskOrchestrator
+
+    class UndecoratedOrchestrator(TaskOrchestrator):
+        async def execute(self, *args, **kwargs):
+            pass
+
+    with pytest.raises(TypeError, match="missing the @orchestrator decorator"):
+        UndecoratedOrchestrator()
+
+    @orchestrator(
+        name="custom_test",
+        description="Custom test orchestrator",
+        version="1.0.0",
+    )
+    class DecoratedOrchestrator(TaskOrchestrator):
+        async def execute(self, *args, **kwargs):
+            pass
+
+    instance = DecoratedOrchestrator()
+    assert instance.info.name == "custom_test"
+    assert instance.info.description == "Custom test orchestrator"
+    assert instance.info.extra == {"version": "1.0.0"}
+    assert DecoratedOrchestrator.info.name == "custom_test"

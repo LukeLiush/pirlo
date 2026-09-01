@@ -1,7 +1,11 @@
 from collections.abc import Callable
-from typing import Any, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar
+
+if TYPE_CHECKING:
+    from pirlo.core.ports.orchestrator import TaskOrchestrator
 
 T = TypeVar("T", bound=type[Any])
+O = TypeVar("O", bound=type["TaskOrchestrator"])
 
 
 def playbook(name: str, description: str | None = None) -> Callable[[T], T]:
@@ -16,13 +20,22 @@ def playbook(name: str, description: str | None = None) -> Callable[[T], T]:
     return decorator
 
 
-def orchestrator(name: str, description: str | None = None) -> Callable[[T], T]:
+def orchestrator(
+    name: str,
+    description: str | None = None,
+    **extra_info: Any,
+) -> Callable[[O], O]:
     """Class decorator to register a TaskOrchestrator engine backend."""
 
-    def decorator(cls: T) -> T:
-        cls.orchestrator_name = name
+    def decorator(cls: O) -> O:
+        from pirlo.core.ports.orchestrator import OrchestratorInfo
+
         doc_desc = cls.__doc__.strip().split("\n")[0] if cls.__doc__ else None
-        cls.orchestrator_description = description or doc_desc or ""
+        cls.info = OrchestratorInfo(
+            name=name,
+            description=description or doc_desc or "",
+            extra=extra_info,
+        )
         return cls
 
     return decorator
