@@ -42,11 +42,13 @@ def test_ensure_local_ssh_key_generates_new_ed25519_key_pair(tmp_path: Path):
 def test_ensure_local_ssh_key_returns_none_on_cryptography_failure(tmp_path: Path):
     ssh_dir = tmp_path / ".ssh"
 
-    with patch("pathlib.Path.expanduser", return_value=ssh_dir):
-        with patch(
+    with (
+        patch("pathlib.Path.expanduser", return_value=ssh_dir),
+        patch(
             "cryptography.hazmat.primitives.asymmetric.ed25519.Ed25519PrivateKey.generate",
             side_effect=RuntimeError("Cryptography engine error"),
-        ):
-            pub_key = ensure_local_ssh_key()
+        ),
+    ):
+        pub_key = ensure_local_ssh_key()
 
     assert pub_key is None

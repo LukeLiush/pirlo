@@ -28,7 +28,8 @@ class ParamikoManifestProber(RemoteManifestProber):
         key_content = public_key_path.read_text().strip()
         if not key_content:
             logger.warning(
-                "[pirlo connect] Local SSH public key file %s is empty.", public_key_path
+                "[pirlo connect] Local SSH public key file %s is empty.",
+                public_key_path,
             )
             return False
 
@@ -78,10 +79,9 @@ class ParamikoManifestProber(RemoteManifestProber):
             if ssh_password:
                 try:
                     self.install_ssh_key_if_needed(ssh_client)
-                except Exception as e:
+                except Exception:
                     logger.exception(
-                        "[pirlo connect] Exception encountered while copying SSH public key to remote host: %s",
-                        e,
+                        "[pirlo connect] Exception encountered while copying SSH public key to remote host"
                     )
 
             ssh_client.close()
@@ -99,4 +99,3 @@ class ParamikoManifestProber(RemoteManifestProber):
             f"💡 Manual Verification Hint:\n   Verify pirlo serve is active by running:\n     {cmd_str}\n"
         )
         return ServeManifest()
-

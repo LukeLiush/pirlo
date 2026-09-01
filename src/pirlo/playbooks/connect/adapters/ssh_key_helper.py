@@ -46,10 +46,13 @@ def ensure_local_ssh_key() -> Path | None:
         public_key_path.write_bytes(public_key_openssh_bytes)
         public_key_path.chmod(PUBLIC_KEY_PERMISSIONS)
 
-        logger.info("[pirlo connect] Generated new ed25519 SSH key pair at %s", private_key_path)
+        logger.info(
+            "[pirlo connect] Generated new ed25519 SSH key pair at %s", private_key_path
+        )
         return public_key_path
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.warning(
-            "[pirlo connect] Could not auto-generate SSH key via cryptography library: %s", e
+            "[pirlo connect] Could not auto-generate SSH key via cryptography library: %s",
+            e,
         )
         return None
