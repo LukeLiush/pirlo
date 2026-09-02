@@ -111,10 +111,14 @@ class ConnectSession(Pitch):
                     data={"active": False},
                 )
 
+            dashboard_url = active_session.prefect_api_url.rstrip("/").replace(
+                "/api", ""
+            )
             detail_msg: str = (
                 f"Remote Host: {active_session.remote_host}\n"
-                f"Prefect API: {active_session.prefect_api_url}\n"
-                f"Ollama Base: {active_session.ollama_base_url}\n"
+                f"Prefect Dashboard: {dashboard_url}\n"
+                f"Local Prefect Tunnel (API): {active_session.prefect_api_url}\n"
+                f"Local Ollama Tunnel: {active_session.ollama_base_url}\n"
                 f"CLI Process PID: {active_session.cli_pid or 'N/A'}\n"
                 f"Health: {'HEALTHY' if health_status and health_status.is_healthy else 'UNHEALTHY'}\n"
                 f"{health_status.message if health_status else ''}"
@@ -214,11 +218,13 @@ class ConnectSession(Pitch):
                 error=f"Connection to {remote_host} failed",
             )
 
+        dashboard_url = session.prefect_api_url.rstrip("/").replace("/api", "")
         self.ui.goal(
             "Connected to pirlo serve successfully!",
             detail=(
                 f"Remote Host: {session.remote_host}\n"
-                f"Local Prefect Tunnel: {session.prefect_api_url}\n"
+                f"Prefect Dashboard: {dashboard_url}\n"
+                f"Local Prefect Tunnel (API): {session.prefect_api_url}\n"
                 f"Local Ollama Tunnel: {session.ollama_base_url}\n\n"
                 f"💡 Press Ctrl+C at any time to disconnect cleanly."
             ),
