@@ -15,6 +15,7 @@ from pirlo.core.models.run_result import RunResult
 from pirlo.core.ports.browser_agent_factory import BrowserAgentFactory
 from pirlo.core.ports.pitch import Pitch
 from pirlo.core.repository.workflow_repository import WorkflowRepository
+from pirlo.core.services.schedule_resolver import get_schedule_help_text
 from pirlo.core.services.workflow_runner import WorkflowRunner
 from pirlo.infrastructure.adapters.browser.browser_agent_factory import (
     DefaultBrowserAgentFactory,
@@ -100,7 +101,7 @@ class AutopassSession(Pitch):
         schedule: Annotated[
             str | None,
             Parameter(
-                help="Optional schedule preset or raw cron string",
+                help=get_schedule_help_text(),
                 env_name="SCHEDULE",
                 short="-s",
             ),

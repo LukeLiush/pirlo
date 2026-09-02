@@ -175,3 +175,51 @@ async def test_cron_schedule_creates_deployment_when_server_active(
         assert call_kwargs["name"] == "pirlo-scheduled-cron-test-2"
         assert call_kwargs["work_pool_name"] == "test-pool"
         assert call_kwargs["schedule"].cron == "0 9 * * *"
+
+
+def test_dynamic_schedule_help_text():
+    from pirlo.core.services.schedule_resolver import get_schedule_help_text
+
+    help_text = get_schedule_help_text()
+    assert "'daily'" in help_text
+    assert "'hourly'" in help_text
+    assert "'weekly'" in help_text
+    assert "'monthly'" in help_text
+
+
+@pytest.mark.anyio
+async def test_cron_schedule_preset_resolution(tmp_path, monkeypatch):
+    monkeypatch.setenv("PIRLO_WORKSPACE", str(tmp_path))
+
+    run_dir = tmp_path / "autopass" / "runs" / "cron-test-preset"
+    run_dir.mkdir(parents=True, exist_ok=True)
+
+    orchestrator_obj = SmartPrefectTaskOrchestrator()
+    orchestrator_obj.server_url = "http://localhost:4200/api"
+    orchestrator_obj.work_pool = "test-pool"
+    prepared_run = PreparedRun(
+        playbook_name="autopass",
+        run_name="cron-test-preset",
+        run_id="cron-test-preset",
+        workspace=tmp_path,
+        parameters={},
+    )
+
+    mock_to_deployment = AsyncMock(return_value="mock-deployment-obj")
+
+    with patch(
+        "pirlo.infrastructure.adapters.orchestrator.prefect_orchestrator.pirlo_decomposed_flow.to_deployment",
+        mock_to_deployment,
+    ):
+        result = await orchestrator_obj.execute(
+            prepared_run=prepared_run,
+            worker_fn=lambda: AsyncMock(return_value="ok")(),
+            task="Do work",
+            schedule="daily",
+        )
+
+        assert result == "mock-deployment-obj"
+        mock_to_deployment.assert_called_once()
+        call_kwargs = mock_to_deployment.call_args.kwargs
+        assert call_kwargs["schedule"].cron == "0 9 * * *"
+        assert call_kwargs["schedule"].timezone is not None

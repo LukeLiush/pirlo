@@ -17,6 +17,11 @@ from pirlo.core.models.link import LlmLink
 from pirlo.core.models.parameters import LinkParameter, Parameter
 from pirlo.core.models.run import PreparedRun
 from pirlo.core.ports.orchestrator import TaskOrchestrator
+from pirlo.core.services.schedule_resolver import (
+    PRESET_SCHEDULES,
+    detect_local_timezone,
+    get_schedule_help_text,
+)
 from pirlo.infrastructure.adapters.decomposer.pydantic_ai_decomposer import (
     PydanticAiDecomposer,
 )
@@ -58,7 +63,11 @@ class SmartPrefectTaskOrchestrator(TaskOrchestrator):
         worker_fn: Callable[..., Awaitable[Any]] | Callable[..., Any],
         task: Annotated[str, Parameter(help="Task prompt to execute")] = "",
         schedule: Annotated[
-            str | None, Parameter(help="Schedule preset or cron string", short="-s")
+            str | None,
+            Parameter(
+                help=get_schedule_help_text(),
+                short="-s",
+            ),
         ] = None,
         server_url: Annotated[
             str | None,
@@ -238,10 +247,24 @@ class SmartPrefectTaskOrchestrator(TaskOrchestrator):
 
         from prefect.client.schemas.schedules import CronSchedule
 
-        print(f"⏰ Scheduling Prefect Flow with cron: '{cron_schedule}'")
+        schedule_lower: str = cron_schedule.lower()
+        resolved_cron: str = PRESET_SCHEDULES.get(schedule_lower, cron_schedule)
+        tz_name: str = detect_local_timezone()
+
+        if schedule_lower in PRESET_SCHEDULES:
+            print(
+                f"🚀 Pitch set to play {schedule_lower}! ⏰ "
+                f"(cron: '{resolved_cron}', timezone: {tz_name})"
+            )
+        else:
+            print(
+                f"🚀 Pitch scheduled to play on timer! ⏰ "
+                f"(cron: '{resolved_cron}', timezone: {tz_name})"
+            )
+
         print(f"🌐 Prefect Server Detected: {settings.web_ui_base}")
 
-        schedule = CronSchedule(cron=cron_schedule, timezone="UTC")
+        schedule = CronSchedule(cron=resolved_cron, timezone=tz_name)
         deployment = await pirlo_decomposed_flow.to_deployment(  # type: ignore[misc]
             name=f"pirlo-scheduled-{prepared_run.run_id}",
             schedule=schedule,  # type: ignore[arg-type]
