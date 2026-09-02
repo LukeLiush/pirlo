@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import sqlite3
 from collections.abc import Awaitable, Callable, Sequence
@@ -11,6 +12,7 @@ from typing import Any, Literal, TypedDict
 
 from prefect import flow, task
 
+from pirlo.core.config import get_workspace_path
 from pirlo.core.models.link import LlmLink
 from pirlo.core.models.plan import DecomposerPlan
 from pirlo.core.models.run import Run, RunStatus
@@ -152,20 +154,46 @@ async def pirlo_decomposed_flow(
     Prefect settings (server vs. ephemeral) are applied by the caller
     (the orchestrator) before this flow runs, so it does not manage them here.
     """
-    tracked = workspace is not None and playbook is not None and run_id is not None
+    effective_workspace = workspace or get_workspace_path()
+    effective_run_id = run_id
+
+    if not effective_run_id and playbook:
+        flow_run_suffix = ""
+        with contextlib.suppress(Exception):
+            from prefect.context import get_run_context
+
+            ctx = get_run_context()
+            flow_run = getattr(ctx, "flow_run", None)
+            if flow_run and hasattr(flow_run, "id"):
+                flow_run_suffix = f"_{str(flow_run.id)[:8]}"
+        run_date_str = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
+        effective_run_id = f"scheduled-{playbook}-{run_date_str}{flow_run_suffix}"
+
+    tracked = (
+        effective_workspace is not None
+        and playbook is not None
+        and effective_run_id is not None
+    )
 
     if tracked:
-        assert workspace and playbook and run_id  # narrowing for the type checker
-        await preregister_run_task(workspace, playbook, run_name or run_id, run_id)
+        assert effective_workspace and playbook and effective_run_id
+        await preregister_run_task(
+            effective_workspace,
+            playbook,
+            run_name or effective_run_id,
+            effective_run_id,
+        )
 
     async def _finalize(status: RunStatus) -> None:
         if not tracked:
             return
-        assert workspace and run_id
+        assert effective_workspace and effective_run_id
         try:
-            await finalize_run_task(workspace, run_id, status)
+            await finalize_run_task(effective_workspace, effective_run_id, status)
         except Exception:
-            logger.exception("Failed to finalize run %s as %s", run_id, status)
+            logger.exception(
+                "Failed to finalize run %s as %s", effective_run_id, status
+            )
 
     try:
         subtask_results = await asyncio.gather(

@@ -175,7 +175,7 @@ class AutopassSession(Pitch):
 
         pm_base_url = playmaker.base_url or "N/A"
 
-        active_schedule: str | None = prepared.parameters.get("schedule")
+        active_schedule: str | None = getattr(self.orchestrator, "schedule", None)
 
         self.ui.lineup(
             "Active Run Configuration",
@@ -239,23 +239,37 @@ class AutopassSession(Pitch):
             workflow_runner=self_healing_runner,
         )
 
-        async with browser_manager.session() as session:
+        is_scheduled = bool(getattr(self.orchestrator, "schedule", None))
+        raw_output: Any
 
-            async def run_use_case(
-                task_prompt: str | None = None, site: str | None = None, **kwargs: Any
-            ) -> str:
-                effective_task = task_prompt or task
-                return await run_autopass_use_case.run(
-                    browser_manager=session,
-                    task_prompt=effective_task,
-                    listener=QuickProgressListener(),
-                    run_name=prepared.run_name,
-                    run_id=prepared.run_id,
-                )
+        if is_scheduled:
 
-            raw_output: Any = await self.orchestrator.execute(
-                prepared, run_use_case, task=task
+            async def _noop_worker(*a: Any, **kw: Any) -> None:
+                pass
+
+            raw_output = await self.orchestrator.execute(
+                prepared, _noop_worker, task=task
             )
+        else:
+            async with browser_manager.session() as session:
+
+                async def run_use_case(
+                    task_prompt: str | None = None,
+                    site: str | None = None,
+                    **kwargs: Any,
+                ) -> str:
+                    effective_task = task_prompt or task
+                    return await run_autopass_use_case.run(
+                        browser_manager=session,
+                        task_prompt=effective_task,
+                        listener=QuickProgressListener(),
+                        run_name=prepared.run_name,
+                        run_id=prepared.run_id,
+                    )
+
+                raw_output = await self.orchestrator.execute(
+                    prepared, run_use_case, task=task
+                )
 
         autopass_output: AutopassRunOutput = AutopassRunOutput(
             task_prompt=task,

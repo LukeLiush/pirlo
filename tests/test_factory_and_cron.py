@@ -1,5 +1,5 @@
 from typing import Annotated, Any
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -156,7 +156,16 @@ async def test_cron_schedule_creates_deployment_when_server_active(
         parameters={},
     )
 
-    mock_to_deployment = AsyncMock(return_value="mock-deployment-obj")
+    mock_plan = MagicMock()
+    mock_plan.model_dump.return_value = {"subtasks": []}
+    mock_decomposer = MagicMock()
+    mock_decomposer.decompose = AsyncMock(return_value=mock_plan)
+    orchestrator_obj._build_decomposer = MagicMock(return_value=mock_decomposer)
+    orchestrator_obj._get_decomposer_link = MagicMock(return_value=MagicMock())
+
+    mock_deployment = MagicMock()
+    mock_deployment.apply = AsyncMock(return_value="mock-deployment-id-123")
+    mock_to_deployment = AsyncMock(return_value=mock_deployment)
 
     with patch(
         "pirlo.infrastructure.adapters.orchestrator.prefect_orchestrator.pirlo_decomposed_flow.to_deployment",
@@ -169,12 +178,19 @@ async def test_cron_schedule_creates_deployment_when_server_active(
             schedule="0 9 * * *",
         )
 
-        assert result == "mock-deployment-obj"
+        assert "pirlo-scheduled-autopass-" in result
+        assert "mock-deployment-id-123" in result
+        assert (
+            "🔗 View deployment in Prefect UI: http://localhost:4200/deployments/deployment/mock-deployment-id-123"
+            in result
+        )
         mock_to_deployment.assert_called_once()
+        mock_deployment.apply.assert_called_once()
         call_kwargs = mock_to_deployment.call_args.kwargs
-        assert call_kwargs["name"] == "pirlo-scheduled-cron-test-2"
+        assert call_kwargs["name"].startswith("pirlo-scheduled-autopass-")
         assert call_kwargs["work_pool_name"] == "test-pool"
         assert call_kwargs["schedule"].cron == "0 9 * * *"
+        assert call_kwargs["parameters"]["playbook"] == "autopass"
 
 
 def test_dynamic_schedule_help_text():
@@ -205,7 +221,16 @@ async def test_cron_schedule_preset_resolution(tmp_path, monkeypatch):
         parameters={},
     )
 
-    mock_to_deployment = AsyncMock(return_value="mock-deployment-obj")
+    mock_plan = MagicMock()
+    mock_plan.model_dump.return_value = {"subtasks": []}
+    mock_decomposer = MagicMock()
+    mock_decomposer.decompose = AsyncMock(return_value=mock_plan)
+    orchestrator_obj._build_decomposer = MagicMock(return_value=mock_decomposer)
+    orchestrator_obj._get_decomposer_link = MagicMock(return_value=MagicMock())
+
+    mock_deployment = MagicMock()
+    mock_deployment.apply = AsyncMock(return_value="mock-deployment-id-456")
+    mock_to_deployment = AsyncMock(return_value=mock_deployment)
 
     with patch(
         "pirlo.infrastructure.adapters.orchestrator.prefect_orchestrator.pirlo_decomposed_flow.to_deployment",
@@ -218,8 +243,23 @@ async def test_cron_schedule_preset_resolution(tmp_path, monkeypatch):
             schedule="daily",
         )
 
-        assert result == "mock-deployment-obj"
+        assert "pirlo-scheduled-autopass-" in result
+        assert "mock-deployment-id-456" in result
+        assert (
+            "🔗 View deployment in Prefect UI: http://localhost:4200/deployments/deployment/mock-deployment-id-456"
+            in result
+        )
         mock_to_deployment.assert_called_once()
+        mock_deployment.apply.assert_called_once()
         call_kwargs = mock_to_deployment.call_args.kwargs
         assert call_kwargs["schedule"].cron == "0 9 * * *"
         assert call_kwargs["schedule"].timezone is not None
+
+
+def test_orchestrator_factory_parses_schedule_flag():
+    orchestrator = OrchestratorFactory.create_from_invocation(
+        name="prefect",
+        playbook_name="autopass",
+        orchestrator_flags=["prefect", "-s", "*/10 * * * *"],
+    )
+    assert getattr(orchestrator, "schedule", None) == "*/10 * * * *"

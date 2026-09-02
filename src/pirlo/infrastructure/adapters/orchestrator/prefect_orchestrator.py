@@ -3,6 +3,7 @@ from __future__ import annotations
 import contextlib
 import logging
 from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -61,10 +62,12 @@ class SmartPrefectTaskOrchestrator(TaskOrchestrator):
         server_url: str | None = None,
         work_pool: str | None = None,
         decomposer_link: LlmLink | str | None = None,
+        schedule: str | None = None,
     ) -> None:
         self.server_url = server_url
         self.work_pool = work_pool
         self.decomposer_link = decomposer_link
+        self.schedule = schedule
 
     # ---- public API -----------------------------------------------------
 
@@ -111,9 +114,11 @@ class SmartPrefectTaskOrchestrator(TaskOrchestrator):
             self.work_pool = work_pool
         if decomposer_link is not None:
             self.decomposer_link = decomposer_link
+        if schedule is not None:
+            self.schedule = schedule
 
         task_str: str = task or str(prepared_run.parameters.get("task", ""))
-        schedule_str: str | None = schedule or prepared_run.parameters.get("schedule")
+        schedule_str: str | None = schedule or getattr(self, "schedule", None)
 
         settings: PrefectServerSettings = PrefectServerSettings.resolve(self.server_url)
 
@@ -281,19 +286,35 @@ class SmartPrefectTaskOrchestrator(TaskOrchestrator):
                 f"(cron: '{resolved_cron}', timezone: {tz_name})"
             )
 
-        print(f"🌐 Prefect Server Detected: {settings.web_ui_base}")
+        decomposer_link = self._get_decomposer_link(prepared_run)
+        decomposer = self._build_decomposer(decomposer_link)
+        plan = await decomposer.decompose(task)
+
+        run_date_str = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
+        deployment_name = f"pirlo-scheduled-{prepared_run.playbook_name}-{run_date_str}"
 
         target_pool = self.work_pool or DEFAULT_WORK_POOL
         schedule = CronSchedule(cron=resolved_cron, timezone=tz_name)
-        deployment = await pirlo_decomposed_flow.to_deployment(  # type: ignore[misc]
-            name=f"pirlo-scheduled-{prepared_run.run_id}",
-            schedule=schedule,  # type: ignore[arg-type]
-            work_pool_name=target_pool,
-        )
-        print(
-            f"✅ Created scheduled Prefect deployment: pirlo-scheduled-{prepared_run.run_id}"
-        )
-        return deployment
+        with temporary_settings(settings.overrides):
+            deployment = await pirlo_decomposed_flow.to_deployment(  # type: ignore[misc]
+                name=deployment_name,
+                schedule=schedule,  # type: ignore[arg-type]
+                work_pool_name=target_pool,
+                parameters={
+                    "plan": plan.model_dump(),
+                    "playbook": prepared_run.playbook_name,
+                    "run_name": prepared_run.run_name,
+                    "workspace": str(prepared_run.workspace),
+                },
+            )
+            deployment_id = await deployment.apply()
+        msg = f"✅ Created & registered scheduled Prefect deployment: {deployment_name} (ID: {deployment_id})"
+        if settings.web_ui_base:
+            deployment_url = f"{settings.web_ui_base.rstrip('/')}/deployments/deployment/{deployment_id}"
+            msg += f"\n🔗 View deployment in Prefect UI: {deployment_url}"
+
+        print(msg)
+        return msg
 
     # ---- helpers -------------------------------------------------------
 
