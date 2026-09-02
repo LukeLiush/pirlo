@@ -172,3 +172,29 @@ def test_connect_service_with_password(tmp_path: Path):
     )
     assert session is not None
     assert prober.last_ssh_password == "secretpassword123"
+
+
+def test_ssh_tunnel_manager_keepalive_configuration(tmp_path: Path):
+    from unittest.mock import MagicMock, patch
+
+    from pirlo.playbooks.connect.adapters.sshtunnel_manager import SshTunnelManager
+
+    mgr = SshTunnelManager()
+    config = TunnelConfig(
+        remote_host="gpu-node.internal",
+        ssh_user="ubuntu",
+        ssh_port=22,
+        remote_prefect_port=4200,
+        remote_ollama_port=11434,
+    )
+
+    with patch("sshtunnel.SSHTunnelForwarder") as mock_forwarder:
+        mock_instance = MagicMock()
+        mock_instance.local_bind_port = 50000
+        mock_forwarder.return_value = mock_instance
+
+        mgr.open_tunnel(config)
+
+        assert mock_forwarder.call_count == 2
+        for call_args in mock_forwarder.call_args_list:
+            assert call_args.kwargs.get("set_keepalive") == 15.0

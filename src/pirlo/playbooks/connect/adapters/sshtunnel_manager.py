@@ -32,6 +32,7 @@ class SshTunnelManager(TunnelManager):
 
         kwargs: dict[str, Any] = {
             "ssh_username": config.ssh_user,
+            "set_keepalive": 15.0,
         }
 
         if config.ssh_password:
