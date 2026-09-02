@@ -286,22 +286,24 @@ class SmartPrefectTaskOrchestrator(TaskOrchestrator):
                 f"(cron: '{resolved_cron}', timezone: {tz_name})"
             )
 
-        decomposer_link = self._get_decomposer_link(prepared_run)
-        decomposer = self._build_decomposer(decomposer_link)
-        plan = await decomposer.decompose(task)
-
-        run_date_str = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
-        deployment_name = f"pirlo-scheduled-{prepared_run.playbook_name}-{run_date_str}"
-
-        target_pool = self.work_pool or DEFAULT_WORK_POOL
-        schedule = CronSchedule(cron=resolved_cron, timezone=tz_name)
         with temporary_settings(settings.overrides):
+            decomposer_link = self._get_decomposer_link(prepared_run)
+            decomposer = self._build_decomposer(decomposer_link)
+            plan = await decomposer.decompose(task)
+
+            run_date_str = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
+            deployment_name = (
+                f"pirlo-scheduled-{prepared_run.playbook_name}-{run_date_str}"
+            )
+
+            target_pool = self.work_pool or DEFAULT_WORK_POOL
+            schedule = CronSchedule(cron=resolved_cron, timezone=tz_name)
             deployment = await pirlo_decomposed_flow.to_deployment(  # type: ignore[misc]
                 name=deployment_name,
                 schedule=schedule,  # type: ignore[arg-type]
                 work_pool_name=target_pool,
                 parameters={
-                    "plan": plan.model_dump(),
+                    "plan": plan.model_dump(mode="json"),
                     "playbook": prepared_run.playbook_name,
                     "run_name": prepared_run.run_name,
                     "workspace": str(prepared_run.workspace),
