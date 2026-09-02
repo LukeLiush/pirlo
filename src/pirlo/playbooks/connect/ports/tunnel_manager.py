@@ -10,6 +10,7 @@ class TunnelConfig:
     remote_prefect_port: int
     remote_ollama_port: int
     ssh_password: str | None = None
+    ssh_keepalive_interval: float = 15.0
 
 
 @dataclass
@@ -17,6 +18,7 @@ class ActiveTunnel:
     local_prefect_port: int
     local_ollama_port: int
     pid: int
+    ssh_keepalive_interval: float = 15.0
 
 
 class TunnelManager(ABC):

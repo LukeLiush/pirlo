@@ -158,6 +158,7 @@ class ConnectService:
                 remote_prefect_port=manifest.default_prefect_port,
                 remote_ollama_port=manifest.default_ollama_port,
                 cli_pid=os.getpid(),
+                ssh_keepalive_interval=tunnel.ssh_keepalive_interval,
             )
 
         # 4. Health Check Verification via Injected ServiceHealthChecker Port

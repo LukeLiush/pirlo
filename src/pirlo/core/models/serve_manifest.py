@@ -45,6 +45,7 @@ class ActiveSession:
     remote_prefect_port: int
     remote_ollama_port: int
     cli_pid: int | None = None
+    ssh_keepalive_interval: float = 15.0
 
     def is_same_host(self, target_host: str) -> bool:
         """Encapsulates host string comparison logic."""

@@ -32,7 +32,7 @@ class SshTunnelManager(TunnelManager):
 
         kwargs: dict[str, Any] = {
             "ssh_username": config.ssh_user,
-            "set_keepalive": 15.0,
+            "set_keepalive": config.ssh_keepalive_interval,
         }
 
         if config.ssh_password:
@@ -72,6 +72,7 @@ class SshTunnelManager(TunnelManager):
             local_prefect_port=self._prefect_tunnel.local_bind_port,
             local_ollama_port=self._ollama_tunnel.local_bind_port,
             pid=psutil.Process().pid,
+            ssh_keepalive_interval=config.ssh_keepalive_interval,
         )
 
     def close_tunnel(self) -> None:
