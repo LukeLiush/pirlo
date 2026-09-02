@@ -41,6 +41,17 @@ from pirlo.infrastructure.services.decomposed_workflow import (
 from pirlo.infrastructure.services.log_streamer import capture_run_logs
 
 
+def _get_server_url_help() -> str:
+    from pirlo.infrastructure.adapters.orchestrator.prefect_settings import (
+        discover_prefect_server_url,
+    )
+
+    detected = discover_prefect_server_url()
+    if detected:
+        return f"Prefect Server API endpoint URL [detected server: {detected} 🌐]"
+    return "Prefect Server API endpoint URL [default: Ephemeral Mode (In-Process) ⚡]"
+
+
 @orchestrator(
     name="prefect", description="Prefect 3.0 workflow orchestrator engine backend"
 )
@@ -71,15 +82,23 @@ class SmartPrefectTaskOrchestrator(TaskOrchestrator):
         ] = None,
         server_url: Annotated[
             str | None,
-            Parameter(help="Prefect Server API endpoint URL", env_name="SERVER_URL"),
+            Parameter(
+                help=_get_server_url_help(),
+                env_name="SERVER_URL",
+            ),
         ] = None,
         work_pool: Annotated[
-            str | None, Parameter(help="Prefect work pool name", env_name="WORK_POOL")
+            str | None,
+            Parameter(
+                help="Prefect work pool name (required when --schedule is used)",
+                env_name="WORK_POOL",
+            ),
         ] = None,
         decomposer_link: Annotated[
             LlmLink | str | None,
             LinkParameter(
-                help="LLM link name for decomposer", env_name="DECOMPOSER_LINK"
+                help="LLM link name for task decomposition [default: auto-detected from playbook parameters]",
+                env_name="DECOMPOSER_LINK",
             ),
         ] = None,
         *args: Any,

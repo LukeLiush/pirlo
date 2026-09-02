@@ -15,7 +15,6 @@ from pirlo.core.models.run_result import RunResult
 from pirlo.core.ports.browser_agent_factory import BrowserAgentFactory
 from pirlo.core.ports.pitch import Pitch
 from pirlo.core.repository.workflow_repository import WorkflowRepository
-from pirlo.core.services.schedule_resolver import get_schedule_help_text
 from pirlo.core.services.workflow_runner import WorkflowRunner
 from pirlo.infrastructure.adapters.browser.browser_agent_factory import (
     DefaultBrowserAgentFactory,
@@ -98,17 +97,10 @@ class AutopassSession(Pitch):
         retry_delay: Annotated[
             int, Parameter(help="Retry delay in seconds", env_name="RETRY_DELAY")
         ] = 10,
-        schedule: Annotated[
-            str | None,
-            Parameter(
-                help=get_schedule_help_text(),
-                env_name="SCHEDULE",
-                short="-s",
-            ),
-        ] = None,
         *args: Any,
         **kwargs: Any,
     ) -> RunResult[AutopassRunOutput]:
+        prepared: PreparedRun = await self.prepared_run()
         self.ui.header(
             "Autopass Workflow Pitch",
             subtitle="Autonomous Browser Automation",
@@ -129,7 +121,7 @@ class AutopassSession(Pitch):
             )
             self.ui.yellow_card(instruction)
             return RunResult(
-                run_id=(await self.prepared_run()).run_id,
+                run_id=prepared.run_id,
                 status=RunStatus.FAILED,
                 error=str(instruction),
             )
@@ -153,7 +145,7 @@ class AutopassSession(Pitch):
             )
             self.ui.yellow_card(instruction)
             return RunResult(
-                run_id=(await self.prepared_run()).run_id,
+                run_id=prepared.run_id,
                 status=RunStatus.FAILED,
                 error=str(instruction),
             )
@@ -163,7 +155,7 @@ class AutopassSession(Pitch):
         if not task:
             self.ui.yellow_card(AutopassInstructions.TASK_REQUIRED)
             return RunResult(
-                run_id=(await self.prepared_run()).run_id,
+                run_id=prepared.run_id,
                 status=RunStatus.FAILED,
                 error=str(AutopassInstructions.TASK_REQUIRED),
             )
@@ -176,12 +168,14 @@ class AutopassSession(Pitch):
             )
             self.ui.yellow_card(err_msg)
             return RunResult(
-                run_id=(await self.prepared_run()).run_id,
+                run_id=prepared.run_id,
                 status=RunStatus.FAILED,
                 error=err_msg,
             )
 
         pm_base_url = playmaker.base_url or "N/A"
+
+        active_schedule: str | None = prepared.parameters.get("schedule")
 
         self.ui.lineup(
             "Active Run Configuration",
@@ -202,7 +196,7 @@ class AutopassSession(Pitch):
                     "Orchestrator Backend",
                     self.orchestrator.info.name if self.orchestrator else "prefect",
                 ],
-                ["Schedule", schedule or "None (Immediate)"],
+                ["Schedule", active_schedule or "None (Immediate)"],
             ],
         )
 
@@ -244,7 +238,6 @@ class AutopassSession(Pitch):
         run_autopass_use_case: RunAutopassUseCase = RunAutopassUseCase(
             workflow_runner=self_healing_runner,
         )
-        prepared: PreparedRun = await self.prepared_run()
 
         async with browser_manager.session() as session:
 
@@ -261,7 +254,7 @@ class AutopassSession(Pitch):
                 )
 
             raw_output: Any = await self.orchestrator.execute(
-                prepared, run_use_case, task=task, schedule=schedule
+                prepared, run_use_case, task=task
             )
 
         autopass_output: AutopassRunOutput = AutopassRunOutput(

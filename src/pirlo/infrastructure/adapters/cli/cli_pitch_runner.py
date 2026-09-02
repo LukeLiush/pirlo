@@ -73,8 +73,17 @@ class CliPitchRunner:
         argument_parser_builder: ArgumentParserBuilder = ArgumentParserBuilder(
             playbook_cls.play
         )
+        epilog_text = (
+            "Orchestrator Options:\n"
+            "  Pirlo uses '--' to pass flags to the execution orchestrator engine.\n"
+            "  Available orchestrator engines: prefect (default)\n\n"
+            "  To view orchestrator engine options:\n"
+            f"    pirlo {resolved_playbook_name} -- prefect --help\n\n"
+            "  To pass orchestrator options (e.g. schedule, work pool):\n"
+            f"    pirlo {resolved_playbook_name} -- prefect -s daily"
+        )
         playbook_parser: argparse.ArgumentParser = argument_parser_builder.build_parser(
-            resolved_playbook_name
+            resolved_playbook_name, epilog_text=epilog_text
         )
 
         parameter_resolver: ParameterResolver = ParameterResolver.create(

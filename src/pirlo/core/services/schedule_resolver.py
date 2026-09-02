@@ -19,7 +19,7 @@ def get_schedule_help_text() -> str:
     tz_name = detect_local_timezone()
     return (
         f"Schedule preset ({presets_str}) or raw cron string (e.g. '0 9 * * *') "
-        f"[local timezone: {tz_name}]"
+        f"[local timezone: {tz_name}, requires: Prefect Server & Work Pool, default: None (Immediate)]"
     )
 
 
