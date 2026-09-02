@@ -11,6 +11,19 @@ services:
     volumes:
       - prefect_data:/root/.prefect
 
+  prefect-worker:
+    image: prefecthq/prefect:3-python3.12
+    container_name: pirlo-prefect-worker
+    restart: unless-stopped
+    command: >
+      sh -c "prefect work-pool create $${PREFECT_WORK_POOL:-pirlo-pool} --type process &&
+             prefect worker start --pool $${PREFECT_WORK_POOL:-pirlo-pool}"
+    environment:
+      - PREFECT_API_URL=http://prefect:4200/api
+      - PREFECT_WORK_POOL=${PREFECT_WORK_POOL:-pirlo-pool}
+    depends_on:
+      - prefect
+
   ollama:
     image: ollama/ollama:latest
     container_name: pirlo-ollama-server

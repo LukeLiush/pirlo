@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 from prefect.settings import temporary_settings
 
-from pirlo.core.config import get_workspace_path
+from pirlo.core.config import DEFAULT_WORK_POOL, get_workspace_path
 from pirlo.core.decorators import orchestrator
 from pirlo.core.models.execution_context import ExecutionContext
 from pirlo.core.models.link import LlmLink
@@ -90,7 +90,7 @@ class SmartPrefectTaskOrchestrator(TaskOrchestrator):
         work_pool: Annotated[
             str | None,
             Parameter(
-                help="Prefect work pool name (required when --schedule is used)",
+                help=f"Prefect work pool name [default: '{DEFAULT_WORK_POOL}']",
                 env_name="WORK_POOL",
             ),
         ] = None,
@@ -283,11 +283,12 @@ class SmartPrefectTaskOrchestrator(TaskOrchestrator):
 
         print(f"🌐 Prefect Server Detected: {settings.web_ui_base}")
 
+        target_pool = self.work_pool or DEFAULT_WORK_POOL
         schedule = CronSchedule(cron=resolved_cron, timezone=tz_name)
         deployment = await pirlo_decomposed_flow.to_deployment(  # type: ignore[misc]
             name=f"pirlo-scheduled-{prepared_run.run_id}",
             schedule=schedule,  # type: ignore[arg-type]
-            work_pool_name=self.work_pool,
+            work_pool_name=target_pool,
         )
         print(
             f"✅ Created scheduled Prefect deployment: pirlo-scheduled-{prepared_run.run_id}"
