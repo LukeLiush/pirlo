@@ -36,55 +36,61 @@ class PlaybookScanner:
         for py_file in directory.glob("**/*.py"):
             if cls._should_skip_file(py_file):
                 continue
-            spec: PlaybookSpec | None = cls.scan_file(py_file, root_dir=directory)
-            if spec:
+            file_specs: list[PlaybookSpec] = cls.scan_file_specs(py_file, root_dir=directory)
+            for spec in file_specs:
                 specs[spec.name] = spec
         return specs
 
     @classmethod
     def scan_file(cls, file_path: Path, root_dir: Path) -> PlaybookSpec | None:
-        """Main orchestrator for scanning a single python file AST."""
+        """Backward-compatible helper returning the first playbook spec in a single python file."""
+        specs: list[PlaybookSpec] = cls.scan_file_specs(file_path, root_dir=root_dir)
+        return specs[0] if specs else None
+
+    @classmethod
+    def scan_file_specs(cls, file_path: Path, root_dir: Path) -> list[PlaybookSpec]:
+        """Main orchestrator for scanning ALL @playbook definitions in a single python file AST."""
         tree: ast.AST | None = cls._parse_ast_tree(file_path)
         if not tree:
-            return None
+            return []
 
-        match: tuple[ast.ClassDef, ast.Call] | None = (
-            cls._find_playbook_decorator_match(tree)
-        )
-        if not match:
-            return None
+        matches: list[tuple[ast.ClassDef, ast.Call]] = cls._find_all_playbook_decorator_matches(tree)
+        if not matches:
+            return []
 
+        results: list[PlaybookSpec] = []
         class_node: ast.ClassDef
         decorator_call: ast.Call
-        class_node, decorator_call = match
+        for class_node, decorator_call in matches:
+            kwargs: dict[str, DecoratorValue] = cls._extract_decorator_kwargs(decorator_call)
 
-        kwargs: dict[str, DecoratorValue] = cls._extract_decorator_kwargs(
-            decorator_call
-        )
+            # Strict validation: 'name' keyword argument is required in @playbook(name="...")
+            name_val: DecoratorValue | None = kwargs.pop("name", None)
+            if not isinstance(name_val, str) or not name_val:
+                sys.stderr.write(
+                    f"Warning: Playbook class '{class_node.name}' in {file_path} "
+                    "has a @playbook decorator missing the required 'name' argument.\n"
+                )
+                continue
 
-        # Strict validation: 'name' keyword argument is required in @playbook(name="...")
-        name_val: DecoratorValue | None = kwargs.pop("name", None)
-        if not isinstance(name_val, str) or not name_val:
-            sys.stderr.write(
-                f"Warning: Playbook class '{class_node.name}' in {file_path} "
-                "has a @playbook decorator missing the required 'name' argument.\n"
+            name: str = name_val
+            desc_val: DecoratorValue | None = kwargs.pop("description", "")
+            description: str = str(desc_val) if isinstance(desc_val, str) else ""
+
+            module_path: str = cls._resolve_module_path(file_path, root_dir)
+
+            results.append(
+                PlaybookSpec(
+                    name=name,
+                    description=description,
+                    module_path=module_path,
+                    class_name=class_node.name,
+                    file_path=file_path,
+                    extra_kwargs=kwargs,
+                )
             )
-            return None
 
-        name: str = name_val
-        desc_val: DecoratorValue | None = kwargs.pop("description", "")
-        description: str = str(desc_val) if isinstance(desc_val, str) else ""
-
-        module_path: str = cls._resolve_module_path(file_path, root_dir)
-
-        return PlaybookSpec(
-            name=name,
-            description=description,
-            module_path=module_path,
-            class_name=class_node.name,
-            file_path=file_path,
-            extra_kwargs=kwargs,
-        )
+        return results
 
     # --- Small Single-Responsibility Helper Methods ---
 
@@ -105,10 +111,11 @@ class PlaybookScanner:
             return None
 
     @classmethod
-    def _find_playbook_decorator_match(
+    def _find_all_playbook_decorator_matches(
         cls, tree: ast.AST
-    ) -> tuple[ast.ClassDef, ast.Call] | None:
-        """Traverses AST nodes to locate a ClassDef with a @playbook(...) decorator."""
+    ) -> list[tuple[ast.ClassDef, ast.Call]]:
+        """Traverses AST nodes to locate ALL ClassDefs with @playbook(...) decorators."""
+        matches: list[tuple[ast.ClassDef, ast.Call]] = []
         ast_node: ast.AST
         for ast_node in ast.walk(tree):
             if isinstance(ast_node, ast.ClassDef):
@@ -117,8 +124,8 @@ class PlaybookScanner:
                 for decorator_node in class_node.decorator_list:
                     if cls._is_playbook_decorator(decorator_node):
                         assert isinstance(decorator_node, ast.Call)
-                        return class_node, decorator_node
-        return None
+                        matches.append((class_node, decorator_node))
+        return matches
 
     @classmethod
     def _is_playbook_decorator(cls, decorator_node: ast.AST) -> bool:

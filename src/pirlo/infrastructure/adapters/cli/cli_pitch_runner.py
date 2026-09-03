@@ -8,7 +8,7 @@ from typing import Any
 
 from pirlo.core.config import get_workspace_path
 from pirlo.core.models.playbook_invocation import PlaybookInvocation
-from pirlo.core.models.run import PreparedRun
+from pirlo.core.models.run import PreparedRun, RunStatus
 from pirlo.core.models.run_result import RunResult
 from pirlo.core.ports.orchestrator import TaskOrchestrator
 from pirlo.core.ports.pitch import Pitch
@@ -127,14 +127,21 @@ class CliPitchRunner:
         parameter_snapshot_writer.write(bound_pitch, prepared_run.parameter_file_path)
 
         async def _play() -> RunResult[Any]:
-            run_result: RunResult[Any] = await bound_pitch.play(
-                **prepared_run.parameters
-            )
+            raw_result: Any = await bound_pitch.play(**prepared_run.parameters)
+            if isinstance(raw_result, RunResult):
+                final_run_result: RunResult[Any] = raw_result
+            else:
+                final_run_result = RunResult(
+                    run_id=prepared_run.run_id,
+                    status=RunStatus.COMPLETED,
+                    data=raw_result,
+                )
+
             bound_pitch.ui.goal(
                 message=f"Run '{prepared_run.run_id}' completed!",
-                detail=f"Result:\n{run_result.data}",
+                detail=f"Result:\n{final_run_result.data}",
             )
-            return run_result
+            return final_run_result
 
         try:
             loop: asyncio.AbstractEventLoop = asyncio.get_running_loop()
