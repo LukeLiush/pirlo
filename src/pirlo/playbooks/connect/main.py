@@ -117,13 +117,13 @@ class ConnectSession(Pitch):
             detail_msg: str = (
                 f"Remote Host: {active_session.remote_host}\n"
                 f"Prefect Dashboard: {dashboard_url}\n"
-                f"Local Prefect Tunnel (API): {active_session.prefect_api_url}\n"
-                f"Local Ollama Tunnel: {active_session.ollama_base_url}\n"
+                f"Ollama Endpoint: {active_session.ollama_base_url}\n"
                 f"CLI Process PID: {active_session.cli_pid or 'N/A'}\n"
                 f"SSH Keep-Alive: {active_session.ssh_keepalive_interval:.0f}s\n"
                 f"Health Monitor: Every {HEALTH_CHECK_INTERVAL_SECONDS:.0f}s (max {MAX_CONSECUTIVE_FAILURES} failures)\n"
                 f"Health: {'HEALTHY' if health_status and health_status.is_healthy else 'UNHEALTHY'}\n"
-                f"{health_status.message if health_status else ''}"
+                f"{health_status.message if health_status else ''}\n\n"
+                f"💡 Verify Ollama endpoint: curl {active_session.ollama_base_url}/api/version"
             )
             self.ui.goal("Active Session Status", detail=detail_msg)
             return RunResult(
@@ -226,10 +226,10 @@ class ConnectSession(Pitch):
             detail=(
                 f"Remote Host: {session.remote_host}\n"
                 f"Prefect Dashboard: {dashboard_url}\n"
-                f"Local Prefect Tunnel (API): {session.prefect_api_url}\n"
-                f"Local Ollama Tunnel: {session.ollama_base_url}\n"
+                f"Ollama Endpoint: {session.ollama_base_url}\n"
                 f"SSH Keep-Alive: {session.ssh_keepalive_interval:.0f}s\n"
                 f"Health Monitor: Every {HEALTH_CHECK_INTERVAL_SECONDS:.0f}s (max {MAX_CONSECUTIVE_FAILURES} failures)\n\n"
+                f"💡 Verify Ollama endpoint: curl {session.ollama_base_url}/api/version\n"
                 f"💡 Press Ctrl+C at any time to disconnect cleanly."
             ),
         )
