@@ -7,7 +7,7 @@ from pirlo.core.models.run_result import RunResult
 from pirlo.core.ports.pitch import Pitch
 
 
-@playbook(name="dummy", description="Dummy test session for console verification.")
+@playbook(name="demo_dummy", description="Dummy test session for console verification.")
 class DummySession(Pitch):
     """Dummy test session for console verification."""
 
