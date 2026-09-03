@@ -173,13 +173,15 @@ class ConnectService:
             return None
 
         # 5. Save ActiveSession state & register overlay links
+        session.models = self._register_overlay_links(
+            session, manifest.models, manifest.default_model
+        )
         session.save(session_file)
-        self._register_overlay_links(session, manifest.models, manifest.default_model)
         return session
 
     def _register_overlay_links(
         self, session: ActiveSession, models: list[str], default_model: str
-    ) -> None:
+    ) -> list[str]:
         connect_repo = JsonLinkRepository(self.connect_dir / "links.json")
 
         live_models = _fetch_live_models_over_tunnel(session.ollama_base_url)
@@ -211,6 +213,8 @@ class ConnectService:
                 is_default=(model == selected_default),
             )
             connect_repo.save(link)
+
+        return models_to_link
 
     def disconnect(self) -> None:
         self.tunnel_manager.close_tunnel()

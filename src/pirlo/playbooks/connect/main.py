@@ -114,16 +114,20 @@ class ConnectSession(Pitch):
             dashboard_url = active_session.prefect_api_url.rstrip("/").replace(
                 "/api", ""
             )
+            models_str = (
+                ", ".join(active_session.models) if active_session.models else "N/A"
+            )
             detail_msg: str = (
                 f"Remote Host: {active_session.remote_host}\n"
                 f"Prefect Dashboard: {dashboard_url}\n"
                 f"Ollama Endpoint: {active_session.ollama_base_url}\n"
+                f"Available Models: {models_str}\n"
                 f"CLI Process PID: {active_session.cli_pid or 'N/A'}\n"
                 f"SSH Keep-Alive: {active_session.ssh_keepalive_interval:.0f}s\n"
                 f"Health Monitor: Every {HEALTH_CHECK_INTERVAL_SECONDS:.0f}s (max {MAX_CONSECUTIVE_FAILURES} failures)\n"
                 f"Health: {'HEALTHY' if health_status and health_status.is_healthy else 'UNHEALTHY'}\n"
                 f"{health_status.message if health_status else ''}\n\n"
-                f"💡 Verify Ollama endpoint: curl {active_session.ollama_base_url}/api/version"
+                f"💡 List models: curl {active_session.ollama_base_url}/api/tags"
             )
             self.ui.goal("Active Session Status", detail=detail_msg)
             return RunResult(
@@ -221,15 +225,17 @@ class ConnectSession(Pitch):
             )
 
         dashboard_url = session.prefect_api_url.rstrip("/").replace("/api", "")
+        models_str = ", ".join(session.models) if session.models else "N/A"
         self.ui.goal(
             "Connected to pirlo serve successfully!",
             detail=(
                 f"Remote Host: {session.remote_host}\n"
                 f"Prefect Dashboard: {dashboard_url}\n"
                 f"Ollama Endpoint: {session.ollama_base_url}\n"
+                f"Available Models: {models_str}\n"
                 f"SSH Keep-Alive: {session.ssh_keepalive_interval:.0f}s\n"
                 f"Health Monitor: Every {HEALTH_CHECK_INTERVAL_SECONDS:.0f}s (max {MAX_CONSECUTIVE_FAILURES} failures)\n\n"
-                f"💡 Verify Ollama endpoint: curl {session.ollama_base_url}/api/version\n"
+                f"💡 List models via Ollama API: curl {session.ollama_base_url}/api/tags\n"
                 f"💡 Press Ctrl+C at any time to disconnect cleanly."
             ),
         )

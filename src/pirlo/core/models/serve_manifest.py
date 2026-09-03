@@ -46,6 +46,7 @@ class ActiveSession:
     remote_ollama_port: int
     cli_pid: int | None = None
     ssh_keepalive_interval: float = 15.0
+    models: list[str] = field(default_factory=list)
 
     def is_same_host(self, target_host: str) -> bool:
         """Encapsulates host string comparison logic."""
