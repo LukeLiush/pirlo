@@ -1,288 +1,157 @@
-import sys
-from collections.abc import Generator
-from contextlib import contextmanager
-from pathlib import Path
-from typing import Annotated, Any
+# src/pirlo/playbooks/autopass/main.py
+from __future__ import annotations
 
-from pirlo.core.config import get_workspace_path
+from typing import Annotated
+
 from pirlo.core.decorators import playbook
 from pirlo.core.instructions import AutopassInstructions
-from pirlo.core.models.browser_config import BrowserConfig
 from pirlo.core.models.link import LlmLink
 from pirlo.core.models.parameters import LinkParameter, Parameter
 from pirlo.core.models.run import PreparedRun, RunStatus
 from pirlo.core.models.run_result import RunResult
-from pirlo.core.ports.browser_agent_factory import BrowserAgentFactory
-from pirlo.core.ports.pitch import Pitch
-from pirlo.core.repository.workflow_repository import WorkflowRepository
-from pirlo.core.services.workflow_runner import WorkflowRunner
-from pirlo.infrastructure.adapters.browser.browser_agent_factory import (
-    DefaultBrowserAgentFactory,
-)
-from pirlo.infrastructure.repository.json_file_workflow_repository import (
-    JsonFileWorkflowRepository,
-)
-from pirlo.infrastructure.services.llm_workflow import LlmWorkflowRunner
-from pirlo.infrastructure.services.playwright_workflow import PlaywrightReplayRunner
+from pirlo.core.ports.pitch import Pitch, PlayerNode
 from pirlo.infrastructure.services.profile_manager import ProfileManager
-from pirlo.infrastructure.services.self_healing_workflow import SelfHealingRunner
-from pirlo.playbooks.autopass.adapters.browser_manager import CloakBrowserManager
-from pirlo.playbooks.autopass.core.ports import ProgressListener
-from pirlo.playbooks.autopass.core.use_cases import RunAutopassUseCase
-from pirlo.playbooks.autopass.models import AutopassRunOutput
+from pirlo.playbooks.autopass.models import (
+    AutopassRunOutput,
+    TaskDecompositionOutput,
+)
+from pirlo.playbooks.autopass.subplaybooks import (
+    DecomposeTaskPlaybook,
+    ExecuteSubtaskPlaybook,
+    MergeResultsPlaybook,
+    QuickProgressListener,
+)
 
-CDP_PORT = 9222
-CDP_URL = f"http://localhost:{CDP_PORT}"
-
-
-class QuickProgressListener(ProgressListener):
-    """Port for presenting status updates and notifications to the user."""
-
-    @contextmanager
-    def status_context(self, message: str) -> Generator[None, None, None]:
-        print(f"⏳ {message}")
-        try:
-            yield
-        finally:
-            pass
-
-    def show_warning(self, message: Any, detail: str | None = None) -> None:
-        sys.stderr.write(f"⚠️ Warning: {message}\n")
-
-    def show_goal(self, message: str, detail: str | None = None) -> None:
-        print(f"⚽ GOAL: {message}")
-        if detail:
-            print(f"   Detail: {detail}")
-
-    def show_red_card(self, message: str, detail: str | None = None) -> None:
-        sys.stderr.write(f"🟥 Error: {message}\n")
-        if detail:
-            sys.stderr.write(f"   Detail: {detail}\n")
+Playbook = Pitch
+__all__ = ["AutopassSession", "QuickProgressListener"]
 
 
-@playbook(name="autopass", description="Run self-healing browser automation workflows.")
-class AutopassSession(Pitch):
-    """Run self-healing browser automation workflows."""
+@playbook(name="autopass", description="Run self-healing decomposed browser automation workflows.")
+class AutopassSession(Playbook[AutopassRunOutput]):
+    """Run self-healing browser automation workflows decomposed into a multi-step DAG."""
 
     async def play(
-        self,
-        profile: Annotated[
-            str,
-            Parameter(
-                help="Name or path of the browser profile to use (default: 'default')",
-                env_name="PROFILE",
-            ),
-        ] = "default",
-        headless: Annotated[
-            bool, Parameter(help="Run browser in headless mode", env_name="HEADLESS")
-        ] = False,
-        task: Annotated[
-            str, Parameter(help="Task prompt to execute autonomously", env_name="TASK")
-        ] = "",
-        playmaker: Annotated[
-            LlmLink | None,
-            LinkParameter(
-                help="Link name for Playmaker (decision brain)", env_name="PLAYMAKER"
-            ),
-        ] = None,
-        use_vision: Annotated[
-            bool, Parameter(help="Enable vision for the Agent", env_name="USE_VISION")
-        ] = False,
-        max_failures: Annotated[
-            int,
-            Parameter(
-                help="Maximum failure attempts before stopping", env_name="MAX_FAILURES"
-            ),
-        ] = 5,
-        retry_delay: Annotated[
-            int, Parameter(help="Retry delay in seconds", env_name="RETRY_DELAY")
-        ] = 10,
-        *args: Any,
-        **kwargs: Any,
-    ) -> RunResult[AutopassRunOutput]:
-        prepared: PreparedRun = await self.prepared_run()
+            self,
+            profile: Annotated[
+                str,
+                Parameter(
+                    help="Name or path of the browser profile to use (default: 'default')",
+                    env_name="PROFILE",
+                ),
+            ] = "default",
+            headless: Annotated[
+                bool, Parameter(help="Run browser in headless mode", env_name="HEADLESS")
+            ] = False,
+            task: Annotated[
+                str, Parameter(help="Task prompt to execute autonomously", env_name="TASK")
+            ] = "",
+            playmaker: Annotated[
+                LlmLink | None,
+                LinkParameter(
+                    help="Link name for Playmaker (decision brain)", env_name="PLAYMAKER"
+                ),
+            ] = None,
+            use_vision: Annotated[
+                bool, Parameter(help="Enable vision for the Agent", env_name="USE_VISION")
+            ] = False,
+            max_failures: Annotated[
+                int,
+                Parameter(
+                    help="Maximum failure attempts before stopping", env_name="MAX_FAILURES"
+                ),
+            ] = 5,
+            retry_delay: Annotated[
+                int, Parameter(help="Retry delay in seconds", env_name="RETRY_DELAY")
+            ] = 10,
+            *args: object,
+            **kwargs: object,
+    ) -> AutopassRunOutput | RunResult[AutopassRunOutput]:
+        prepared: PreparedRun | None = None
+        try:
+            prepared = await self.prepared_run()
+        except RuntimeError:
+            pass
+
         self.ui.header(
             "Autopass Workflow Pitch",
-            subtitle="Autonomous Browser Automation",
+            subtitle="Autonomous Decomposed Browser Automation",
         )
 
         if not ProfileManager.exists(profile):
             all_profiles = ProfileManager.list_profiles()
-            if all_profiles:
-                profiles_info = "Existing Saved Profiles:\n" + "\n".join(
+            profiles_info = (
+                "Existing Saved Profiles:\n"
+                + "\n".join(
                     f"  • {p.name} (URLs: {', '.join(p.authenticated_urls) or 'None'})"
                     for p in all_profiles
                 )
-            else:
-                profiles_info = "No browser profiles currently exist."
-
+                if all_profiles
+                else "No browser profiles currently exist."
+            )
             instruction = AutopassInstructions.PROFILE_MISSING.format(
                 profile=profile, existing_info=profiles_info
             )
             self.ui.yellow_card(instruction)
             return RunResult(
-                run_id=prepared.run_id,
+                run_id=prepared.run_id if prepared else "unknown",
                 status=RunStatus.FAILED,
                 error=str(instruction),
             )
-
-        if ProfileManager.is_expired(profile):
-            meta = ProfileManager.load_profile_metadata(profile)
-            exp_date = meta.expires_at if meta else "N/A"
-            ttl_days = meta.ttl_days if meta else 7
-            days_passed = ProfileManager.get_days_since_created(profile)
-            urls_str = (
-                " ".join(meta.authenticated_urls)
-                if (meta and meta.authenticated_urls)
-                else "<target_urls>"
-            )
-            instruction = AutopassInstructions.PROFILE_EXPIRED.format(
-                profile=profile,
-                days_passed=days_passed,
-                ttl_days=ttl_days,
-                expires_at=exp_date,
-                authenticated_urls=urls_str,
-            )
-            self.ui.yellow_card(instruction)
-            return RunResult(
-                run_id=prepared.run_id,
-                status=RunStatus.FAILED,
-                error=str(instruction),
-            )
-
-        profile_path: Path = ProfileManager.resolve_profile_path(profile)
 
         if not task:
             self.ui.yellow_card(AutopassInstructions.TASK_REQUIRED)
             return RunResult(
-                run_id=prepared.run_id,
+                run_id=prepared.run_id if prepared else "unknown",
                 status=RunStatus.FAILED,
                 error=str(AutopassInstructions.TASK_REQUIRED),
             )
 
-        if playmaker is None:
-            err_msg = (
-                "Error: Playmaker link is required.\n"
-                "Please specify --playmaker.\n"
-                "Run 'pirlo link list' to see available links, or 'pirlo link create' to register a new one."
-            )
-            self.ui.yellow_card(err_msg)
-            return RunResult(
-                run_id=prepared.run_id,
-                status=RunStatus.FAILED,
-                error=err_msg,
-            )
-
-        pm_base_url = playmaker.base_url or "N/A"
-
-        active_schedule: str | None = getattr(self.orchestrator, "schedule", None)
-
-        self.ui.lineup(
-            "Active Run Configuration",
-            columns=["Setting", "Value"],
-            rows=[
-                ["Profile Path", str(profile_path.resolve())],
-                ["Headless", str(headless)],
-                ["Task", task],
-                [
-                    "Playmaker Link (Provider)",
-                    f"{playmaker} ({playmaker.provider})",
-                ],
-                ["Playmaker Model", playmaker.model],
-                ["Playmaker Base URL", pm_base_url or "N/A"],
-                ["Vision Enabled", str(use_vision)],
-                ["Max Failures / Delay", f"{max_failures} / {retry_delay}s"],
-                [
-                    "Orchestrator Backend",
-                    self.orchestrator.info.name if self.orchestrator else "prefect",
-                ],
-                ["Schedule", active_schedule or "None (Immediate)"],
-            ],
-        )
-
-        workflows_dir: Path = get_workspace_path() / "workflows"
-        workflow_repo: WorkflowRepository = JsonFileWorkflowRepository(workflows_dir)
-        browser_config: BrowserConfig = BrowserConfig(
-            cdp_url=CDP_URL, headless=headless
-        )
-
-        agent_factory: BrowserAgentFactory = DefaultBrowserAgentFactory(
-            link=playmaker,
-            use_vision=use_vision,
-            max_failures=max_failures,
-            retry_delay=retry_delay,
-        )
-
-        fallback_runner: WorkflowRunner = LlmWorkflowRunner(
-            agent_factory=agent_factory,
-            repository=workflow_repo,
-            browser_config=browser_config,
-        )
-
-        replay_runner: WorkflowRunner = PlaywrightReplayRunner(
-            repository=workflow_repo,
-            browser_config=browser_config,
-        )
-
-        self_healing_runner: WorkflowRunner = SelfHealingRunner(
-            replay_runner=replay_runner,
-            fallback_runner=fallback_runner,
-            repository=workflow_repo,
-        )
-
-        browser_manager: CloakBrowserManager = CloakBrowserManager(
-            profile_path=profile_path,
-            headless=headless,
-            cdp_port=CDP_PORT,
-        )
-        run_autopass_use_case: RunAutopassUseCase = RunAutopassUseCase(
-            workflow_runner=self_healing_runner,
-        )
-
-        is_scheduled = bool(getattr(self.orchestrator, "schedule", None))
-        raw_output: Any
-
-        if is_scheduled:
-
-            async def _noop_worker(*a: Any, **kw: Any) -> None:
-                pass
-
-            raw_output = await self.orchestrator.execute(
-                prepared, _noop_worker, task=task
-            )
-        else:
-            async with browser_manager.session() as session:
-
-                async def run_use_case(
-                    task_prompt: str | None = None,
-                    site: str | None = None,
-                    **kwargs: Any,
-                ) -> str:
-                    effective_task = task_prompt or task
-                    return await run_autopass_use_case.run(
-                        browser_manager=session,
-                        task_prompt=effective_task,
-                        listener=QuickProgressListener(),
-                        run_name=prepared.run_name,
-                        run_id=prepared.run_id,
-                    )
-
-                raw_output = await self.orchestrator.execute(
-                    prepared, run_use_case, task=task
-                )
-
-        autopass_output: AutopassRunOutput = AutopassRunOutput(
+        # ---------------------------------------------------------------------
+        # Phase 1: Run task_decomposer to get actual Python list of prompt strings
+        # ---------------------------------------------------------------------
+        task_decomposer: PlayerNode = self.player(
+            DecomposeTaskPlaybook,
             task_prompt=task,
-            final_message=str(raw_output),
+            playmaker=playmaker,
+        )
+        decomp_output: Any = await self.kickoff([task_decomposer])
+        prompts: list[str] = (
+            decomp_output.task_prompts
+            if hasattr(decomp_output, "task_prompts") and decomp_output.task_prompts
+            else [task]
         )
 
-        run_result: RunResult[AutopassRunOutput] = RunResult(
-            run_id=prepared.run_id,
-            status=RunStatus.COMPLETED,
-            data=autopass_output,
+        # ---------------------------------------------------------------------
+        # Phase 2: Draft ONE ExecuteSubtaskPlaybook node for EACH prompt string!
+        # ---------------------------------------------------------------------
+        subtask_executors: list[PlayerNode] = [
+            self.player(
+                ExecuteSubtaskPlaybook,
+                subtask_prompt=prompt_string,
+                profile=profile,
+                headless=headless,
+                playmaker=playmaker,
+                use_vision=use_vision,
+            )
+            for prompt_string in prompts
+        ]
+
+        # ---------------------------------------------------------------------
+        # Phase 3: Draft result_summarizer and wire dependencies using '>>'!
+        # ---------------------------------------------------------------------
+        result_summarizer: PlayerNode = self.player(
+            MergeResultsPlaybook,
+            original_task=task,
         )
 
-        return run_result
+        # Wire dependency line: list of subtask_executors pass to result_summarizer
+        subtask_executors >> result_summarizer
+
+        # Kickoff Phase 2: run subtask_executors and result_summarizer!
+        final_output: AutopassRunOutput = await self.kickoff(
+            [*subtask_executors, result_summarizer]
+        )
+        return final_output
 
 
 if __name__ == "__main__":

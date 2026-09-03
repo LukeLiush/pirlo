@@ -72,6 +72,13 @@ class PlayerNode:
             target_node.after(self)
         return other
 
+    def __rrshift__(
+        self, other: PlayerNode | list[PlayerNode]
+    ) -> PlayerNode:
+        """Reversed Operator '>>' for list-to-single (e.g. [A, B] >> C)."""
+        self.after(other)
+        return self
+
 
 class PlayerGroup:
     """Group of PlayerNode instances for batch operators like players(p1, p2) >> p3."""
@@ -249,16 +256,43 @@ class Pitch(ABC, Generic[T]):
         player_node: PlayerNode
         for player_node in players_list:
             # 1. Resolve parameters from parent outputs
-            resolved_kwargs: dict[str, ParameterValue | ProxyRef] = dict(player_node.kwargs)
+            resolved_kwargs: dict[str, Any] = dict(player_node.kwargs)
             param_name: str
-            parameter_value: ParameterValue | ProxyRef
+            parameter_value: Any
             for param_name, parameter_value in list(resolved_kwargs.items()):
                 if isinstance(parameter_value, ProxyRef):
                     parent_output: PlaybookOutput | None = results.get(parameter_value.node_id)
                     if parent_output is not None:
-                        resolved_kwargs[param_name] = cast(
-                            ParameterValue, getattr(parent_output, parameter_value.field, None)
+                        resolved_kwargs[param_name] = getattr(
+                            parent_output, parameter_value.field, parent_output
                         )
+                elif isinstance(parameter_value, list):
+                    resolved_list: list[Any] = []
+                    item: Any
+                    for item in parameter_value:
+                        if isinstance(item, ProxyRef):
+                            parent_output = results.get(item.node_id)
+                            if parent_output is not None:
+                                resolved_list.append(
+                                    getattr(parent_output, item.field, parent_output)
+                                )
+                        else:
+                            resolved_list.append(item)
+                    resolved_kwargs[param_name] = resolved_list
+
+            # Fallback: if 'subtask_results' parameter is accepted by play() and unbound, collect outputs from depends_on_nodes
+            import inspect
+
+            play_params: dict[str, inspect.Parameter] = dict(
+                inspect.signature(player_node.playbook_cls.play).parameters
+            )
+            if "subtask_results" in play_params:
+                if ("subtask_results" not in resolved_kwargs or not resolved_kwargs["subtask_results"]) and player_node.depends_on_nodes:
+                    dep_outputs: list[PlaybookOutput] = [
+                        results[dep.node_id] for dep in player_node.depends_on_nodes if dep.node_id in results
+                    ]
+                    if dep_outputs:
+                        resolved_kwargs["subtask_results"] = dep_outputs
 
             # 2. Instantiate and run player playbook with injected UI & PreparedRun dependencies
             playbook_cls: type[Pitch[PlaybookOutput]] = player_node.playbook_cls

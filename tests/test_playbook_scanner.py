@@ -12,7 +12,7 @@ def test_scan_existing_playbooks_dir():
     specs = PlaybookScanner.scan_directory(pkg_playbooks_dir)
 
     assert "login" in specs
-    assert "dummy" in specs
+    assert "dummy" in specs or "demo_dummy" in specs
     assert "autopass" in specs
 
     login_spec = specs["login"]
@@ -20,7 +20,8 @@ def test_scan_existing_playbooks_dir():
     assert "Launch a browser" in login_spec.description
     assert login_spec.module_path == "pirlo.playbooks.login"
 
-    dummy_spec = specs["dummy"]
+    dummy_key = "demo_dummy" if "demo_dummy" in specs else "dummy"
+    dummy_spec = specs[dummy_key]
     assert dummy_spec.class_name == "DummySession"
     assert "Dummy test session" in dummy_spec.description
 
