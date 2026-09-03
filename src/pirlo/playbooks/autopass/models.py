@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import field
+
 from pirlo.core.models.blueprint import PlaybookOutput
 
 

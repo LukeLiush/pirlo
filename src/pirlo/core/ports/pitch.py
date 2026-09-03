@@ -23,6 +23,18 @@ from pirlo.infrastructure.adapters.cli.terminal_pitch_ui import TerminalPitchUI
 T = TypeVar("T", bound=PlaybookOutput)
 
 
+class MappedParameter:
+    """Wrapper marking a parameter for dynamic subtask fan-out mapping."""
+
+    def __init__(self, target: ProxyRef | list[Any]) -> None:
+        self.target: ProxyRef | list[Any] = target
+
+
+def each(target: ProxyRef | list[Any]) -> MappedParameter:
+    """Marks a parameter for dynamic subtask fan-out mapping across items."""
+    return MappedParameter(target)
+
+
 class PlayerNode:
     """Represents a player (task node) drafted onto the Pitch for DAG composition with '.after()' or '>>'."""
 
@@ -30,11 +42,13 @@ class PlayerNode:
         self,
         node_id: str,
         playbook_cls: type[Pitch[PlaybookOutput]],
-        kwargs: dict[str, ParameterValue | ProxyRef],
+        kwargs: dict[str, ParameterValue | ProxyRef | MappedParameter],
+        is_mapped: bool = False,
     ) -> None:
         self.node_id: str = node_id
         self.playbook_cls: type[Pitch[PlaybookOutput]] = playbook_cls
-        self.kwargs: dict[str, ParameterValue | ProxyRef] = kwargs
+        self.kwargs: dict[str, ParameterValue | ProxyRef | MappedParameter] = kwargs
+        self.is_mapped: bool = is_mapped
         self.depends_on_nodes: list[PlayerNode] = []
         self._proxy: SymbolicProxy = SymbolicProxy(node_id=node_id)
 
@@ -47,9 +61,7 @@ class PlayerNode:
         """Direct property proxying (e.g. player_1.auth_token)."""
         return getattr(self._proxy, name)
 
-    def after(
-        self, *upstream_nodes: PlayerNode | list[PlayerNode]
-    ) -> PlayerNode:
+    def after(self, *upstream_nodes: PlayerNode | list[PlayerNode]) -> PlayerNode:
         """Fluent method declaring that this player node runs AFTER the specified upstream player nodes."""
         node_argument: PlayerNode | list[PlayerNode]
         for node_argument in upstream_nodes:
@@ -66,15 +78,15 @@ class PlayerNode:
         self, other: PlayerNode | list[PlayerNode]
     ) -> PlayerNode | list[PlayerNode]:
         """Operator '>>' syntax sugar forwarding to .after(self)."""
-        target_player_nodes: list[PlayerNode] = other if isinstance(other, list) else [other]
+        target_player_nodes: list[PlayerNode] = (
+            other if isinstance(other, list) else [other]
+        )
         target_node: PlayerNode
         for target_node in target_player_nodes:
             target_node.after(self)
         return other
 
-    def __rrshift__(
-        self, other: PlayerNode | list[PlayerNode]
-    ) -> PlayerNode:
+    def __rrshift__(self, other: PlayerNode | list[PlayerNode]) -> PlayerNode:
         """Reversed Operator '>>' for list-to-single (e.g. [A, B] >> C)."""
         self.after(other)
         return self
@@ -100,7 +112,7 @@ def players(*nodes: PlayerNode) -> PlayerGroup:
     return PlayerGroup(nodes=list(nodes))
 
 
-class Pitch(ABC, Generic[T]):
+class Pitch(ABC, Generic[T]):  # noqa: UP046
     """Pure Abstract Port representing presentation canvas & lifecycle contract."""
 
     def __init__(
@@ -139,20 +151,46 @@ class Pitch(ABC, Generic[T]):
         return self._prepared_run
 
     @abstractmethod
-    async def play(self, *args: ParameterValue, **kwargs: ParameterValue) -> T | RunResult[T]:
+    async def play(self, *args: Any, **kwargs: Any) -> T | RunResult[T]:
         """Core playbook execution logic implemented by subclasses."""
 
     def player(
-        self, playbook_cls: type[Pitch[PlaybookOutput]], **kwargs: ParameterValue | ProxyRef
+        self,
+        playbook_cls: type[Pitch[PlaybookOutput]],
+        **kwargs: ParameterValue | ProxyRef | MappedParameter,
     ) -> PlayerNode:
         """Drafts a player node onto the Pitch for DAG composition with '.after()' or '>>'."""
         step_index: int = len(self._drafted_players) + 1
         node_id: str = f"player_{step_index}_{playbook_cls.__name__}"
+        is_mapped = any(isinstance(v, MappedParameter) for v in kwargs.values())
         player_node: PlayerNode = PlayerNode(
-            node_id=node_id, playbook_cls=playbook_cls, kwargs=kwargs
+            node_id=node_id,
+            playbook_cls=playbook_cls,
+            kwargs=kwargs,
+            is_mapped=is_mapped,
         )
         self._drafted_players.append(player_node)
         return player_node
+
+    def players(
+        self,
+        playbook_cls: type[Pitch[PlaybookOutput]],
+        params: ProxyRef | list[Any] | None = None,
+        **kwargs: ParameterValue | ProxyRef | MappedParameter,
+    ) -> PlayerNode:
+        """Convenience helper drafting a dynamic fan-out player node for mapped execution across items."""
+        if params is not None:
+            kwargs["params"] = MappedParameter(params)
+        elif not any(isinstance(v, MappedParameter) for v in kwargs.values()):
+            # Wrap any ProxyRef in kwargs as MappedParameter if explicitly called via self.players(...)
+            first_proxy_key = next(
+                (k for k, v in kwargs.items() if isinstance(v, ProxyRef)), None
+            )
+            if first_proxy_key:
+                kwargs[first_proxy_key] = MappedParameter(
+                    cast(ProxyRef, kwargs[first_proxy_key])
+                )
+        return self.player(playbook_cls, **kwargs)
 
     async def kickoff(self, players_list: list[PlayerNode]) -> T | SymbolicProxy:
         """Kicks off execution of the drafted DAG player nodes.
@@ -171,13 +209,15 @@ class Pitch(ABC, Generic[T]):
             player_node: PlayerNode
             for player_node in players_list:
                 extra_dependencies: list[str] = [
-                    dependency_node.node_id for dependency_node in player_node.depends_on_nodes
+                    dependency_node.node_id
+                    for dependency_node in player_node.depends_on_nodes
                 ]
                 self._record_traced_node(
                     player_node.playbook_cls,
                     player_node.kwargs,
                     node_id=player_node.node_id,
                     extra_deps=extra_dependencies,
+                    is_mapped=player_node.is_mapped,
                 )
             last_player_node: PlayerNode = players_list[-1]
             return SymbolicProxy(node_id=last_player_node.node_id)
@@ -211,9 +251,10 @@ class Pitch(ABC, Generic[T]):
     def _record_traced_node(
         self,
         playbook_cls: type[Pitch[PlaybookOutput]],
-        kwargs: dict[str, ParameterValue | ProxyRef],
+        kwargs: dict[str, ParameterValue | ProxyRef | MappedParameter],
         node_id: str | None = None,
         extra_deps: list[str] | None = None,
+        is_mapped: bool = False,
     ) -> SymbolicProxy:
         if self._tracing_blueprint is None:
             raise BlueprintError("_record_traced_node called without active blueprint.")
@@ -223,14 +264,24 @@ class Pitch(ABC, Generic[T]):
 
         static_kwargs: dict[str, ParameterValue] = {}
         param_bindings: dict[str, ParamBinding] = {}
+        mapped_bindings: dict[str, ParamBinding] = {}
         depends_on: set[str] = set(extra_deps or [])
 
         param_name: str
-        parameter_value: ParameterValue | ProxyRef
+        parameter_value: ParameterValue | ProxyRef | MappedParameter
         for param_name, parameter_value in kwargs.items():
-            if isinstance(parameter_value, ProxyRef):
+            if isinstance(parameter_value, MappedParameter):
+                target = parameter_value.target
+                if isinstance(target, ProxyRef):
+                    mapped_bindings[param_name] = ParamBinding(
+                        source_node_id=target.node_id,
+                        source_field=target.field,
+                    )
+                    depends_on.add(target.node_id)
+            elif isinstance(parameter_value, ProxyRef):
                 param_bindings[param_name] = ParamBinding(
-                    source_node_id=parameter_value.node_id, source_field=parameter_value.field
+                    source_node_id=parameter_value.node_id,
+                    source_field=parameter_value.field,
                 )
                 depends_on.add(parameter_value.node_id)
             else:
@@ -241,15 +292,15 @@ class Pitch(ABC, Generic[T]):
             playbook_name=playbook_cls.__name__,
             static_kwargs=static_kwargs,
             param_bindings=param_bindings,
-            depends_on=sorted(list(depends_on)),
+            mapped_bindings=mapped_bindings,
+            is_mapped=is_mapped or len(mapped_bindings) > 0,
+            depends_on=sorted(depends_on),
         )
         self._tracing_blueprint.nodes.append(node)
         self._tracing_blueprint.output_node_id = effective_id
         return SymbolicProxy(node_id=effective_id)
 
-    async def _practice_run(
-        self, players_list: list[PlayerNode]
-    ) -> T:
+    async def _practice_run(self, players_list: list[PlayerNode]) -> T:
         """Executes player nodes sequentially in-process on the local Pitch during CLI practice runs."""
         results: dict[str, PlaybookOutput] = {}
 
@@ -261,7 +312,9 @@ class Pitch(ABC, Generic[T]):
             parameter_value: Any
             for param_name, parameter_value in list(resolved_kwargs.items()):
                 if isinstance(parameter_value, ProxyRef):
-                    parent_output: PlaybookOutput | None = results.get(parameter_value.node_id)
+                    parent_output: PlaybookOutput | None = results.get(
+                        parameter_value.node_id
+                    )
                     if parent_output is not None:
                         resolved_kwargs[param_name] = getattr(
                             parent_output, parameter_value.field, parent_output
@@ -286,25 +339,89 @@ class Pitch(ABC, Generic[T]):
             play_params: dict[str, inspect.Parameter] = dict(
                 inspect.signature(player_node.playbook_cls.play).parameters
             )
-            if "subtask_results" in play_params:
-                if ("subtask_results" not in resolved_kwargs or not resolved_kwargs["subtask_results"]) and player_node.depends_on_nodes:
-                    dep_outputs: list[PlaybookOutput] = [
-                        results[dep.node_id] for dep in player_node.depends_on_nodes if dep.node_id in results
-                    ]
-                    if dep_outputs:
-                        resolved_kwargs["subtask_results"] = dep_outputs
+            if (
+                "subtask_results" in play_params
+                and (
+                    "subtask_results" not in resolved_kwargs
+                    or not resolved_kwargs["subtask_results"]
+                )
+                and player_node.depends_on_nodes
+            ):
+                dep_outputs: list[PlaybookOutput] = []
+                for dep in player_node.depends_on_nodes:
+                    dep_val = results.get(dep.node_id)
+                    if isinstance(dep_val, list):
+                        dep_outputs.extend(dep_val)
+                    elif isinstance(dep_val, PlaybookOutput):
+                        dep_outputs.append(dep_val)
+                if dep_outputs:
+                    resolved_kwargs["subtask_results"] = dep_outputs
 
-            # 2. Instantiate and run player playbook with injected UI & PreparedRun dependencies
+            # 2. Handle dynamic fan-out mapped execution if is_mapped is True
+            if player_node.is_mapped:
+                mapped_param_names: list[str] = []
+                mapped_param_lists: list[list[Any]] = []
+
+                for k, v in list(resolved_kwargs.items()):
+                    if isinstance(v, MappedParameter):
+                        target_val = v.target
+                        if isinstance(target_val, ProxyRef):
+                            parent_out: PlaybookOutput | None = results.get(
+                                target_val.node_id  # type: ignore[arg-type]
+                            )
+                            resolved_list = (
+                                getattr(parent_out, target_val.field, [])
+                                if parent_out
+                                else []
+                            )
+                        elif isinstance(target_val, list):
+                            resolved_list = target_val
+                        else:
+                            resolved_list = [target_val]
+
+                        mapped_param_names.append(k)
+                        mapped_param_lists.append(resolved_list)
+                        resolved_kwargs.pop(k, None)
+
+                mapped_results: list[PlaybookOutput] = []
+                if mapped_param_lists:
+                    zipped_tuples = zip(*mapped_param_lists)
+                    for tuple_item in zipped_tuples:
+                        instance = player_node.playbook_cls(
+                            prepared_run=self._prepared_run, ui=self._ui
+                        )
+                        item_kwargs = dict(resolved_kwargs)
+                        for param_n, val_item in zip(mapped_param_names, tuple_item):
+                            item_kwargs[param_n] = val_item
+
+                        sub_res = await instance.play(
+                            **cast(dict[str, ParameterValue], item_kwargs)
+                        )
+                        res_data = (
+                            sub_res.data if isinstance(sub_res, RunResult) else sub_res
+                        )
+                        if res_data is not None:
+                            mapped_results.append(res_data)
+
+                results[player_node.node_id] = mapped_results  # type: ignore[assignment]
+                continue
+
+            # 3. Instantiate and run standard single player playbook
             playbook_cls: type[Pitch[PlaybookOutput]] = player_node.playbook_cls
-            instance: Pitch[PlaybookOutput] = playbook_cls(
+            single_instance: Pitch[PlaybookOutput] = playbook_cls(
                 prepared_run=self._prepared_run, ui=self._ui
             )
-            playbook_result: PlaybookOutput | RunResult[PlaybookOutput] = await instance.play(
+            playbook_result: (
+                PlaybookOutput | RunResult[PlaybookOutput]
+            ) = await single_instance.play(
                 **cast(dict[str, ParameterValue], resolved_kwargs)
             )
 
-            # 3. Store result in practice run score table
-            if isinstance(playbook_result, RunResult) and playbook_result.data is not None:
+            # 4. Store result in practice run score table
+            if (
+                isinstance(playbook_result, RunResult)
+                and playbook_result.data is not None
+            ):
                 results[player_node.node_id] = playbook_result.data
             elif isinstance(playbook_result, PlaybookOutput):
                 results[player_node.node_id] = playbook_result

@@ -2,24 +2,39 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+
 from pydantic import BaseModel
 
 
 class PlaybookOutput(BaseModel):
     """Base class for all strongly-typed playbook output payloads."""
 
-    pass
 
+from pathlib import Path
+from typing import TYPE_CHECKING
 
-# Union type for strongly-typed static kwarg values
-type ParameterValue = (
+if TYPE_CHECKING:
+    from pirlo.core.models.link import LlmLink
+    from pirlo.core.ports.pitch import MappedParameter
+
+type ScalarValue = (
     str
     | int
     | float
     | bool
+    | Path
+    | LlmLink
     | PlaybookOutput
-    | list[PlaybookOutput]
-    | dict[str, PlaybookOutput]
+    | ProxyRef
+    | MappedParameter
+)
+
+# Union type for strongly-typed static kwarg values
+type ParameterValue = (
+    ScalarValue
+    | list[ScalarValue]
+    | list[dict[str, ScalarValue]]
+    | dict[str, ScalarValue]
     | None
 )
 
@@ -44,6 +59,8 @@ class BlueprintNode:
     playbook_name: str
     static_kwargs: dict[str, ParameterValue] = field(default_factory=dict)
     param_bindings: dict[str, ParamBinding] = field(default_factory=dict)
+    mapped_bindings: dict[str, ParamBinding] = field(default_factory=dict)
+    is_mapped: bool = False
     depends_on: list[str] = field(default_factory=list)
 
 

@@ -2,7 +2,8 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from pirlo.core.models.blueprint import BlueprintNode, PlaybookBlueprint
 from pirlo.infrastructure.adapters.orchestrator.prefect_compiler import (

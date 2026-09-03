@@ -1,7 +1,8 @@
 # tests/test_prefect_compiler.py
 from __future__ import annotations
 
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from pirlo.core.decorators import playbook
 from pirlo.core.models.blueprint import PlaybookBlueprint, PlaybookOutput
@@ -26,9 +27,7 @@ class CheckoutOutput(PlaybookOutput):
 
 class LoginCompilerTestPlaybook(Pitch[LoginOutput]):
     async def play(self, profile: str = "default") -> LoginOutput:
-        return LoginOutput(
-            auth_token="token_prefect_123", user_id="user_prefect_99"
-        )
+        return LoginOutput(auth_token="token_prefect_123", user_id="user_prefect_99")
 
 
 class VerifyCompilerTestPlaybook(Pitch[VerifyOutput]):

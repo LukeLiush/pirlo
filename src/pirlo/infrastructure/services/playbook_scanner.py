@@ -36,10 +36,29 @@ class PlaybookScanner:
         for py_file in directory.glob("**/*.py"):
             if cls._should_skip_file(py_file):
                 continue
-            file_specs: list[PlaybookSpec] = cls.scan_file_specs(py_file, root_dir=directory)
+            file_specs: list[PlaybookSpec] = cls.scan_file_specs(
+                py_file, root_dir=directory
+            )
             for spec in file_specs:
                 specs[spec.name] = spec
         return specs
+
+    @classmethod
+    def get_playbook_class(cls, playbook_name: str) -> type[object]:
+        """Dynamically imports and returns the Python class for a given playbook_name."""
+        import importlib
+
+        from pirlo.core.config import get_workspace_path
+
+        workspace_path = get_workspace_path()
+        playbooks_dir = workspace_path / "src" / "pirlo" / "playbooks"
+        specs = cls.scan_directory(playbooks_dir)
+        spec = specs.get(playbook_name)
+        if not spec:
+            raise KeyError(f"Playbook '{playbook_name}' not found.")
+
+        module = importlib.import_module(spec.module_path)
+        return getattr(module, spec.class_name)  # type: ignore[no-any-return]
 
     @classmethod
     def scan_file(cls, file_path: Path, root_dir: Path) -> PlaybookSpec | None:
@@ -54,7 +73,9 @@ class PlaybookScanner:
         if not tree:
             return []
 
-        matches: list[tuple[ast.ClassDef, ast.Call]] = cls._find_all_playbook_decorator_matches(tree)
+        matches: list[tuple[ast.ClassDef, ast.Call]] = (
+            cls._find_all_playbook_decorator_matches(tree)
+        )
         if not matches:
             return []
 
@@ -62,7 +83,9 @@ class PlaybookScanner:
         class_node: ast.ClassDef
         decorator_call: ast.Call
         for class_node, decorator_call in matches:
-            kwargs: dict[str, DecoratorValue] = cls._extract_decorator_kwargs(decorator_call)
+            kwargs: dict[str, DecoratorValue] = cls._extract_decorator_kwargs(
+                decorator_call
+            )
 
             # Strict validation: 'name' keyword argument is required in @playbook(name="...")
             name_val: DecoratorValue | None = kwargs.pop("name", None)

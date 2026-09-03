@@ -2,12 +2,9 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Annotated
-from pydantic import BaseModel
 
 from pirlo.core.decorators import playbook
 from pirlo.core.models.blueprint import (
-    BlueprintError,
     BlueprintNode,
     PlaybookBlueprint,
     PlaybookOutput,
@@ -107,7 +104,9 @@ def test_players_group_operator_syntax():
     blueprint: PlaybookBlueprint = GroupDAGPlaybook().extract_blueprint()
     assert len(blueprint.nodes) == 3
     node3: BlueprintNode = blueprint.nodes[2]
-    assert sorted(node3.depends_on) == sorted([blueprint.nodes[0].node_id, blueprint.nodes[1].node_id])
+    assert sorted(node3.depends_on) == sorted(
+        [blueprint.nodes[0].node_id, blueprint.nodes[1].node_id]
+    )
 
 
 def test_practice_run_local_execution():

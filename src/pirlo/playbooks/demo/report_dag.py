@@ -1,7 +1,7 @@
 # src/pirlo/playbooks/demo/report_dag.py
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, cast
 
 from pirlo.core.decorators import playbook
 from pirlo.core.models.blueprint import PlaybookOutput
@@ -40,10 +40,10 @@ class AlertOutput(PlaybookOutput):
 # )
 class DownloadReportPlaybook(Playbook[DownloadOutput]):
     async def play(
-            self,
-            report_month: Annotated[
-                str, Parameter(help="Target month (YYYY-MM)")
-            ] = "2026-08",
+        self,
+        report_month: Annotated[
+            str, Parameter(help="Target month (YYYY-MM)")
+        ] = "2026-08",
     ) -> DownloadOutput:
         # Simulates downloading a report file...
         return DownloadOutput(
@@ -58,10 +58,8 @@ class DownloadReportPlaybook(Playbook[DownloadOutput]):
 # )
 class ExtractSummaryPlaybook(Playbook[SummaryOutput]):
     async def play(
-            self,
-            file_path: Annotated[
-                str, Parameter(help="Path to report PDF file")
-            ] = "",
+        self,
+        file_path: Annotated[str, Parameter(help="Path to report PDF file")] = "",
     ) -> SummaryOutput:
         # Simulates extracting summary stats...
         return SummaryOutput(
@@ -76,14 +74,10 @@ class ExtractSummaryPlaybook(Playbook[SummaryOutput]):
 # )
 class SendAlertPlaybook(Playbook[AlertOutput]):
     async def play(
-            self,
-            report_date: Annotated[str, Parameter(help="Report date")] = "",
-            status_summary: Annotated[
-                str, Parameter(help="Summary text")
-            ] = "",
-            channel: Annotated[
-                str, Parameter(help="Target alert channel")
-            ] = "#reports",
+        self,
+        report_date: Annotated[str, Parameter(help="Report date")] = "",
+        status_summary: Annotated[str, Parameter(help="Summary text")] = "",
+        channel: Annotated[str, Parameter(help="Target alert channel")] = "#reports",
     ) -> AlertOutput:
         # Simulates sending a Slack/Email alert...
         print(f"📢 [{channel}] Report {report_date}: {status_summary}")
@@ -99,34 +93,35 @@ class SendAlertPlaybook(Playbook[AlertOutput]):
 )
 class ReportDownloadDAG(Playbook[AlertOutput]):
     async def play(
-            self,
-            report_month: Annotated[
-                str, Parameter(help="Target report month")
-            ] = "2026-08",
-            channel: Annotated[
-                str, Parameter(help="Alert channel name")
-            ] = "#finance",
+        self,
+        report_month: Annotated[str, Parameter(help="Target report month")] = "2026-08",
+        channel: Annotated[str, Parameter(help="Alert channel name")] = "#finance",
     ) -> AlertOutput:
         # Step 1: Download Report
         player_download: PlayerNode = self.player(
-            DownloadReportPlaybook, report_month=report_month
+            cast(type[Pitch[PlaybookOutput]], DownloadReportPlaybook),
+            report_month=report_month,
         )
 
         # Step 2: Extract Summary (depends on player_download.ball.file_path)
         player_extract: PlayerNode = self.player(
-            ExtractSummaryPlaybook, file_path=player_download.ball.file_path
+            cast(type[Pitch[PlaybookOutput]], ExtractSummaryPlaybook),
+            file_path=player_download.ball.file_path,
         ).after(player_download)
 
         # Step 3: Send Alert (depends on player_download & player_extract)
         player_alert: PlayerNode = self.player(
-            SendAlertPlaybook,
+            cast(type[Pitch[PlaybookOutput]], SendAlertPlaybook),
             report_date=player_download.ball.report_date,
             status_summary=player_extract.ball.status_summary,
             channel=channel,
         ).after(player_download, player_extract)
 
         # Kickoff the match!
-        return await self.kickoff([player_download, player_extract, player_alert])
+        return cast(
+            AlertOutput,
+            await self.kickoff([player_download, player_extract, player_alert]),
+        )
 
 
 if __name__ == "__main__":
