@@ -106,7 +106,7 @@ class ReportDownloadDAG(Playbook[AlertOutput]):
         ).after(player_download)
 
         # Step 3: Send Alert (depends on player_download & player_extract)
-        player_alert: PlayerNode = self.player(
+        self.player(
             cast(type[Playbook[PlaybookOutput]], SendAlertPlaybook),
             report_date=player_download.ball.report_date,
             status_summary=player_extract.ball.status_summary,
@@ -116,7 +116,7 @@ class ReportDownloadDAG(Playbook[AlertOutput]):
         # Kickoff the match!
         return cast(
             AlertOutput,
-            await self.kickoff([player_download, player_extract, player_alert]),
+            await self.kickoff(),
         )
 
 

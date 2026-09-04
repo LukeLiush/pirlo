@@ -192,13 +192,13 @@ class Playbook(ABC, Generic[T]):  # noqa: UP046
                 )
         return self.player(playbook_cls, **kwargs)
 
-    async def kickoff(self, players_list: list[PlayerNode]) -> T | SymbolicProxy:
+    async def kickoff(self) -> T | SymbolicProxy:
         """Kicks off execution of the drafted DAG player nodes.
 
         Returns strongly-typed output T in execution mode, or SymbolicProxy in tracing mode.
         """
-        if not players_list:
-            raise BlueprintError("kickoff() called with an empty player list.")
+        if not self._drafted_players:
+            raise BlueprintError("kickoff() called without drafting any player nodes.")
 
         if self._is_tracing:
             if self._tracing_blueprint is None:
@@ -207,7 +207,7 @@ class Playbook(ABC, Generic[T]):  # noqa: UP046
                 )
 
             player_node: PlayerNode
-            for player_node in players_list:
+            for player_node in self._drafted_players:
                 extra_dependencies: list[str] = [
                     dependency_node.node_id
                     for dependency_node in player_node.depends_on_nodes
@@ -219,11 +219,11 @@ class Playbook(ABC, Generic[T]):  # noqa: UP046
                     extra_deps=extra_dependencies,
                     is_mapped=player_node.is_mapped,
                 )
-            last_player_node: PlayerNode = players_list[-1]
-            return SymbolicProxy(node_id=last_player_node.node_id)
+            terminal_player_node: PlayerNode = self._drafted_players[-1]
+            return SymbolicProxy(node_id=terminal_player_node.node_id)
 
         # In Local CLI execution mode: run practice run locally in-process
-        return await self._practice_run(players_list)
+        return await self._practice_run(self._drafted_players)
 
     def extract_blueprint(self) -> PlaybookBlueprint:
         """Traces the playbook in dry-run mode to generate the PlaybookBlueprint."""
