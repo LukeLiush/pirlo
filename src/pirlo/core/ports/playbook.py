@@ -41,12 +41,12 @@ class PlayerNode:
     def __init__(
         self,
         node_id: str,
-        playbook_cls: type[Pitch[PlaybookOutput]],
+        playbook_cls: type[Playbook[PlaybookOutput]],
         kwargs: dict[str, ParameterValue | ProxyRef | MappedParameter],
         is_mapped: bool = False,
     ) -> None:
         self.node_id: str = node_id
-        self.playbook_cls: type[Pitch[PlaybookOutput]] = playbook_cls
+        self.playbook_cls: type[Playbook[PlaybookOutput]] = playbook_cls
         self.kwargs: dict[str, ParameterValue | ProxyRef | MappedParameter] = kwargs
         self.is_mapped: bool = is_mapped
         self.depends_on_nodes: list[PlayerNode] = []
@@ -136,8 +136,8 @@ class Playbook(ABC, Generic[T]):  # noqa: UP046
     def orchestrator(self) -> Any:
         if self._orchestrator is None:
             raise RuntimeError(
-                "Pitch orchestrator has not been initialized. "
-                "Ensure Pitch is instantiated with an orchestrator engine."
+                "Playbook orchestrator has not been initialized. "
+                "Ensure Playbook is instantiated with an orchestrator engine."
             )
         return self._orchestrator
 
@@ -145,7 +145,7 @@ class Playbook(ABC, Generic[T]):  # noqa: UP046
         """Returns the PreparedRun context (run_id, run_dir, parameters) for the active playbook run."""
         if self._prepared_run is None:
             raise RuntimeError(
-                "Pitch prepared_run accessed before preparation. "
+                "Playbook prepared_run accessed before preparation. "
                 "Ensure RunPreparer has prepared the run before accessing."
             )
         return self._prepared_run
@@ -156,7 +156,7 @@ class Playbook(ABC, Generic[T]):  # noqa: UP046
 
     def player(
         self,
-        playbook_cls: type[Pitch[PlaybookOutput]],
+        playbook_cls: type[Playbook[PlaybookOutput]],
         **kwargs: ParameterValue | ProxyRef | MappedParameter,
     ) -> PlayerNode:
         """Drafts a player node onto the Pitch for DAG composition with '.after()' or '>>'."""
@@ -174,7 +174,7 @@ class Playbook(ABC, Generic[T]):  # noqa: UP046
 
     def players(
         self,
-        playbook_cls: type[Pitch[PlaybookOutput]],
+        playbook_cls: type[Playbook[PlaybookOutput]],
         params: ProxyRef | list[Any] | None = None,
         **kwargs: ParameterValue | ProxyRef | MappedParameter,
     ) -> PlayerNode:
@@ -250,7 +250,7 @@ class Playbook(ABC, Generic[T]):  # noqa: UP046
 
     def _record_traced_node(
         self,
-        playbook_cls: type[Pitch[PlaybookOutput]],
+        playbook_cls: type[Playbook[PlaybookOutput]],
         kwargs: dict[str, ParameterValue | ProxyRef | MappedParameter],
         node_id: str | None = None,
         extra_deps: list[str] | None = None,
@@ -430,8 +430,8 @@ class Playbook(ABC, Generic[T]):  # noqa: UP046
                 continue
 
             # 3. Instantiate and run standard single player playbook
-            playbook_cls: type[Pitch[PlaybookOutput]] = player_node.playbook_cls
-            single_instance: Pitch[PlaybookOutput] = playbook_cls(
+            playbook_cls: type[Playbook[PlaybookOutput]] = player_node.playbook_cls
+            single_instance: Playbook[PlaybookOutput] = playbook_cls(
                 prepared_run=self._prepared_run, ui=self._ui
             )
             playbook_result: (
@@ -474,6 +474,3 @@ class Playbook(ABC, Generic[T]):  # noqa: UP046
         )
 
         return CliPlaybookRunner.run(cls, playbook_name=playbook_name)
-
-
-Pitch = Playbook

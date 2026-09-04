@@ -156,6 +156,3 @@ class CliPlaybookRunner:
                 return _play()  # type: ignore[return-value]
             else:
                 return loop.run_until_complete(_play())
-
-
-CliPitchRunner = CliPlaybookRunner

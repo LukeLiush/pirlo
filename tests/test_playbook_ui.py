@@ -72,19 +72,19 @@ def test_pitch_ui_delegation():
     assert "lineup:Lineup" in mock_ui.calls
 
 
-def test_pitch_uninitialized_error_guards():
-    pitch = CustomPlaybook()
+def test_playbook_uninitialized_error_guards():
+    playbook = CustomPlaybook()
     with pytest.raises(
-        RuntimeError, match="Pitch orchestrator has not been initialized"
+        RuntimeError, match="Playbook orchestrator has not been initialized"
     ):
-        _ = pitch.orchestrator
+        _ = playbook.orchestrator
 
     with pytest.raises(
-        RuntimeError, match="Pitch prepared_run accessed before preparation"
+        RuntimeError, match="Playbook prepared_run accessed before preparation"
     ):
         import asyncio
 
-        asyncio.run(pitch.prepared_run())
+        asyncio.run(playbook.prepared_run())
 
 
 def test_terminal_pitch_ui_console():
