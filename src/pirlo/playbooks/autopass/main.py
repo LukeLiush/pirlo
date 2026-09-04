@@ -53,16 +53,17 @@ class AutopassSession(Playbook[AutopassRunOutput]):
         *args: object,
         **kwargs: object,
     ) -> PlayerNode:
-        if not ProfileManager.exists(profile):
-            instruction = AutopassInstructions.PROFILE_MISSING.format(
-                profile=profile, existing_info=""
-            )
-            self.ui.yellow_card(instruction)
-            raise ValueError(str(instruction))
+        if not self._is_tracing:
+            if not ProfileManager.exists(profile):
+                instruction = AutopassInstructions.PROFILE_MISSING.format(
+                    profile=profile, existing_info=""
+                )
+                self.ui.yellow_card(instruction)
+                raise ValueError(str(instruction))
 
-        if not task:
-            self.ui.yellow_card(AutopassInstructions.TASK_REQUIRED)
-            raise ValueError(str(AutopassInstructions.TASK_REQUIRED))
+            if not task:
+                self.ui.yellow_card(AutopassInstructions.TASK_REQUIRED)
+                raise ValueError(str(AutopassInstructions.TASK_REQUIRED))
 
         # ---------------------------------------------------------------------
         # Step 1: Draft task_decomposer
@@ -88,11 +89,12 @@ class AutopassSession(Playbook[AutopassRunOutput]):
         # ---------------------------------------------------------------------
         # Step 3: Draft result_summarizer (implicit dataflow + terminal return)
         # ---------------------------------------------------------------------
-        return self.player(
+        summarizer = self.player(
             MergeResultsPlaybook,
             original_task=task,
             subtask_results=subtask_executors.ball,
         )
+        return summarizer
 
 
 if __name__ == "__main__":

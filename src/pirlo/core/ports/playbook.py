@@ -1,15 +1,12 @@
 # src/pirlo/core/ports/pitch.py
 from __future__ import annotations
 
-import asyncio
 from abc import ABC, abstractmethod
 from collections.abc import Generator
 from typing import Any, Generic, TypeVar, cast
 
 from pirlo.core.models.blueprint import (
     BlueprintError,
-    BlueprintNode,
-    ParamBinding,
     ParameterValue,
     PlaybookBlueprint,
     PlaybookOutput,
@@ -218,14 +215,17 @@ class Playbook(ABC, Generic[OutputT]):  # noqa: UP046
         )
         self._drafted_players.append(player_node)
 
-        if self._is_tracing:
+        if self._is_tracing and self._tracing_blueprint is not None:
             extra_dependencies: list[str] = [
                 dependency_node.node_id
                 for dependency_node in player_node.depends_on_nodes
             ]
-            self._record_traced_node(
-                playbook_cls,
-                kwargs,
+            from pirlo.core.services.blueprint_extractor import BlueprintExtractor
+
+            BlueprintExtractor.record_traced_node(
+                blueprint=self._tracing_blueprint,
+                playbook_cls=playbook_cls,  # type: ignore[arg-type]
+                kwargs=kwargs,
                 node_id=node_id,
                 extra_deps=extra_dependencies,
                 is_mapped=is_mapped,
@@ -241,134 +241,24 @@ class Playbook(ABC, Generic[OutputT]):  # noqa: UP046
 
     async def extract_blueprint_async(self) -> PlaybookBlueprint:
         """Asynchronously traces the playbook in dry-run mode to generate the PlaybookBlueprint."""
-        self._is_tracing = True
-        self._tracing_blueprint = PlaybookBlueprint(
-            name=self.__class__.__name__, entry_playbook=self.__class__.__name__
-        )
-        self._drafted_players = []
+        from pirlo.core.services.blueprint_extractor import BlueprintExtractor
 
-        try:
-            play_result: Any = await self.play()
-            if self._tracing_blueprint is not None:
-                if isinstance(play_result, (PlayerNode, SymbolicProxy)):
-                    self._tracing_blueprint.output_node_id = str(play_result.node_id)
-                elif (
-                    self._tracing_blueprint.output_node_id is None
-                    and self._drafted_players
-                ):
-                    self._tracing_blueprint.output_node_id = self._drafted_players[
-                        -1
-                    ].node_id
-        except Exception as error:
-            raise BlueprintError(
-                f"Failed to trace blueprint for {self.__class__.__name__}: {error}"
-            ) from error
-        finally:
-            self._is_tracing = False
-
-        blueprint: PlaybookBlueprint | None = self._tracing_blueprint
-        self._tracing_blueprint = None
-        if blueprint is None:
-            raise BlueprintError("Tracing completed but blueprint was not generated.")
-        return blueprint
+        return await BlueprintExtractor.extract_async(self)
 
     def extract_blueprint(self) -> PlaybookBlueprint:
         """Traces the playbook in dry-run mode to generate the PlaybookBlueprint."""
-        try:
-            asyncio.get_running_loop()
-        except RuntimeError:
-            return asyncio.run(self.extract_blueprint_async())
-        else:
-            import concurrent.futures
+        from pirlo.core.services.blueprint_extractor import BlueprintExtractor
 
-            with concurrent.futures.ThreadPoolExecutor() as pool:
-                return pool.submit(
-                    lambda: asyncio.run(self.extract_blueprint_async())
-                ).result()
-
-    def _record_traced_node(
-        self,
-        playbook_cls: type[Playbook[PlaybookOutput]],
-        kwargs: dict[str, ParameterValue | ProxyRef | MappedParameter | SymbolicProxy],
-        node_id: str | None = None,
-        extra_deps: list[str] | None = None,
-        is_mapped: bool = False,
-    ) -> SymbolicProxy:
-        if self._tracing_blueprint is None:
-            raise BlueprintError("_record_traced_node called without active blueprint.")
-
-        step_index: int = len(self._tracing_blueprint.nodes) + 1
-        effective_id: str = node_id or f"node_{step_index}_{playbook_cls.__name__}"
-
-        static_kwargs: dict[str, ParameterValue] = {}
-        param_bindings: dict[str, ParamBinding] = {}
-        mapped_bindings: dict[str, ParamBinding] = {}
-        depends_on: set[str] = set(extra_deps or [])
-
-        param_name: str
-        parameter_value: ParameterValue | ProxyRef | MappedParameter | SymbolicProxy
-        for param_name, parameter_value in kwargs.items():
-            if isinstance(parameter_value, MappedParameter):
-                target = parameter_value.target
-                if isinstance(target, ProxyRef):
-                    mapped_bindings[param_name] = ParamBinding(
-                        source_node_id=target.node_id,
-                        source_field=target.field,
-                    )
-                    depends_on.add(target.node_id)
-            elif isinstance(parameter_value, SymbolicProxy):
-                proxy_node_id: str = getattr(
-                    parameter_value, "_node_id", str(parameter_value.node_id)
-                )
-                param_bindings[param_name] = ParamBinding(
-                    source_node_id=proxy_node_id,
-                    source_field="",
-                )
-                depends_on.add(proxy_node_id)
-            elif isinstance(parameter_value, ProxyRef):
-                param_bindings[param_name] = ParamBinding(
-                    source_node_id=parameter_value.node_id,
-                    source_field=parameter_value.field,
-                )
-                depends_on.add(parameter_value.node_id)
-            else:
-                static_kwargs[param_name] = parameter_value
-
-        node: BlueprintNode = BlueprintNode(
-            node_id=effective_id,
-            playbook_name=playbook_cls.__name__,
-            static_kwargs=static_kwargs,
-            param_bindings=param_bindings,
-            mapped_bindings=mapped_bindings,
-            is_mapped=is_mapped or len(mapped_bindings) > 0,
-            depends_on=sorted(depends_on),
-        )
-        self._tracing_blueprint.nodes.append(node)
-        self._tracing_blueprint.output_node_id = effective_id
-        return SymbolicProxy(node_id=effective_id)
+        return BlueprintExtractor.extract(self)
 
     def _blueprint_from_players(
         self, players: list[PlayerNode], target_node_id: str | None = None
     ) -> PlaybookBlueprint:
-        blueprint = PlaybookBlueprint(
-            name=self.__class__.__name__,
-            entry_playbook=self.__class__.__name__,
-            output_node_id=target_node_id or (players[-1].node_id if players else None),
+        from pirlo.core.services.blueprint_extractor import BlueprintExtractor
+
+        return BlueprintExtractor.blueprint_from_players(
+            self, players, target_node_id=target_node_id
         )
-        self._tracing_blueprint = blueprint
-        try:
-            for p in players:
-                extra_deps = [dep.node_id for dep in p.depends_on_nodes]
-                self._record_traced_node(
-                    p.playbook_cls,
-                    p.kwargs,
-                    node_id=p.node_id,
-                    extra_deps=extra_deps,
-                    is_mapped=p.is_mapped,
-                )
-        finally:
-            self._tracing_blueprint = None
-        return blueprint
 
     async def _practice_run(
         self,

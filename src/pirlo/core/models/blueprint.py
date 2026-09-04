@@ -63,6 +63,21 @@ class BlueprintNode:
     is_mapped: bool = False
     depends_on: list[str] = field(default_factory=list)
 
+    def render_ascii(self) -> str:
+        """Renders ASCII diagnostic summary of this single node."""
+        bindings = ", ".join(
+            f"{k} ◄─ {b.source_node_id}.{b.source_field}"
+            for k, b in self.param_bindings.items()
+        )
+        deps = ", ".join(self.depends_on) or "none"
+        mapped_flag = " [MAPPER/FAN-OUT]" if self.is_mapped else ""
+        return (
+            f"Node: {self.node_id} ({self.playbook_name}){mapped_flag}\n"
+            f"  Kwargs:   {self.static_kwargs}\n"
+            f"  Bindings: {bindings or 'none'}\n"
+            f"  Depends:  [{deps}]"
+        )
+
 
 @dataclass
 class PlaybookBlueprint:
@@ -72,6 +87,20 @@ class PlaybookBlueprint:
     entry_playbook: str
     output_node_id: str | None = None
     nodes: list[BlueprintNode] = field(default_factory=list)
+
+    def render_ascii(self) -> str:
+        """Renders ASCII diagnostic summary of the complete DAG blueprint."""
+        header = (
+            f"=== [PlaybookBlueprint: {self.name}] ===\n"
+            f"Output Target: {self.output_node_id or 'none'}\n"
+            f"Total Nodes:   {len(self.nodes)}\n" + "-" * 45
+        )
+        nodes_str = "\n\n".join(node.render_ascii() for node in self.nodes)
+        return f"{header}\n{nodes_str}\n" + "=" * 45
+
+    def render_blueprint_ascii(self) -> str:
+        """Alias for render_ascii()."""
+        return self.render_ascii()
 
 
 @dataclass(frozen=True)
