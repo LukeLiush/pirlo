@@ -7,11 +7,11 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
-from pirlo.core.ports.pitch_ui import PitchUI
+from pirlo.core.ports.playbook_ui import PlaybookUI
 
 
-class TerminalPitchUI(PitchUI):
-    """Rich graphical terminal presentation adapter for Pitch."""
+class TerminalPlaybookUI(PlaybookUI):
+    """Rich graphical terminal presentation adapter for Playbook."""
 
     def __init__(self, console: Console | None = None) -> None:
         self._console = console or Console()
@@ -84,3 +84,6 @@ class TerminalPitchUI(PitchUI):
         if det_str:
             text += f"\n[dim]{det_str}[/dim]"
         self._console.print(Panel(text, border_style="yellow", expand=False))
+
+
+TerminalPitchUI = TerminalPlaybookUI

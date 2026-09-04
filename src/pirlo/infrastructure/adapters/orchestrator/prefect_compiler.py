@@ -15,7 +15,7 @@ from pirlo.core.models.blueprint import (
     PlaybookOutput,
 )
 from pirlo.core.models.run_result import RunResult
-from pirlo.core.ports.pitch import Pitch
+from pirlo.core.ports.playbook import Playbook
 
 logger = logging.getLogger(__name__)
 
@@ -51,16 +51,16 @@ class PrefectCompiler:
                         parent_result, param_binding.source_field, None
                     )
 
-                playbook_cls: type[Pitch[PlaybookOutput]] = cls._resolve_playbook_class(
-                    blueprint_node.playbook_name
+                playbook_cls: type[Playbook[PlaybookOutput]] = (
+                    cls._resolve_playbook_class(blueprint_node.playbook_name)
                 )
 
                 @flow(name=f"Subflow: {blueprint_node.playbook_name}")
                 async def subflow_runner(
-                    _cls: type[Pitch[PlaybookOutput]] = playbook_cls,
+                    _cls: type[Playbook[PlaybookOutput]] = playbook_cls,
                     **kwargs: object,
                 ) -> PlaybookOutput:
-                    instance: Pitch[PlaybookOutput] = _cls()
+                    instance: Playbook[PlaybookOutput] = _cls()
                     playbook_result: (
                         PlaybookOutput | RunResult[PlaybookOutput]
                     ) = await instance.play(**kwargs)  # type: ignore[arg-type]
@@ -120,8 +120,10 @@ class PrefectCompiler:
         return prefect_master_flow
 
     @classmethod
-    def _resolve_playbook_class(cls, playbook_name: str) -> type[Pitch[PlaybookOutput]]:
+    def _resolve_playbook_class(
+        cls, playbook_name: str
+    ) -> type[Playbook[PlaybookOutput]]:
         from pirlo.infrastructure.services.playbook_scanner import PlaybookScanner
 
         class_object: type[object] = PlaybookScanner().get_playbook_class(playbook_name)
-        return cast(type[Pitch[PlaybookOutput]], class_object)
+        return cast(type[Playbook[PlaybookOutput]], class_object)

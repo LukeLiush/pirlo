@@ -8,9 +8,9 @@ from typing import Annotated, Any, get_args, get_origin, get_type_hints
 
 from pirlo.core.models.parameters import LinkParameter, Parameter
 from pirlo.core.ports.orchestrator import TaskOrchestrator
-from pirlo.core.ports.pitch import Pitch
+from pirlo.core.ports.playbook import Playbook
 
-TargetSignatureSource = type[Pitch] | type[TaskOrchestrator] | Callable[..., Any]
+TargetSignatureSource = type[Playbook] | type[TaskOrchestrator] | Callable[..., Any]
 
 
 def extract_signature_parameters(

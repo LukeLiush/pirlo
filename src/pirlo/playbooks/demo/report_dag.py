@@ -6,11 +6,7 @@ from typing import Annotated, cast
 from pirlo.core.decorators import playbook
 from pirlo.core.models.blueprint import PlaybookOutput
 from pirlo.core.models.parameters import Parameter
-from pirlo.core.ports.pitch import Pitch, PlayerNode
-
-# Playbook is the primary base class alias for Pitch
-Playbook = Pitch
-
+from pirlo.core.ports.playbook import Playbook, PlayerNode
 
 # --- 1. Sub-Playbook Output Models ---
 
@@ -99,19 +95,19 @@ class ReportDownloadDAG(Playbook[AlertOutput]):
     ) -> AlertOutput:
         # Step 1: Download Report
         player_download: PlayerNode = self.player(
-            cast(type[Pitch[PlaybookOutput]], DownloadReportPlaybook),
+            cast(type[Playbook[PlaybookOutput]], DownloadReportPlaybook),
             report_month=report_month,
         )
 
         # Step 2: Extract Summary (depends on player_download.ball.file_path)
         player_extract: PlayerNode = self.player(
-            cast(type[Pitch[PlaybookOutput]], ExtractSummaryPlaybook),
+            cast(type[Playbook[PlaybookOutput]], ExtractSummaryPlaybook),
             file_path=player_download.ball.file_path,
         ).after(player_download)
 
         # Step 3: Send Alert (depends on player_download & player_extract)
         player_alert: PlayerNode = self.player(
-            cast(type[Pitch[PlaybookOutput]], SendAlertPlaybook),
+            cast(type[Playbook[PlaybookOutput]], SendAlertPlaybook),
             report_date=player_download.ball.report_date,
             status_summary=player_extract.ball.status_summary,
             channel=channel,

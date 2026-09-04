@@ -23,7 +23,7 @@ from pirlo.core.models.parameters import Parameter
 from pirlo.core.models.run import RunStatus
 from pirlo.core.models.run_result import RunResult
 from pirlo.core.models.serve_manifest import ServeManifest
-from pirlo.core.ports.pitch import Pitch
+from pirlo.core.ports.playbook import Playbook
 from pirlo.infrastructure.adapters.docker.docker_compose_manager import (
     DockerComposeManager,
 )
@@ -51,7 +51,7 @@ def _get_live_ollama_models(ollama_port: int) -> list[str]:
     name="serve",
     description="Starts Pirlo serve (Prefect dev server + Ollama multi-model) using Docker.",
 )
-class ServeSession(Pitch):
+class ServeSession(Playbook):
     """Serve playbook that launches Prefect dev server and Ollama via Docker Compose."""
 
     def _find_free_port(self, preferred_port: int) -> int:

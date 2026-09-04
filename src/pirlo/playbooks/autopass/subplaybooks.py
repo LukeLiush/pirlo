@@ -14,7 +14,7 @@ from pirlo.core.models.browser_config import BrowserConfig
 from pirlo.core.models.link import LlmLink
 from pirlo.core.models.parameters import LinkParameter, Parameter
 from pirlo.core.ports.browser_agent_factory import BrowserAgentFactory
-from pirlo.core.ports.pitch import Pitch
+from pirlo.core.ports.playbook import Playbook
 from pirlo.core.repository.workflow_repository import WorkflowRepository
 from pirlo.core.services.workflow_runner import WorkflowRunner
 from pirlo.infrastructure.adapters.browser.browser_agent_factory import (
@@ -41,7 +41,6 @@ from pirlo.playbooks.autopass.models import (
 
 logger = logging.getLogger(__name__)
 CDP_PORT = 9222
-Playbook = Pitch
 
 
 class QuickProgressListener(ProgressListener):

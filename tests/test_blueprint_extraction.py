@@ -9,7 +9,7 @@ from pirlo.core.models.blueprint import (
     PlaybookBlueprint,
     PlaybookOutput,
 )
-from pirlo.core.ports.pitch import Pitch, PlayerNode, players
+from pirlo.core.ports.playbook import Playbook, PlayerNode, players
 
 
 class LoginOutput(PlaybookOutput):
@@ -25,17 +25,17 @@ class CheckoutOutput(PlaybookOutput):
     order_id: str
 
 
-class LoginTestPlaybook(Pitch[LoginOutput]):
+class LoginTestPlaybook(Playbook[LoginOutput]):
     async def play(self, profile: str = "default") -> LoginOutput:
         return LoginOutput(auth_token="token_test_123", user_id="user_test_99")
 
 
-class VerifyTestPlaybook(Pitch[VerifyOutput]):
+class VerifyTestPlaybook(Playbook[VerifyOutput]):
     async def play(self, user_id: str = "") -> VerifyOutput:
         return VerifyOutput(verification_code="code_777")
 
 
-class CheckoutTestPlaybook(Pitch[CheckoutOutput]):
+class CheckoutTestPlaybook(Playbook[CheckoutOutput]):
     async def play(
         self, auth_token: str = "", verification_code: str = "", item_id: str = ""
     ) -> CheckoutOutput:
@@ -43,7 +43,7 @@ class CheckoutTestPlaybook(Pitch[CheckoutOutput]):
 
 
 @playbook(name="test_checkout_dag")
-class CheckoutDAGPlaybook(Pitch[CheckoutOutput]):
+class CheckoutDAGPlaybook(Playbook[CheckoutOutput]):
     async def play(self, item_id: str = "item_42") -> CheckoutOutput:
         player_login: PlayerNode = self.player(LoginTestPlaybook, profile="prod")
         player_verify: PlayerNode = self.player(
@@ -69,12 +69,16 @@ def test_extract_blueprint_and_ball_proxy():
     node1: BlueprintNode = blueprint.nodes[0]
     assert node1.playbook_name == "LoginTestPlaybook"
     assert node1.static_kwargs == {"profile": "prod"}
+    assert node1.param_bindings == {}
+    assert node1.depends_on == []
 
     node2: BlueprintNode = blueprint.nodes[1]
     assert node2.playbook_name == "VerifyTestPlaybook"
+    assert node2.static_kwargs == {}
     assert "user_id" in node2.param_bindings
     assert node2.param_bindings["user_id"].source_node_id == node1.node_id
     assert node2.param_bindings["user_id"].source_field == "user_id"
+    assert node2.depends_on == [node1.node_id]
 
     node3: BlueprintNode = blueprint.nodes[2]
     assert node3.playbook_name == "CheckoutTestPlaybook"
@@ -85,7 +89,7 @@ def test_extract_blueprint_and_ball_proxy():
 
 
 def test_players_group_operator_syntax():
-    class GroupDAGPlaybook(Pitch[CheckoutOutput]):
+    class GroupDAGPlaybook(Playbook[CheckoutOutput]):
         async def play(self, item_id: str = "item_99") -> CheckoutOutput:
             p1 = self.player(LoginTestPlaybook, profile="dev")
             p2 = self.player(VerifyTestPlaybook, user_id=p1.ball.user_id)

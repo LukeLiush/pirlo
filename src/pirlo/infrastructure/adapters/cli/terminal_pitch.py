@@ -1,4 +1,4 @@
-from pirlo.core.ports.pitch import Pitch
+from pirlo.core.ports.playbook import Playbook
 
-# Deprecated backward-compatibility alias for Pitch
-TerminalPitch = Pitch
+# Deprecated backward-compatibility alias for Playbook
+TerminalPitch = Playbook

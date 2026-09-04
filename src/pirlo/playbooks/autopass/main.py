@@ -10,7 +10,7 @@ from pirlo.core.models.link import LlmLink
 from pirlo.core.models.parameters import LinkParameter, Parameter
 from pirlo.core.models.run import PreparedRun, RunStatus
 from pirlo.core.models.run_result import RunResult
-from pirlo.core.ports.pitch import Pitch, PlayerNode, each
+from pirlo.core.ports.playbook import Playbook, PlayerNode, each
 from pirlo.infrastructure.services.profile_manager import ProfileManager
 from pirlo.playbooks.autopass.models import (
     AutopassRunOutput,
@@ -22,7 +22,6 @@ from pirlo.playbooks.autopass.subplaybooks import (
     QuickProgressListener,
 )
 
-Playbook = Pitch
 __all__ = ["AutopassSession", "QuickProgressListener"]
 
 
@@ -86,7 +85,7 @@ class AutopassSession(Playbook[AutopassRunOutput]):
         # Step 1: Draft task_decomposer
         # ---------------------------------------------------------------------
         task_decomposer: PlayerNode = self.player(
-            cast(type[Pitch[PlaybookOutput]], DecomposeTaskPlaybook),
+            cast(type[Playbook[PlaybookOutput]], DecomposeTaskPlaybook),
             task_prompt=task,
             playmaker=playmaker,
         )
@@ -95,7 +94,7 @@ class AutopassSession(Playbook[AutopassRunOutput]):
         # Step 2: Draft subtask_executors using each(...) for dynamic fan-out
         # ---------------------------------------------------------------------
         subtask_executors: PlayerNode = self.player(
-            cast(type[Pitch[PlaybookOutput]], ExecuteSubtaskPlaybook),
+            cast(type[Playbook[PlaybookOutput]], ExecuteSubtaskPlaybook),
             subtask_prompt=each(task_decomposer.ball.task_prompts),
             profile=profile,
             headless=headless,
@@ -107,7 +106,7 @@ class AutopassSession(Playbook[AutopassRunOutput]):
         # Step 3: Draft result_summarizer and wire DAG dependencies with '>>'
         # ---------------------------------------------------------------------
         result_summarizer: PlayerNode = self.player(
-            cast(type[Pitch[PlaybookOutput]], MergeResultsPlaybook),
+            cast(type[Playbook[PlaybookOutput]], MergeResultsPlaybook),
             original_task=task,
         )
 

@@ -4,11 +4,11 @@ from typing import Annotated, Any
 from pirlo.core.decorators import playbook
 from pirlo.core.models.parameters import Parameter
 from pirlo.core.models.run_result import RunResult
-from pirlo.core.ports.pitch import Pitch
+from pirlo.core.ports.playbook import Playbook
 
 
 @playbook(name="demo_dummy", description="Dummy test session for console verification.")
-class DummySession(Pitch):
+class DummySession(Playbook):
     """Dummy test session for console verification."""
 
     async def play(

@@ -13,7 +13,7 @@ from pirlo.core.models.run import RunStatus
 from pirlo.core.models.run_result import RunResult
 from pirlo.core.models.serve_manifest import ActiveSession
 from pirlo.core.ports.health_checker import HealthStatus
-from pirlo.core.ports.pitch import Pitch
+from pirlo.core.ports.playbook import Playbook
 from pirlo.playbooks.connect.domain.connect_service import ConnectService
 
 HEALTH_CHECK_INTERVAL_SECONDS: float = 15.0
@@ -32,7 +32,7 @@ class UnhealthyServiceError(Exception):
     name="connect",
     description="Connects to a remote pirlo serve instance via Paramiko SSH tunnels.",
 )
-class ConnectSession(Pitch):
+class ConnectSession(Playbook):
     """Connect playbook that establishes SSH tunnels and registers link overlays."""
 
     async def _monitor_health_loop(

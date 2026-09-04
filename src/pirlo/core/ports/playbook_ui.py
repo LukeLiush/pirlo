@@ -3,7 +3,7 @@ from contextlib import AbstractContextManager
 from typing import Any
 
 
-class PitchUI(ABC):
+class PlaybookUI(ABC):
     """Pure Abstract Port representing presentation rendering and user interaction."""
 
     @abstractmethod
@@ -41,3 +41,6 @@ class PitchUI(ABC):
     @abstractmethod
     def yellow_card(self, message: Any, detail: str | None = None) -> None:
         """Draw warning panel/message (Yellow Card!)."""
+
+
+PitchUI = PlaybookUI

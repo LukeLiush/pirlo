@@ -11,11 +11,11 @@ from pirlo.core.models.playbook_invocation import PlaybookInvocation
 from pirlo.core.models.run import PreparedRun, RunStatus
 from pirlo.core.models.run_result import RunResult
 from pirlo.core.ports.orchestrator import TaskOrchestrator
-from pirlo.core.ports.pitch import Pitch
+from pirlo.core.ports.playbook import Playbook
 from pirlo.infrastructure.adapters.cli.argument_parser_builder import (
     ArgumentParserBuilder,
 )
-from pirlo.infrastructure.adapters.cli.terminal_pitch_ui import TerminalPitchUI
+from pirlo.infrastructure.adapters.cli.terminal_playbook_ui import TerminalPlaybookUI
 from pirlo.infrastructure.services.parameter_provider import ParameterProvider
 from pirlo.infrastructure.services.parameter_resolution import ParameterResolver
 
@@ -30,13 +30,13 @@ def extract_raw_arguments_excluding_command(
     return raw_args
 
 
-class CliPitchRunner:
-    """CLI Execution Runner adapter that parses POSIX arguments and runs a Pitch class."""
+class CliPlaybookRunner:
+    """CLI Execution Runner adapter that parses POSIX arguments and runs a Playbook class."""
 
     @classmethod
     def run(
         cls,
-        playbook_cls: type[Pitch],
+        playbook_cls: type[Playbook],
         playbook_name: str | None = None,
     ) -> RunResult[Any]:
         """Parse CLI parameters using the POSIX '--' delimiter and play the pitch."""
@@ -110,11 +110,11 @@ class CliPitchRunner:
             orchestrator_flags=playbook_invocation.orchestrator_args,
         )
 
-        # Step C: Instantiate pitch with injected TerminalPitchUI and orchestrator
-        pitch: Pitch = playbook_cls(
+        # Step C: Instantiate playbook with injected TerminalPlaybookUI and orchestrator
+        playbook_instance: Playbook = playbook_cls(
             prepared_run=prepared_run,
             orchestrator=orchestrator,
-            ui=TerminalPitchUI(),
+            ui=TerminalPlaybookUI(),
         )
 
         parameter_provider: ParameterProvider = ParameterProvider(parameter_resolver)
@@ -122,12 +122,16 @@ class CliPitchRunner:
             parameter_provider
         )
 
-        bound_pitch: Pitch = ParameterBinder.bind_values(pitch, prepared_run.parameters)
+        bound_playbook: Playbook = ParameterBinder.bind_values(
+            playbook_instance, prepared_run.parameters
+        )
 
-        parameter_snapshot_writer.write(bound_pitch, prepared_run.parameter_file_path)
+        parameter_snapshot_writer.write(
+            bound_playbook, prepared_run.parameter_file_path
+        )
 
         async def _play() -> RunResult[Any]:
-            raw_result: Any = await bound_pitch.play(**prepared_run.parameters)
+            raw_result: Any = await bound_playbook.play(**prepared_run.parameters)
             if isinstance(raw_result, RunResult):
                 final_run_result: RunResult[Any] = raw_result
             else:
@@ -137,7 +141,7 @@ class CliPitchRunner:
                     data=raw_result,
                 )
 
-            bound_pitch.ui.goal(
+            bound_playbook.ui.goal(
                 message=f"Run '{prepared_run.run_id}' completed!",
                 detail=f"Result:\n{final_run_result.data}",
             )
@@ -152,3 +156,6 @@ class CliPitchRunner:
                 return _play()  # type: ignore[return-value]
             else:
                 return loop.run_until_complete(_play())
+
+
+CliPitchRunner = CliPlaybookRunner

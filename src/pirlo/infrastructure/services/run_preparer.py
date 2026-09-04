@@ -7,7 +7,7 @@ from typing import Any
 
 from pirlo.core.models.playbook_invocation import PlaybookInvocation
 from pirlo.core.models.run import PreparedRun
-from pirlo.core.ports.pitch import Pitch
+from pirlo.core.ports.playbook import Playbook
 from pirlo.infrastructure.services.parameter_provider import discover_parameters
 from pirlo.infrastructure.services.parameter_resolution import ParameterResolver
 from pirlo.infrastructure.services.run_id_generator import IdentityFactory
@@ -18,7 +18,7 @@ class RunPreparer:
 
     def __init__(
         self,
-        playbook_cls: type[Pitch],
+        playbook_cls: type[Playbook],
         pirlo_workspace: Path,
         parameter_resolver: ParameterResolver,
     ) -> None:

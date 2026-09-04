@@ -8,7 +8,7 @@ from pirlo.core.decorators import playbook
 from pirlo.core.models.parameters import Parameter
 from pirlo.core.models.run import RunStatus
 from pirlo.core.models.run_result import RunResult
-from pirlo.core.ports.pitch import Pitch
+from pirlo.core.ports.playbook import Playbook
 from pirlo.infrastructure.services.profile_manager import ProfileManager
 
 
@@ -16,7 +16,7 @@ from pirlo.infrastructure.services.profile_manager import ProfileManager
     name="login",
     description="Launch a browser to authenticate and save persistent cookies.",
 )
-class LoginSession(Pitch):
+class LoginSession(Playbook):
     """Launch a browser to authenticate and save persistent cookies."""
 
     async def play(

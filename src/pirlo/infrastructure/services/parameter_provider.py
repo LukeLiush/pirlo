@@ -4,13 +4,13 @@ from collections.abc import Callable
 from typing import Any
 
 from pirlo.core.ports.orchestrator import TaskOrchestrator
-from pirlo.core.ports.pitch import Pitch
+from pirlo.core.ports.playbook import Playbook
 from pirlo.infrastructure.adapters.cli.argument_parser_builder import (
     extract_signature_parameters,
 )
 from pirlo.infrastructure.services.parameter_resolution import ParameterResolver
 
-TargetSignatureSource = type[Pitch] | type[TaskOrchestrator] | Callable[..., Any]
+TargetSignatureSource = type[Playbook] | type[TaskOrchestrator] | Callable[..., Any]
 
 
 def discover_parameters(

@@ -17,8 +17,8 @@ from pirlo.core.models.blueprint import (
 )
 from pirlo.core.models.run import PreparedRun
 from pirlo.core.models.run_result import RunResult
-from pirlo.core.ports.pitch_ui import PitchUI
-from pirlo.infrastructure.adapters.cli.terminal_pitch_ui import TerminalPitchUI
+from pirlo.core.ports.playbook_ui import PlaybookUI
+from pirlo.infrastructure.adapters.cli.terminal_playbook_ui import TerminalPlaybookUI
 
 T = TypeVar("T", bound=PlaybookOutput)
 
@@ -112,24 +112,24 @@ def players(*nodes: PlayerNode) -> PlayerGroup:
     return PlayerGroup(nodes=list(nodes))
 
 
-class Pitch(ABC, Generic[T]):  # noqa: UP046
+class Playbook(ABC, Generic[T]):  # noqa: UP046
     """Pure Abstract Port representing presentation canvas & lifecycle contract."""
 
     def __init__(
         self,
         prepared_run: PreparedRun | None = None,
         orchestrator: Any | None = None,
-        ui: PitchUI | None = None,
+        ui: PlaybookUI | None = None,
     ) -> None:
         self._prepared_run: PreparedRun | None = prepared_run
         self._orchestrator: Any | None = orchestrator
-        self._ui: PitchUI = ui if ui is not None else TerminalPitchUI()
+        self._ui: PlaybookUI = ui if ui is not None else TerminalPlaybookUI()
         self._is_tracing: bool = False
         self._tracing_blueprint: PlaybookBlueprint | None = None
         self._drafted_players: list[PlayerNode] = []
 
     @property
-    def ui(self) -> PitchUI:
+    def ui(self) -> PlaybookUI:
         return self._ui
 
     @property
@@ -441,9 +441,12 @@ class Pitch(ABC, Generic[T]):  # noqa: UP046
 
     @classmethod
     def cli(cls, playbook_name: str | None = None) -> RunResult[Any]:
-        """Parse CLI parameters using POSIX '--' delimiter and play the pitch."""
-        from pirlo.infrastructure.adapters.cli.cli_pitch_runner import (
-            CliPitchRunner,
+        """Parse CLI parameters using POSIX '--' delimiter and play the playbook."""
+        from pirlo.infrastructure.adapters.cli.cli_playbook_runner import (
+            CliPlaybookRunner,
         )
 
-        return CliPitchRunner.run(cls, playbook_name=playbook_name)
+        return CliPlaybookRunner.run(cls, playbook_name=playbook_name)
+
+
+Pitch = Playbook

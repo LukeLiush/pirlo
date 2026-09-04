@@ -1,12 +1,12 @@
 import pytest
 from rich.console import Console
 
-from pirlo.core.ports.pitch import Pitch
-from pirlo.core.ports.pitch_ui import PitchUI
-from pirlo.infrastructure.adapters.cli.terminal_pitch_ui import TerminalPitchUI
+from pirlo.core.ports.playbook import Playbook
+from pirlo.core.ports.playbook_ui import PlaybookUI
+from pirlo.infrastructure.adapters.cli.terminal_playbook_ui import TerminalPlaybookUI
 
 
-class MockPitchUI(PitchUI):
+class MockPlaybookUI(PlaybookUI):
     def __init__(self) -> None:
         self.calls: list[str] = []
 
@@ -48,14 +48,14 @@ class MockPitchUI(PitchUI):
         self.calls.append(f"commentary:{message}")
 
 
-class CustomPitch(Pitch):
+class CustomPlaybook(Playbook):
     async def play(self, *args, **kwargs):
         pass
 
 
 def test_pitch_ui_delegation():
-    mock_ui = MockPitchUI()
-    pitch = CustomPitch(ui=mock_ui)
+    mock_ui = MockPlaybookUI()
+    pitch = CustomPlaybook(ui=mock_ui)
 
     pitch.ui.header("Test Header", subtitle="Sub")
     pitch.ui.goal("Goal scored!")
@@ -73,7 +73,7 @@ def test_pitch_ui_delegation():
 
 
 def test_pitch_uninitialized_error_guards():
-    pitch = CustomPitch()
+    pitch = CustomPlaybook()
     with pytest.raises(
         RuntimeError, match="Pitch orchestrator has not been initialized"
     ):
@@ -89,7 +89,7 @@ def test_pitch_uninitialized_error_guards():
 
 def test_terminal_pitch_ui_console():
     console = Console(record=True)
-    ui = TerminalPitchUI(console=console)
+    ui = TerminalPlaybookUI(console=console)
     ui.header("Terminal Banner", subtitle="Rich Output")
     ui.goal("Scored!")
     ui.red_card("Failed!")

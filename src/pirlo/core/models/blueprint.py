@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from pirlo.core.models.link import LlmLink
-    from pirlo.core.ports.pitch import MappedParameter
+    from pirlo.core.ports.playbook import MappedParameter
 
 type ScalarValue = (
     str
