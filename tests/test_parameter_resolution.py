@@ -8,14 +8,14 @@ import pytest
 from pirlo.core.decorators import playbook
 from pirlo.core.models.parameters import Parameter
 from pirlo.core.models.run_result import RunResult
-from pirlo.infrastructure.adapters.cli.terminal_pitch import TerminalPitch
+from pirlo.core.ports.playbook import Playbook
 
 
 @playbook(
     name="dummy_resolution",
     description="Session subclass for testing parameter resolution.",
 )
-class DummyResolutionSession(TerminalPitch):
+class DummyResolutionSession(Playbook):
     """Session subclass for testing parameter resolution."""
 
     async def play(

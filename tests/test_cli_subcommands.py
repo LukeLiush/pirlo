@@ -8,11 +8,11 @@ import pytest
 from pirlo.core.decorators import playbook
 from pirlo.core.models.parameters import Parameter
 from pirlo.core.models.run_result import RunResult
-from pirlo.infrastructure.adapters.cli.terminal_pitch import TerminalPitch
+from pirlo.core.ports.playbook import Playbook
 
 
 @playbook(name="mock", description="Mock session for testing CLI subcommands.")
-class MockSubcommandSession(TerminalPitch):
+class MockSubcommandSession(Playbook):
     """Mock session for testing CLI subcommands."""
 
     async def play(

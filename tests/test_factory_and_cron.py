@@ -94,10 +94,10 @@ def test_factory_unknown_orchestrator_raises_error():
 
 from pirlo.core.models.run import PreparedRun
 from pirlo.core.models.run_result import RunResult
-from pirlo.infrastructure.adapters.cli.terminal_pitch import TerminalPitch
+from pirlo.core.ports.playbook import Playbook
 
 
-class DummyPitch(TerminalPitch):
+class DummyPlaybook(Playbook):
     """Dummy Pitch for orchestrator cron testing."""
 
     async def on_play(self, *args, **kwargs) -> RunResult[Any]:

@@ -7,7 +7,7 @@ import pytest
 from pirlo.core.decorators import playbook
 from pirlo.core.models.run import PreparedRun
 from pirlo.core.models.run_result import RunResult
-from pirlo.infrastructure.adapters.cli.terminal_pitch import TerminalPitch
+from pirlo.core.ports.playbook import Playbook
 from pirlo.infrastructure.adapters.orchestrator.factory import OrchestratorFactory
 from pirlo.infrastructure.adapters.orchestrator.prefect_orchestrator import (
     SmartPrefectTaskOrchestrator,
@@ -15,7 +15,7 @@ from pirlo.infrastructure.adapters.orchestrator.prefect_orchestrator import (
 
 
 @playbook(name="autopass", description="Mock Autopass pitch for testing.")
-class DummyAutopassPitch(TerminalPitch):
+class DummyAutopassPlaybook(Playbook):
     """Mock Autopass pitch for testing."""
 
     task = "Search Google for OpenAI"
