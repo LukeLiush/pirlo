@@ -49,12 +49,12 @@ class CheckoutCompilerTestPlaybook(Playbook[CheckoutOutput]):
 
 @playbook(name="test_prefect_dag")
 class PrefectCompilerDAGPlaybook(Playbook[CheckoutOutput]):
-    async def play(self, item_id: str = "item_88") -> CheckoutOutput:
+    async def play(self, item_id: str = "item_88") -> PlayerNode:
         p1: PlayerNode = self.player(LoginCompilerTestPlaybook, profile="prod")
         p2: PlayerNode = self.player(
             VerifyCompilerTestPlaybook, user_id=p1.ball.user_id
         )
-        return await self.player(
+        return self.player(
             CheckoutCompilerTestPlaybook,
             auth_token=p1.ball.auth_token,
             verification_code=p2.ball.verification_code,

@@ -2,7 +2,7 @@ import argparse
 import sys
 from datetime import UTC, datetime
 
-from pirlo.core.services.profile_manager import ProfileManager
+from pirlo.infrastructure.services.profile_manager import ProfileManager
 
 
 def profile_main() -> None:

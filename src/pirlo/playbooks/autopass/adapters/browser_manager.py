@@ -7,9 +7,7 @@ from typing import Any
 
 from cloakbrowser import launch_persistent_context_async
 
-from pirlo.playbooks.autopass.adapters.profile_lock_patcher import (
-    ChromiumProfileLockPatcher,
-)
+from pirlo.infrastructure.services.profile_manager import ProfileManager
 from pirlo.playbooks.autopass.core.ports import BrowserManager as BaseBrowserManager
 
 
@@ -26,22 +24,30 @@ class CloakBrowserManager(BaseBrowserManager):
 
     @asynccontextmanager
     async def session(self) -> AsyncIterator[CloakBrowserManager]:
-        """Launches the persistent CloakBrowser context on enter, and closes it on exit."""
-        ChromiumProfileLockPatcher.patch(self.profile_path)
+        """Launches persistent CloakBrowser context using an isolated ephemeral worker profile."""
+        worker_profile_path, cleanup = ProfileManager.create_ephemeral_worker_profile(
+            self.profile_path.name
+        )
 
-        self._ctx = await launch_persistent_context_async(
-            str(self.profile_path),
-            headless=self.headless,
-            humanize=False,
-            args=[f"--remote-debugging-port={self.cdp_port}"],
+        cdp_arg = (
+            f"--remote-debugging-port={self.cdp_port}"
+            if self.cdp_port > 0 and self.cdp_port != 9222
+            else "--remote-debugging-port=0"
         )
 
         try:
+            self._ctx = await launch_persistent_context_async(
+                str(worker_profile_path),
+                headless=self.headless,
+                humanize=False,
+                args=[cdp_arg],
+            )
             yield self
         finally:
             if self._ctx:
                 await self._ctx.close()
                 self._ctx = None
+            cleanup()
 
     @asynccontextmanager
     async def new_page(self) -> AsyncIterator[Any]:

@@ -39,7 +39,9 @@ def test_autopass_dag_execution():
         )
         session = AutopassSession()
         output: AutopassRunOutput = asyncio.run(
-            session.play(task="Buy keyboard", profile="default", playmaker=mock_link)
+            session.run_play(
+                task="Buy keyboard", profile="default", playmaker=mock_link
+            )
         )
 
         assert isinstance(output, AutopassRunOutput)

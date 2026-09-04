@@ -21,7 +21,8 @@ from pirlo.core.models.run_result import RunResult
 from pirlo.core.ports.playbook_ui import PlaybookUI
 from pirlo.infrastructure.adapters.cli.terminal_playbook_ui import TerminalPlaybookUI
 
-T = TypeVar("T", bound=PlaybookOutput)
+OutputT = TypeVar("OutputT", bound=PlaybookOutput, covariant=True)  # noqa: PLC0105
+PlayerPlaybookT = TypeVar("PlayerPlaybookT", bound="Playbook[PlaybookOutput]")
 
 
 class MappedParameter:
@@ -98,12 +99,16 @@ class PlayerNode:
 
     def __rrshift__(self, other: PlayerNode | list[PlayerNode]) -> PlayerNode:
         """Reversed Operator '>>' for list-to-single (e.g. [A, B] >> C)."""
-        self.after(other)
+        target_player_nodes: list[PlayerNode] = (
+            other if isinstance(other, list) else [other]
+        )
+        for target_node in target_player_nodes:
+            self.after(target_node)
         return self
 
 
 class PlayerGroup:
-    """Group of PlayerNode instances for batch operators like players(p1, p2) >> p3."""
+    """Group of PlayerNodes for clean batch dependency wiring."""
 
     def __init__(self, nodes: list[PlayerNode]) -> None:
         self.nodes: list[PlayerNode] = nodes
@@ -111,9 +116,13 @@ class PlayerGroup:
     def __rshift__(
         self, other: PlayerNode | list[PlayerNode]
     ) -> PlayerNode | list[PlayerNode]:
-        player_node: PlayerNode
-        for player_node in self.nodes:
-            player_node >> other
+        """Bitwise >> operator on PlayerGroup to wire all nodes in group to target node(s)."""
+        target_player_nodes: list[PlayerNode] = (
+            other if isinstance(other, list) else [other]
+        )
+        for target_node in target_player_nodes:
+            for group_node in self.nodes:
+                target_node.after(group_node)
         return other
 
 
@@ -122,7 +131,7 @@ def players(*nodes: PlayerNode) -> PlayerGroup:
     return PlayerGroup(nodes=list(nodes))
 
 
-class Playbook(ABC, Generic[T]):  # noqa: UP046
+class Playbook(ABC, Generic[OutputT]):  # noqa: UP046
     """Pure Abstract Port representing presentation canvas & lifecycle contract."""
 
     def __init__(
@@ -161,7 +170,9 @@ class Playbook(ABC, Generic[T]):  # noqa: UP046
         return self._prepared_run
 
     @abstractmethod
-    async def play(self, *args: Any, **kwargs: Any) -> T | RunResult[T] | SymbolicProxy:
+    async def play(
+        self, *args: Any, **kwargs: Any
+    ) -> PlayerNode | OutputT | RunResult[OutputT] | SymbolicProxy | None:
         """Core playbook execution logic implemented by subclasses."""
 
     async def _execute_player_node(self, player_node: PlayerNode) -> Any:
@@ -173,7 +184,7 @@ class Playbook(ABC, Generic[T]):  # noqa: UP046
             self._drafted_players, target_node_id=player_node.node_id
         )
 
-    async def run_play(self, *args: Any, **kwargs: Any) -> T:
+    async def run_play(self, *args: Any, **kwargs: Any) -> OutputT:
         """Executes play() and auto-evaluates the DAG if a PlayerNode, SymbolicProxy, or None is returned."""
         play_result: Any = await self.play(*args, **kwargs)
 
@@ -183,7 +194,7 @@ class Playbook(ABC, Generic[T]):  # noqa: UP046
         elif play_result is None and self._drafted_players:
             target_node_id = self._drafted_players[-1].node_id
         elif play_result is not None:
-            return cast(T, play_result)
+            return cast(OutputT, play_result)
 
         return await self._practice_run(
             self._drafted_players, target_node_id=target_node_id
@@ -191,7 +202,7 @@ class Playbook(ABC, Generic[T]):  # noqa: UP046
 
     def player(
         self,
-        playbook_cls: type[Playbook[PlaybookOutput]],
+        playbook_cls: type[PlayerPlaybookT],
         **kwargs: ParameterValue | ProxyRef | MappedParameter | SymbolicProxy,
     ) -> PlayerNode:
         """Drafts a player node onto the Pitch for DAG composition with '.after()' or '>>'."""
@@ -222,15 +233,14 @@ class Playbook(ABC, Generic[T]):  # noqa: UP046
 
         return player_node
 
-
     async def kickoff(self) -> Any:
         """Kicks off execution of the drafted DAG player nodes."""
         if not self._drafted_players:
             raise BlueprintError("kickoff() called without drafting any player nodes.")
         return await self._drafted_players[-1]
 
-    def extract_blueprint(self) -> PlaybookBlueprint:
-        """Traces the playbook in dry-run mode to generate the PlaybookBlueprint."""
+    async def extract_blueprint_async(self) -> PlaybookBlueprint:
+        """Asynchronously traces the playbook in dry-run mode to generate the PlaybookBlueprint."""
         self._is_tracing = True
         self._tracing_blueprint = PlaybookBlueprint(
             name=self.__class__.__name__, entry_playbook=self.__class__.__name__
@@ -238,7 +248,7 @@ class Playbook(ABC, Generic[T]):  # noqa: UP046
         self._drafted_players = []
 
         try:
-            play_result: Any = asyncio.run(self.play())
+            play_result: Any = await self.play()
             if self._tracing_blueprint is not None:
                 if isinstance(play_result, (PlayerNode, SymbolicProxy)):
                     self._tracing_blueprint.output_node_id = str(play_result.node_id)
@@ -261,6 +271,20 @@ class Playbook(ABC, Generic[T]):  # noqa: UP046
         if blueprint is None:
             raise BlueprintError("Tracing completed but blueprint was not generated.")
         return blueprint
+
+    def extract_blueprint(self) -> PlaybookBlueprint:
+        """Traces the playbook in dry-run mode to generate the PlaybookBlueprint."""
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(self.extract_blueprint_async())
+        else:
+            import concurrent.futures
+
+            with concurrent.futures.ThreadPoolExecutor() as pool:
+                return pool.submit(
+                    lambda: asyncio.run(self.extract_blueprint_async())
+                ).result()
 
     def _record_traced_node(
         self,
@@ -323,182 +347,71 @@ class Playbook(ABC, Generic[T]):  # noqa: UP046
         self._tracing_blueprint.output_node_id = effective_id
         return SymbolicProxy(node_id=effective_id)
 
+    def _blueprint_from_players(
+        self, players: list[PlayerNode], target_node_id: str | None = None
+    ) -> PlaybookBlueprint:
+        blueprint = PlaybookBlueprint(
+            name=self.__class__.__name__,
+            entry_playbook=self.__class__.__name__,
+            output_node_id=target_node_id or (players[-1].node_id if players else None),
+        )
+        self._tracing_blueprint = blueprint
+        try:
+            for p in players:
+                extra_deps = [dep.node_id for dep in p.depends_on_nodes]
+                self._record_traced_node(
+                    p.playbook_cls,
+                    p.kwargs,
+                    node_id=p.node_id,
+                    extra_deps=extra_deps,
+                    is_mapped=p.is_mapped,
+                )
+        finally:
+            self._tracing_blueprint = None
+        return blueprint
+
     async def _practice_run(
         self,
-        players_list: list[PlayerNode],
+        players_list: list[PlayerNode] | None = None,
         target_node_id: str | None = None,
-    ) -> T:
-        """Executes player nodes sequentially in-process on the local Playbook during practice runs."""
-        from graphlib import TopologicalSorter
-
-        # Build dependency graph and topologically sort nodes before execution
-        node_map: dict[str, PlayerNode] = {p.node_id: p for p in players_list}
-        topological_sorter: TopologicalSorter = TopologicalSorter()
-        for p in players_list:
-            dep_ids: set[str] = {
-                dep.node_id for dep in p.depends_on_nodes if dep.node_id in node_map
-            }
-            for v in p.kwargs.values():
-                if isinstance(v, SymbolicProxy):
-                    v_node_id: str = getattr(v, "_node_id", str(v.node_id))
-                    if v_node_id in node_map:
-                        dep_ids.add(v_node_id)
-                elif isinstance(v, ProxyRef) and v.node_id in node_map:
-                    dep_ids.add(v.node_id)
-                elif (
-                    isinstance(v, MappedParameter)
-                    and isinstance(v.target, ProxyRef)
-                    and v.target.node_id in node_map
-                ):
-                    dep_ids.add(v.target.node_id)
-            topological_sorter.add(p.node_id, *dep_ids)
-
-        ordered_node_ids = list(topological_sorter.static_order())
-        ordered_players = [node_map[nid] for nid in ordered_node_ids if nid in node_map]
-
-        results: dict[str, Any] = {}
-
-        player_node: PlayerNode
-        for player_node in ordered_players:
-            # 1. Resolve parameters from parent outputs
-            resolved_kwargs: dict[str, Any] = dict(player_node.kwargs)
-            param_name: str
-            parameter_value: Any
-            for param_name, parameter_value in list(resolved_kwargs.items()):
-                if isinstance(parameter_value, SymbolicProxy):
-                    target_id: str = getattr(
-                        parameter_value, "_node_id", str(parameter_value.node_id)
-                    )
-                    parent_output: Any = results.get(target_id)
-                    if parent_output is not None:
-                        resolved_kwargs[param_name] = parent_output
-                elif isinstance(parameter_value, ProxyRef):
-                    parent_output = results.get(parameter_value.node_id)
-                    if parent_output is not None:
-                        resolved_kwargs[param_name] = getattr(
-                            parent_output, parameter_value.field, parent_output
-                        )
-                elif isinstance(parameter_value, list):
-                    resolved_list: list[Any] = []
-                    item: Any
-                    for item in parameter_value:
-                        if isinstance(item, ProxyRef):
-                            parent_output = results.get(item.node_id)
-                            if parent_output is not None:
-                                resolved_list.append(
-                                    getattr(parent_output, item.field, parent_output)
-                                )
-                        else:
-                            resolved_list.append(item)
-                    resolved_kwargs[param_name] = resolved_list
-
-            # Fallback: if 'subtask_results' parameter is accepted by play() and unbound, collect outputs from depends_on_nodes
-            import inspect
-
-            play_params: dict[str, inspect.Parameter] = dict(
-                inspect.signature(player_node.playbook_cls.play).parameters
-            )
-            if (
-                "subtask_results" in play_params
-                and (
-                    "subtask_results" not in resolved_kwargs
-                    or not resolved_kwargs["subtask_results"]
-                )
-                and player_node.depends_on_nodes
-            ):
-                dep_outputs: list[PlaybookOutput] = []
-                for dep in player_node.depends_on_nodes:
-                    dep_val = results.get(dep.node_id)
-                    if isinstance(dep_val, list):
-                        dep_outputs.extend(dep_val)
-                    elif isinstance(dep_val, PlaybookOutput):
-                        dep_outputs.append(dep_val)
-                if dep_outputs:
-                    resolved_kwargs["subtask_results"] = dep_outputs
-
-            # 2. Handle dynamic fan-out mapped execution if is_mapped is True
-            if player_node.is_mapped:
-                mapped_param_names: list[str] = []
-                mapped_param_lists: list[list[Any]] = []
-
-                for k, v in list(resolved_kwargs.items()):
-                    if isinstance(v, MappedParameter):
-                        target_val = v.target
-                        if isinstance(target_val, ProxyRef):
-                            parent_out: PlaybookOutput | None = results.get(
-                                target_val.node_id  # type: ignore[arg-type]
-                            )
-                            resolved_list = (
-                                getattr(parent_out, target_val.field, [])
-                                if parent_out
-                                else []
-                            )
-                        elif isinstance(target_val, list):
-                            resolved_list = target_val
-                        else:
-                            resolved_list = [target_val]
-
-                        mapped_param_names.append(k)
-                        mapped_param_lists.append(resolved_list)
-                        resolved_kwargs.pop(k, None)
-
-                mapped_results: list[Any] = []
-                if mapped_param_lists:
-                    zipped_tuples = zip(*mapped_param_lists)
-                    for tuple_item in zipped_tuples:
-                        instance = player_node.playbook_cls(
-                            prepared_run=self._prepared_run, ui=self._ui
-                        )
-                        item_kwargs = dict(resolved_kwargs)
-                        for param_n, val_item in zip(mapped_param_names, tuple_item):
-                            item_kwargs[param_n] = val_item
-
-                        sub_res = await instance.play(
-                            **cast(dict[str, ParameterValue], item_kwargs)
-                        )
-                        res_data = (
-                            sub_res.data if isinstance(sub_res, RunResult) else sub_res
-                        )
-                        if res_data is not None:
-                            mapped_results.append(res_data)
-
-                results[player_node.node_id] = mapped_results
-                continue
-
-            # 3. Instantiate and run standard single player playbook
-            playbook_cls: type[Playbook[PlaybookOutput]] = player_node.playbook_cls
-            single_instance: Playbook[PlaybookOutput] = playbook_cls(
-                prepared_run=self._prepared_run, ui=self._ui
-            )
-            playbook_result: (
-                PlaybookOutput | RunResult[PlaybookOutput] | SymbolicProxy
-            ) = await single_instance.play(
-                **cast(dict[str, ParameterValue], resolved_kwargs)
-            )
-
-            # 4. Store result in practice run score table
-            if (
-                isinstance(playbook_result, RunResult)
-                and playbook_result.data is not None
-            ):
-                results[player_node.node_id] = playbook_result.data
-            elif isinstance(playbook_result, PlaybookOutput):
-                results[player_node.node_id] = playbook_result
-
-        # 4. Return final player output
-        output_node_id: str = target_node_id or (
-            self._tracing_blueprint.output_node_id
-            if (self._tracing_blueprint and self._tracing_blueprint.output_node_id)
-            else players_list[-1].node_id
+    ) -> OutputT:
+        """Executes the Playbook DAG via Prefect in local ephemeral mode."""
+        from prefect.settings import (
+            PREFECT_API_URL,
+            PREFECT_SERVER_EPHEMERAL_ENABLED,
+            temporary_settings,
         )
-        raw_final_output: PlaybookOutput | None = results.get(output_node_id)
-        if raw_final_output is None:
+
+        from pirlo.infrastructure.adapters.orchestrator.prefect_compiler import (
+            PrefectCompiler,
+        )
+
+        active_players = players_list or self._drafted_players
+        if active_players:
+            blueprint: PlaybookBlueprint = self._blueprint_from_players(
+                active_players, target_node_id=target_node_id
+            )
+        else:
+            blueprint = await self.extract_blueprint_async()
+            if target_node_id:
+                blueprint.output_node_id = target_node_id
+
+        with temporary_settings(
+            {
+                PREFECT_API_URL: None,
+                PREFECT_SERVER_EPHEMERAL_ENABLED: True,
+            }
+        ):
+            master_flow = PrefectCompiler.compile(blueprint)
+            raw_result: PlaybookOutput | None = await master_flow()
+
+        if raw_result is None:
+            output_id = target_node_id or blueprint.output_node_id
             raise BlueprintError(
-                f"No execution result found for output node '{output_node_id}'."
+                f"No execution result returned for output node '{output_id}'."
             )
 
-        final_output: T = cast(T, raw_final_output)
-        return final_output
+        return cast(OutputT, raw_result)
 
     # --- Runner Entrypoints (Lazy Infrastructure Delegation) ---
 

@@ -44,7 +44,7 @@ def test_demo_report_dag_blueprint_extraction():
 def test_demo_report_dag_local_practice_run():
     dag = ReportDownloadDAG()
     result: AlertOutput = asyncio.run(
-        dag.play(report_month="2026-09", channel="#testing")
+        dag.run_play(report_month="2026-09", channel="#testing")
     )
 
     assert isinstance(result, AlertOutput)

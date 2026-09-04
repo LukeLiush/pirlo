@@ -1,5 +1,7 @@
 import json
+import os
 import shutil
+from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -165,7 +167,7 @@ class ProfileManager:
             return result
 
         for item in sorted(profiles_dir.iterdir()):
-            if item.is_dir():
+            if item.is_dir() and "_worker_" not in item.name:
                 meta = cls.load_profile_metadata(item.name)
                 if not meta:
                     meta = ProfileMetadata(
@@ -187,3 +189,36 @@ class ProfileManager:
             shutil.rmtree(profile_path)
             return True
         return False
+
+    @classmethod
+    def create_ephemeral_worker_profile(
+        cls, profile_input: str = "default", label: str = ""
+    ) -> tuple[Path, Callable[[], None]]:
+        """Creates an isolated ephemeral copy of a profile for concurrent worker execution."""
+        import uuid
+
+        source_path = cls.resolve_profile_path(profile_input)
+        timestamp_str = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
+        unique_suffix = uuid.uuid4().hex[:6]
+        worker_label = label or f"{timestamp_str}_{os.getpid()}_{unique_suffix}"
+        worker_dir = (
+            cls.get_profiles_dir() / f"{source_path.name}_worker_{worker_label}"
+        )
+        worker_dir.mkdir(parents=True, exist_ok=True)
+
+        # Copy session state if source profile exists
+        if source_path.exists():
+            for item in ("metadata.json", "Cookies", "Local Storage", "Default"):
+                src_item = source_path / item
+                if src_item.exists():
+                    dst_item = worker_dir / item
+                    if src_item.is_dir():
+                        shutil.copytree(src_item, dst_item, dirs_exist_ok=True)
+                    else:
+                        shutil.copy2(src_item, dst_item)
+
+        def cleanup() -> None:
+            if worker_dir.exists():
+                shutil.rmtree(worker_dir, ignore_errors=True)
+
+        return worker_dir, cleanup

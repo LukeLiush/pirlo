@@ -1,15 +1,12 @@
 # src/pirlo/playbooks/autopass/main.py
 from __future__ import annotations
 
-from typing import Annotated, cast
+from typing import Annotated
 
 from pirlo.core.decorators import playbook
 from pirlo.core.instructions import AutopassInstructions
-from pirlo.core.models.blueprint import PlaybookOutput, SymbolicProxy
 from pirlo.core.models.link import LlmLink
 from pirlo.core.models.parameters import LinkParameter, Parameter
-from pirlo.core.models.run import PreparedRun, RunStatus
-from pirlo.core.models.run_result import RunResult
 from pirlo.core.ports.playbook import Playbook, PlayerNode, each
 from pirlo.infrastructure.services.profile_manager import ProfileManager
 from pirlo.playbooks.autopass.models import (
@@ -55,37 +52,23 @@ class AutopassSession(Playbook[AutopassRunOutput]):
         ] = 5,
         *args: object,
         **kwargs: object,
-    ) -> AutopassRunOutput | RunResult[AutopassRunOutput] | SymbolicProxy:
-        prepared: PreparedRun | None = None
-        try:
-            prepared = await self.prepared_run()
-        except RuntimeError:
-            prepared = None
-
+    ) -> PlayerNode:
         if not ProfileManager.exists(profile):
             instruction = AutopassInstructions.PROFILE_MISSING.format(
                 profile=profile, existing_info=""
             )
             self.ui.yellow_card(instruction)
-            return RunResult(
-                run_id=prepared.run_id if prepared else "unknown",
-                status=RunStatus.FAILED,
-                error=str(instruction),
-            )
+            raise ValueError(str(instruction))
 
         if not task:
             self.ui.yellow_card(AutopassInstructions.TASK_REQUIRED)
-            return RunResult(
-                run_id=prepared.run_id if prepared else "unknown",
-                status=RunStatus.FAILED,
-                error=str(AutopassInstructions.TASK_REQUIRED),
-            )
+            raise ValueError(str(AutopassInstructions.TASK_REQUIRED))
 
         # ---------------------------------------------------------------------
         # Step 1: Draft task_decomposer
         # ---------------------------------------------------------------------
         task_decomposer: PlayerNode = self.player(
-            cast(type[Playbook[PlaybookOutput]], DecomposeTaskPlaybook),
+            DecomposeTaskPlaybook,
             task_prompt=task,
             playmaker=playmaker,
         )
@@ -94,7 +77,7 @@ class AutopassSession(Playbook[AutopassRunOutput]):
         # Step 2: Draft subtask_executors using each(...) for dynamic fan-out
         # ---------------------------------------------------------------------
         subtask_executors: PlayerNode = self.player(
-            cast(type[Playbook[PlaybookOutput]], ExecuteSubtaskPlaybook),
+            ExecuteSubtaskPlaybook,
             subtask_prompt=each(task_decomposer.ball.task_prompts),
             profile=profile,
             headless=headless,
@@ -105,8 +88,8 @@ class AutopassSession(Playbook[AutopassRunOutput]):
         # ---------------------------------------------------------------------
         # Step 3: Draft result_summarizer (implicit dataflow + terminal return)
         # ---------------------------------------------------------------------
-        return await self.player(
-            cast(type[Playbook[PlaybookOutput]], MergeResultsPlaybook),
+        return self.player(
+            MergeResultsPlaybook,
             original_task=task,
             subtask_results=subtask_executors.ball,
         )
