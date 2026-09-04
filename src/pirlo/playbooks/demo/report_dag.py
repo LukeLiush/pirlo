@@ -1,10 +1,10 @@
 # src/pirlo/playbooks/demo/report_dag.py
 from __future__ import annotations
 
-from typing import Annotated, Any, cast
+from typing import Annotated, cast
 
 from pirlo.core.decorators import playbook
-from pirlo.core.models.blueprint import PlaybookOutput
+from pirlo.core.models.blueprint import PlaybookOutput, SymbolicProxy
 from pirlo.core.models.parameters import Parameter
 from pirlo.core.ports.playbook import Playbook, PlayerNode
 
@@ -92,7 +92,7 @@ class ReportDownloadDAG(Playbook[AlertOutput]):
         self,
         report_month: Annotated[str, Parameter(help="Target report month")] = "2026-08",
         channel: Annotated[str, Parameter(help="Alert channel name")] = "#finance",
-    ) -> Any:
+    ) -> AlertOutput | SymbolicProxy:
         # Step 1: Download Report
         player_download: PlayerNode = self.player(
             cast(type[Playbook[PlaybookOutput]], DownloadReportPlaybook),

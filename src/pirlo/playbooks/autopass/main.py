@@ -1,11 +1,11 @@
 # src/pirlo/playbooks/autopass/main.py
 from __future__ import annotations
 
-from typing import Annotated, Any, cast
+from typing import Annotated, cast
 
 from pirlo.core.decorators import playbook
 from pirlo.core.instructions import AutopassInstructions
-from pirlo.core.models.blueprint import PlaybookOutput
+from pirlo.core.models.blueprint import PlaybookOutput, SymbolicProxy
 from pirlo.core.models.link import LlmLink
 from pirlo.core.models.parameters import LinkParameter, Parameter
 from pirlo.core.models.run import PreparedRun, RunStatus
@@ -55,7 +55,7 @@ class AutopassSession(Playbook[AutopassRunOutput]):
         ] = 5,
         *args: object,
         **kwargs: object,
-    ) -> Any:
+    ) -> AutopassRunOutput | RunResult[AutopassRunOutput] | SymbolicProxy:
         prepared: PreparedRun | None = None
         try:
             prepared = await self.prepared_run()

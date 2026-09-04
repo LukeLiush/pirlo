@@ -161,7 +161,7 @@ class Playbook(ABC, Generic[T]):  # noqa: UP046
         return self._prepared_run
 
     @abstractmethod
-    async def play(self, *args: Any, **kwargs: Any) -> Any:
+    async def play(self, *args: Any, **kwargs: Any) -> T | RunResult[T] | SymbolicProxy:
         """Core playbook execution logic implemented by subclasses."""
 
     async def _execute_player_node(self, player_node: PlayerNode) -> Any:
@@ -461,7 +461,7 @@ class Playbook(ABC, Generic[T]):  # noqa: UP046
                         mapped_param_lists.append(resolved_list)
                         resolved_kwargs.pop(k, None)
 
-                mapped_results: list[PlaybookOutput] = []
+                mapped_results: list[Any] = []
                 if mapped_param_lists:
                     zipped_tuples = zip(*mapped_param_lists)
                     for tuple_item in zipped_tuples:
@@ -481,7 +481,7 @@ class Playbook(ABC, Generic[T]):  # noqa: UP046
                         if res_data is not None:
                             mapped_results.append(res_data)
 
-                results[player_node.node_id] = mapped_results  # type: ignore[assignment]
+                results[player_node.node_id] = mapped_results
                 continue
 
             # 3. Instantiate and run standard single player playbook
@@ -490,7 +490,7 @@ class Playbook(ABC, Generic[T]):  # noqa: UP046
                 prepared_run=self._prepared_run, ui=self._ui
             )
             playbook_result: (
-                PlaybookOutput | RunResult[PlaybookOutput]
+                PlaybookOutput | RunResult[PlaybookOutput] | SymbolicProxy
             ) = await single_instance.play(
                 **cast(dict[str, ParameterValue], resolved_kwargs)
             )

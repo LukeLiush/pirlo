@@ -13,6 +13,7 @@ from pirlo.core.models.blueprint import (
     BlueprintNode,
     PlaybookBlueprint,
     PlaybookOutput,
+    SymbolicProxy,
 )
 from pirlo.core.models.run_result import RunResult
 from pirlo.core.ports.playbook import Playbook
@@ -62,7 +63,7 @@ class PrefectCompiler:
                 ) -> PlaybookOutput:
                     instance: Playbook[PlaybookOutput] = _cls()
                     playbook_result: (
-                        PlaybookOutput | RunResult[PlaybookOutput]
+                        PlaybookOutput | RunResult[PlaybookOutput] | SymbolicProxy
                     ) = await instance.play(**kwargs)  # type: ignore[arg-type]
                     return (
                         playbook_result.data
