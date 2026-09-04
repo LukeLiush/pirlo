@@ -222,25 +222,6 @@ class Playbook(ABC, Generic[T]):  # noqa: UP046
 
         return player_node
 
-    def players(
-        self,
-        playbook_cls: type[Playbook[PlaybookOutput]],
-        params: ProxyRef | list[Any] | None = None,
-        **kwargs: ParameterValue | ProxyRef | MappedParameter | SymbolicProxy,
-    ) -> PlayerNode:
-        """Convenience helper drafting a dynamic fan-out player node for mapped execution across items."""
-        if params is not None:
-            kwargs["params"] = MappedParameter(params)
-        elif not any(isinstance(v, MappedParameter) for v in kwargs.values()):
-            # Wrap any ProxyRef in kwargs as MappedParameter if explicitly called via self.players(...)
-            first_proxy_key = next(
-                (k for k, v in kwargs.items() if isinstance(v, ProxyRef)), None
-            )
-            if first_proxy_key:
-                kwargs[first_proxy_key] = MappedParameter(
-                    cast(ProxyRef, kwargs[first_proxy_key])
-                )
-        return self.player(playbook_cls, **kwargs)
 
     async def kickoff(self) -> Any:
         """Kicks off execution of the drafted DAG player nodes."""
