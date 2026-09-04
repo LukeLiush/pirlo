@@ -49,14 +49,12 @@ class CheckoutDAGPlaybook(Playbook[CheckoutOutput]):
         player_verify: PlayerNode = self.player(
             VerifyTestPlaybook, user_id=player_login.ball.user_id
         )
-        self.player(
+        return await self.player(
             CheckoutTestPlaybook,
             auth_token=player_login.ball.auth_token,
             verification_code=player_verify.ball.verification_code,
             item_id=item_id,
         ).after(player_login, player_verify)
-
-        return await self.kickoff()
 
 
 def test_extract_blueprint_and_ball_proxy():
@@ -103,7 +101,7 @@ def test_players_group_operator_syntax():
             # Use players() helper with >> operator
             players(p1, p2) >> p3
 
-            return await self.kickoff()
+            return await p3
 
     blueprint: PlaybookBlueprint = GroupDAGPlaybook().extract_blueprint()
     assert len(blueprint.nodes) == 3
@@ -126,14 +124,12 @@ def test_out_of_order_kickoff_topological_sort():
         async def play(self, item_id: str = "item_999") -> CheckoutOutput:
             p1: PlayerNode = self.player(LoginTestPlaybook, profile="dev")
             p2: PlayerNode = self.player(VerifyTestPlaybook, user_id=p1.ball.user_id)
-            self.player(
+            return await self.player(
                 CheckoutTestPlaybook,
                 auth_token=p1.ball.auth_token,
                 verification_code=p2.ball.verification_code,
                 item_id=item_id,
             ).after(p1, p2)
-
-            return await self.kickoff()
 
     result: CheckoutOutput = asyncio.run(OutOfOrderDAG().play())
     assert isinstance(result, CheckoutOutput)

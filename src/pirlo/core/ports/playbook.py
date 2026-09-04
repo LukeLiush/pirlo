@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 from abc import ABC, abstractmethod
+from collections.abc import Generator
 from typing import Any, Generic, TypeVar, cast
 
 from pirlo.core.models.blueprint import (
@@ -42,15 +43,24 @@ class PlayerNode:
         self,
         node_id: str,
         playbook_cls: type[Playbook[PlaybookOutput]],
-        kwargs: dict[str, ParameterValue | ProxyRef | MappedParameter],
+        kwargs: dict[str, ParameterValue | ProxyRef | MappedParameter | SymbolicProxy],
         is_mapped: bool = False,
+        playbook: Playbook[Any] | None = None,
     ) -> None:
         self.node_id: str = node_id
         self.playbook_cls: type[Playbook[PlaybookOutput]] = playbook_cls
-        self.kwargs: dict[str, ParameterValue | ProxyRef | MappedParameter] = kwargs
+        self.kwargs: dict[
+            str, ParameterValue | ProxyRef | MappedParameter | SymbolicProxy
+        ] = kwargs
         self.is_mapped: bool = is_mapped
         self.depends_on_nodes: list[PlayerNode] = []
         self._proxy: SymbolicProxy = SymbolicProxy(node_id=node_id)
+        self._playbook: Playbook[Any] | None = playbook
+
+    def __await__(self) -> Generator[Any, None, Any]:
+        if self._playbook is None:
+            raise BlueprintError("PlayerNode is not bound to a Playbook instance.")
+        return self._playbook._execute_player_node(self).__await__()
 
     @property
     def ball(self) -> SymbolicProxy:
@@ -151,13 +161,38 @@ class Playbook(ABC, Generic[T]):  # noqa: UP046
         return self._prepared_run
 
     @abstractmethod
-    async def play(self, *args: Any, **kwargs: Any) -> T | RunResult[T]:
+    async def play(self, *args: Any, **kwargs: Any) -> Any:
         """Core playbook execution logic implemented by subclasses."""
+
+    async def _execute_player_node(self, player_node: PlayerNode) -> Any:
+        if self._is_tracing:
+            if self._tracing_blueprint is not None:
+                self._tracing_blueprint.output_node_id = player_node.node_id
+            return SymbolicProxy(node_id=player_node.node_id)
+        return await self._practice_run(
+            self._drafted_players, target_node_id=player_node.node_id
+        )
+
+    async def run_play(self, *args: Any, **kwargs: Any) -> T:
+        """Executes play() and auto-evaluates the DAG if a PlayerNode, SymbolicProxy, or None is returned."""
+        play_result: Any = await self.play(*args, **kwargs)
+
+        target_node_id: str | None = None
+        if isinstance(play_result, (PlayerNode, SymbolicProxy)):
+            target_node_id = str(play_result.node_id)
+        elif play_result is None and self._drafted_players:
+            target_node_id = self._drafted_players[-1].node_id
+        elif play_result is not None:
+            return cast(T, play_result)
+
+        return await self._practice_run(
+            self._drafted_players, target_node_id=target_node_id
+        )
 
     def player(
         self,
         playbook_cls: type[Playbook[PlaybookOutput]],
-        **kwargs: ParameterValue | ProxyRef | MappedParameter,
+        **kwargs: ParameterValue | ProxyRef | MappedParameter | SymbolicProxy,
     ) -> PlayerNode:
         """Drafts a player node onto the Pitch for DAG composition with '.after()' or '>>'."""
         step_index: int = len(self._drafted_players) + 1
@@ -168,15 +203,30 @@ class Playbook(ABC, Generic[T]):  # noqa: UP046
             playbook_cls=playbook_cls,
             kwargs=kwargs,
             is_mapped=is_mapped,
+            playbook=self,
         )
         self._drafted_players.append(player_node)
+
+        if self._is_tracing:
+            extra_dependencies: list[str] = [
+                dependency_node.node_id
+                for dependency_node in player_node.depends_on_nodes
+            ]
+            self._record_traced_node(
+                playbook_cls,
+                kwargs,
+                node_id=node_id,
+                extra_deps=extra_dependencies,
+                is_mapped=is_mapped,
+            )
+
         return player_node
 
     def players(
         self,
         playbook_cls: type[Playbook[PlaybookOutput]],
         params: ProxyRef | list[Any] | None = None,
-        **kwargs: ParameterValue | ProxyRef | MappedParameter,
+        **kwargs: ParameterValue | ProxyRef | MappedParameter | SymbolicProxy,
     ) -> PlayerNode:
         """Convenience helper drafting a dynamic fan-out player node for mapped execution across items."""
         if params is not None:
@@ -192,38 +242,11 @@ class Playbook(ABC, Generic[T]):  # noqa: UP046
                 )
         return self.player(playbook_cls, **kwargs)
 
-    async def kickoff(self) -> T | SymbolicProxy:
-        """Kicks off execution of the drafted DAG player nodes.
-
-        Returns strongly-typed output T in execution mode, or SymbolicProxy in tracing mode.
-        """
+    async def kickoff(self) -> Any:
+        """Kicks off execution of the drafted DAG player nodes."""
         if not self._drafted_players:
             raise BlueprintError("kickoff() called without drafting any player nodes.")
-
-        if self._is_tracing:
-            if self._tracing_blueprint is None:
-                raise BlueprintError(
-                    "Tracing mode is active but _tracing_blueprint is None."
-                )
-
-            player_node: PlayerNode
-            for player_node in self._drafted_players:
-                extra_dependencies: list[str] = [
-                    dependency_node.node_id
-                    for dependency_node in player_node.depends_on_nodes
-                ]
-                self._record_traced_node(
-                    player_node.playbook_cls,
-                    player_node.kwargs,
-                    node_id=player_node.node_id,
-                    extra_deps=extra_dependencies,
-                    is_mapped=player_node.is_mapped,
-                )
-            terminal_player_node: PlayerNode = self._drafted_players[-1]
-            return SymbolicProxy(node_id=terminal_player_node.node_id)
-
-        # In Local CLI execution mode: run practice run locally in-process
-        return await self._practice_run(self._drafted_players)
+        return await self._drafted_players[-1]
 
     def extract_blueprint(self) -> PlaybookBlueprint:
         """Traces the playbook in dry-run mode to generate the PlaybookBlueprint."""
@@ -234,7 +257,17 @@ class Playbook(ABC, Generic[T]):  # noqa: UP046
         self._drafted_players = []
 
         try:
-            asyncio.run(self.play())
+            play_result: Any = asyncio.run(self.play())
+            if self._tracing_blueprint is not None:
+                if isinstance(play_result, (PlayerNode, SymbolicProxy)):
+                    self._tracing_blueprint.output_node_id = str(play_result.node_id)
+                elif (
+                    self._tracing_blueprint.output_node_id is None
+                    and self._drafted_players
+                ):
+                    self._tracing_blueprint.output_node_id = self._drafted_players[
+                        -1
+                    ].node_id
         except Exception as error:
             raise BlueprintError(
                 f"Failed to trace blueprint for {self.__class__.__name__}: {error}"
@@ -251,7 +284,7 @@ class Playbook(ABC, Generic[T]):  # noqa: UP046
     def _record_traced_node(
         self,
         playbook_cls: type[Playbook[PlaybookOutput]],
-        kwargs: dict[str, ParameterValue | ProxyRef | MappedParameter],
+        kwargs: dict[str, ParameterValue | ProxyRef | MappedParameter | SymbolicProxy],
         node_id: str | None = None,
         extra_deps: list[str] | None = None,
         is_mapped: bool = False,
@@ -268,7 +301,7 @@ class Playbook(ABC, Generic[T]):  # noqa: UP046
         depends_on: set[str] = set(extra_deps or [])
 
         param_name: str
-        parameter_value: ParameterValue | ProxyRef | MappedParameter
+        parameter_value: ParameterValue | ProxyRef | MappedParameter | SymbolicProxy
         for param_name, parameter_value in kwargs.items():
             if isinstance(parameter_value, MappedParameter):
                 target = parameter_value.target
@@ -278,6 +311,15 @@ class Playbook(ABC, Generic[T]):  # noqa: UP046
                         source_field=target.field,
                     )
                     depends_on.add(target.node_id)
+            elif isinstance(parameter_value, SymbolicProxy):
+                proxy_node_id: str = getattr(
+                    parameter_value, "_node_id", str(parameter_value.node_id)
+                )
+                param_bindings[param_name] = ParamBinding(
+                    source_node_id=proxy_node_id,
+                    source_field="",
+                )
+                depends_on.add(proxy_node_id)
             elif isinstance(parameter_value, ProxyRef):
                 param_bindings[param_name] = ParamBinding(
                     source_node_id=parameter_value.node_id,
@@ -300,7 +342,11 @@ class Playbook(ABC, Generic[T]):  # noqa: UP046
         self._tracing_blueprint.output_node_id = effective_id
         return SymbolicProxy(node_id=effective_id)
 
-    async def _practice_run(self, players_list: list[PlayerNode]) -> T:
+    async def _practice_run(
+        self,
+        players_list: list[PlayerNode],
+        target_node_id: str | None = None,
+    ) -> T:
         """Executes player nodes sequentially in-process on the local Playbook during practice runs."""
         from graphlib import TopologicalSorter
 
@@ -312,7 +358,11 @@ class Playbook(ABC, Generic[T]):  # noqa: UP046
                 dep.node_id for dep in p.depends_on_nodes if dep.node_id in node_map
             }
             for v in p.kwargs.values():
-                if isinstance(v, ProxyRef) and v.node_id in node_map:
+                if isinstance(v, SymbolicProxy):
+                    v_node_id: str = getattr(v, "_node_id", str(v.node_id))
+                    if v_node_id in node_map:
+                        dep_ids.add(v_node_id)
+                elif isinstance(v, ProxyRef) and v.node_id in node_map:
                     dep_ids.add(v.node_id)
                 elif (
                     isinstance(v, MappedParameter)
@@ -325,7 +375,7 @@ class Playbook(ABC, Generic[T]):  # noqa: UP046
         ordered_node_ids = list(topological_sorter.static_order())
         ordered_players = [node_map[nid] for nid in ordered_node_ids if nid in node_map]
 
-        results: dict[str, PlaybookOutput] = {}
+        results: dict[str, Any] = {}
 
         player_node: PlayerNode
         for player_node in ordered_players:
@@ -334,10 +384,15 @@ class Playbook(ABC, Generic[T]):  # noqa: UP046
             param_name: str
             parameter_value: Any
             for param_name, parameter_value in list(resolved_kwargs.items()):
-                if isinstance(parameter_value, ProxyRef):
-                    parent_output: PlaybookOutput | None = results.get(
-                        parameter_value.node_id
+                if isinstance(parameter_value, SymbolicProxy):
+                    target_id: str = getattr(
+                        parameter_value, "_node_id", str(parameter_value.node_id)
                     )
+                    parent_output: Any = results.get(target_id)
+                    if parent_output is not None:
+                        resolved_kwargs[param_name] = parent_output
+                elif isinstance(parameter_value, ProxyRef):
+                    parent_output = results.get(parameter_value.node_id)
                     if parent_output is not None:
                         resolved_kwargs[param_name] = getattr(
                             parent_output, parameter_value.field, parent_output
@@ -450,7 +505,7 @@ class Playbook(ABC, Generic[T]):  # noqa: UP046
                 results[player_node.node_id] = playbook_result
 
         # 4. Return final player output
-        output_node_id: str = (
+        output_node_id: str = target_node_id or (
             self._tracing_blueprint.output_node_id
             if (self._tracing_blueprint and self._tracing_blueprint.output_node_id)
             else players_list[-1].node_id

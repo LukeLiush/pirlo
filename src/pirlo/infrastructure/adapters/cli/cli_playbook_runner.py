@@ -131,7 +131,7 @@ class CliPlaybookRunner:
         )
 
         async def _play() -> RunResult[Any]:
-            raw_result: Any = await bound_playbook.play(**prepared_run.parameters)
+            raw_result: Any = await bound_playbook.run_play(**prepared_run.parameters)
             if isinstance(raw_result, RunResult):
                 final_run_result: RunResult[Any] = raw_result
             else:

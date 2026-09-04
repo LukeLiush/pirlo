@@ -1,7 +1,7 @@
 # src/pirlo/playbooks/demo/report_dag.py
 from __future__ import annotations
 
-from typing import Annotated, cast
+from typing import Annotated, Any, cast
 
 from pirlo.core.decorators import playbook
 from pirlo.core.models.blueprint import PlaybookOutput
@@ -92,7 +92,7 @@ class ReportDownloadDAG(Playbook[AlertOutput]):
         self,
         report_month: Annotated[str, Parameter(help="Target report month")] = "2026-08",
         channel: Annotated[str, Parameter(help="Alert channel name")] = "#finance",
-    ) -> AlertOutput:
+    ) -> Any:
         # Step 1: Download Report
         player_download: PlayerNode = self.player(
             cast(type[Playbook[PlaybookOutput]], DownloadReportPlaybook),
@@ -105,19 +105,13 @@ class ReportDownloadDAG(Playbook[AlertOutput]):
             file_path=player_download.ball.file_path,
         ).after(player_download)
 
-        # Step 3: Send Alert (depends on player_download & player_extract)
-        self.player(
+        # Step 3: Send Alert (depends on player_download & player_extract) and return terminal node
+        return await self.player(
             cast(type[Playbook[PlaybookOutput]], SendAlertPlaybook),
             report_date=player_download.ball.report_date,
             status_summary=player_extract.ball.status_summary,
             channel=channel,
         ).after(player_download, player_extract)
-
-        # Kickoff the match!
-        return cast(
-            AlertOutput,
-            await self.kickoff(),
-        )
 
 
 if __name__ == "__main__":

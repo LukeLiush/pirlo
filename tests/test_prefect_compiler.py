@@ -54,14 +54,12 @@ class PrefectCompilerDAGPlaybook(Playbook[CheckoutOutput]):
         p2: PlayerNode = self.player(
             VerifyCompilerTestPlaybook, user_id=p1.ball.user_id
         )
-        self.player(
+        return await self.player(
             CheckoutCompilerTestPlaybook,
             auth_token=p1.ball.auth_token,
             verification_code=p2.ball.verification_code,
             item_id=item_id,
         ).after(p1, p2)
-
-        return await self.kickoff()
 
 
 def test_prefect_compiler_flow_generation():

@@ -1,7 +1,7 @@
 # src/pirlo/playbooks/autopass/main.py
 from __future__ import annotations
 
-from typing import Annotated, cast
+from typing import Annotated, Any, cast
 
 from pirlo.core.decorators import playbook
 from pirlo.core.instructions import AutopassInstructions
@@ -55,7 +55,7 @@ class AutopassSession(Playbook[AutopassRunOutput]):
         ] = 5,
         *args: object,
         **kwargs: object,
-    ) -> AutopassRunOutput | RunResult[AutopassRunOutput]:
+    ) -> Any:
         prepared: PreparedRun | None = None
         try:
             prepared = await self.prepared_run()
@@ -103,22 +103,13 @@ class AutopassSession(Playbook[AutopassRunOutput]):
         )
 
         # ---------------------------------------------------------------------
-        # Step 3: Draft result_summarizer and wire DAG dependencies with '>>'
+        # Step 3: Draft result_summarizer (implicit dataflow + terminal return)
         # ---------------------------------------------------------------------
-        result_summarizer: PlayerNode = self.player(
+        return await self.player(
             cast(type[Playbook[PlaybookOutput]], MergeResultsPlaybook),
             original_task=task,
+            subtask_results=subtask_executors.ball,
         )
-
-        # Wire passing line: task_decomposer >> subtask_executors >> result_summarizer
-        task_decomposer >> subtask_executors >> result_summarizer
-
-        # Single static kickoff pass!
-        final_output: AutopassRunOutput = cast(
-            AutopassRunOutput,
-            await self.kickoff(),
-        )
-        return final_output
 
 
 if __name__ == "__main__":
