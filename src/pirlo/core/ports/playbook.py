@@ -301,11 +301,34 @@ class Playbook(ABC, Generic[T]):  # noqa: UP046
         return SymbolicProxy(node_id=effective_id)
 
     async def _practice_run(self, players_list: list[PlayerNode]) -> T:
-        """Executes player nodes sequentially in-process on the local Pitch during CLI practice runs."""
+        """Executes player nodes sequentially in-process on the local Playbook during practice runs."""
+        from graphlib import TopologicalSorter
+
+        # Build dependency graph and topologically sort nodes before execution
+        node_map: dict[str, PlayerNode] = {p.node_id: p for p in players_list}
+        topological_sorter: TopologicalSorter = TopologicalSorter()
+        for p in players_list:
+            dep_ids: set[str] = {
+                dep.node_id for dep in p.depends_on_nodes if dep.node_id in node_map
+            }
+            for v in p.kwargs.values():
+                if isinstance(v, ProxyRef) and v.node_id in node_map:
+                    dep_ids.add(v.node_id)
+                elif (
+                    isinstance(v, MappedParameter)
+                    and isinstance(v.target, ProxyRef)
+                    and v.target.node_id in node_map
+                ):
+                    dep_ids.add(v.target.node_id)
+            topological_sorter.add(p.node_id, *dep_ids)
+
+        ordered_node_ids = list(topological_sorter.static_order())
+        ordered_players = [node_map[nid] for nid in ordered_node_ids if nid in node_map]
+
         results: dict[str, PlaybookOutput] = {}
 
         player_node: PlayerNode
-        for player_node in players_list:
+        for player_node in ordered_players:
             # 1. Resolve parameters from parent outputs
             resolved_kwargs: dict[str, Any] = dict(player_node.kwargs)
             param_name: str
@@ -427,11 +450,15 @@ class Playbook(ABC, Generic[T]):  # noqa: UP046
                 results[player_node.node_id] = playbook_result
 
         # 4. Return final player output
-        last_node_id: str = players_list[-1].node_id
-        raw_final_output: PlaybookOutput | None = results.get(last_node_id)
+        output_node_id: str = (
+            self._tracing_blueprint.output_node_id
+            if (self._tracing_blueprint and self._tracing_blueprint.output_node_id)
+            else players_list[-1].node_id
+        )
+        raw_final_output: PlaybookOutput | None = results.get(output_node_id)
         if raw_final_output is None:
             raise BlueprintError(
-                f"No execution result found for last player node '{last_node_id}'."
+                f"No execution result found for output node '{output_node_id}'."
             )
 
         final_output: T = cast(T, raw_final_output)

@@ -116,7 +116,13 @@ class AutopassSession(Playbook[AutopassRunOutput]):
         # Single static kickoff pass!
         final_output: AutopassRunOutput = cast(
             AutopassRunOutput,
-            await self.kickoff([task_decomposer, subtask_executors, result_summarizer]),
+            await self.kickoff(
+                [
+                    task_decomposer,
+                    subtask_executors,
+                    result_summarizer,
+                ]
+            ),
         )
         return final_output
 

@@ -119,3 +119,23 @@ def test_practice_run_local_execution():
 
     assert isinstance(result, CheckoutOutput)
     assert result.order_id == "order_item_777_token_test_123"
+
+
+def test_out_of_order_kickoff_topological_sort():
+    class OutOfOrderDAG(Playbook[CheckoutOutput]):
+        async def play(self, item_id: str = "item_999") -> CheckoutOutput:
+            p1 = self.player(LoginTestPlaybook, profile="dev")
+            p2 = self.player(VerifyTestPlaybook, user_id=p1.ball.user_id)
+            p3 = self.player(
+                CheckoutTestPlaybook,
+                auth_token=p1.ball.auth_token,
+                verification_code=p2.ball.verification_code,
+                item_id=item_id,
+            ).after(p1, p2)
+
+            # Pass nodes out-of-order in kickoff: p2 comes before p1, but p3 is final target
+            return await self.kickoff([p2, p1, p3])
+
+    result: CheckoutOutput = asyncio.run(OutOfOrderDAG().play())
+    assert isinstance(result, CheckoutOutput)
+    assert result.order_id == "order_item_999_token_test_123"
