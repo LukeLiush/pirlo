@@ -49,7 +49,7 @@ async def test_prefect_runner_ephemeral_execution():
     workflow: PrefectWorkflow = compiler.compile(blueprint)
     assert isinstance(workflow, PrefectWorkflow)
 
-    runner = PrefectRunner(mode="ephemeral")
+    runner = PrefectRunner(compiler=compiler, mode="ephemeral")
     result = await runner.run(workflow)
 
     assert isinstance(result, StepTwoOutput)
@@ -61,7 +61,8 @@ async def test_prefect_runner_run_blueprint_shortcut():
     play_instance = StepTwoPlay()
     blueprint: PlayBlueprint = play_instance.extract_blueprint()
 
-    runner = PrefectRunner(mode="ephemeral")
+    compiler = PrefectCompiler()
+    runner = PrefectRunner(compiler=compiler, mode="ephemeral")
     result = await runner.run_blueprint(blueprint)
 
     assert isinstance(result, StepTwoOutput)

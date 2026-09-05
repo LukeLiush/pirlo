@@ -30,13 +30,13 @@ class PrefectRunner(PlayRunner[PrefectWorkflow]):
 
     def __init__(
         self,
+        compiler: PrefectCompiler,
         mode: Literal["auto", "ephemeral", "server"] = "auto",
         server_url: str | None = None,
-        compiler: PrefectCompiler | None = None,
     ) -> None:
+        self.compiler: PrefectCompiler = compiler
         self.mode: Literal["auto", "ephemeral", "server"] = mode
         self.server_url: str | None = server_url
-        self.compiler: PrefectCompiler = compiler or PrefectCompiler()
 
     async def run(
         self,
