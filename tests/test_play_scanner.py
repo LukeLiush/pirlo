@@ -1,7 +1,7 @@
 from pathlib import Path
 
-from pirlo.infrastructure.services.playbook_scanner import (
-    PlaybookScanner,
+from pirlo.infrastructure.services.play_scanner import (
+    PlayScanner,
 )
 
 
@@ -9,7 +9,7 @@ def test_scan_existing_playbooks_dir():
     pkg_playbooks_dir = (
         Path(__file__).resolve().parents[1] / "src" / "pirlo" / "playbooks"
     )
-    specs = PlaybookScanner.scan_directory(pkg_playbooks_dir)
+    specs = PlayScanner.scan_directory(pkg_playbooks_dir)
 
     assert "login" in specs
     assert "dummy" in specs or "demo_dummy" in specs
@@ -39,7 +39,7 @@ def test_scan_file_missing_name_warning(tmp_path: Path, capsys):
         "    pass\n"
     )
 
-    spec = PlaybookScanner.scan_file(bad_file, root_dir=tmp_path)
+    spec = PlayScanner.scan_file(bad_file, root_dir=tmp_path)
     assert spec is None
 
     stderr = capsys.readouterr().err
@@ -55,7 +55,7 @@ def test_scan_file_extra_kwargs(tmp_path: Path):
         "    pass\n"
     )
 
-    spec = PlaybookScanner.scan_file(custom_file, root_dir=tmp_path)
+    spec = PlayScanner.scan_file(custom_file, root_dir=tmp_path)
     assert spec is not None
     assert spec.name == "custom"
     assert spec.description == "Custom task"
@@ -64,9 +64,7 @@ def test_scan_file_extra_kwargs(tmp_path: Path):
 
 
 def test_should_skip_file():
-    assert PlaybookScanner._should_skip_file(Path("__init__.py")) is True
-    assert PlaybookScanner._should_skip_file(Path("_private.py")) is True
-    assert PlaybookScanner._should_skip_file(Path("tests/test_playbook.py")) is True
-    assert (
-        PlaybookScanner._should_skip_file(Path("src/pirlo/playbooks/login.py")) is False
-    )
+    assert PlayScanner._should_skip_file(Path("__init__.py")) is True
+    assert PlayScanner._should_skip_file(Path("_private.py")) is True
+    assert PlayScanner._should_skip_file(Path("tests/test_playbook.py")) is True
+    assert PlayScanner._should_skip_file(Path("src/pirlo/playbooks/login.py")) is False

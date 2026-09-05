@@ -216,8 +216,8 @@ class PrefectCompiler(
                     ):
                         return cast(type[Any], obj)
 
-        # 2. Fallback to PlaybookScanner disk scanner
-        from pirlo.infrastructure.services.playbook_scanner import PlaybookScanner
+        # 2. Fallback to PlayScanner disk scanner
+        from pirlo.infrastructure.services.play_scanner import PlayScanner
 
-        class_object: type[object] = PlaybookScanner().get_playbook_class(playbook_name)
+        class_object: type[object] = PlayScanner().get_play_class(playbook_name)
         return cast(type[Any], class_object)

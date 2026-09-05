@@ -3,9 +3,9 @@ import sys
 import tomllib
 from pathlib import Path
 
-from pirlo.infrastructure.services.playbook_scanner import (
-    PlaybookScanner,
-    PlaybookSpec,
+from pirlo.infrastructure.services.play_scanner import (
+    PlayScanner,
+    PlaySpec,
 )
 
 
@@ -39,19 +39,19 @@ def load_pyproject_playbooks() -> dict[str, str]:
     return playbooks
 
 
-def load_all_playbooks() -> dict[str, PlaybookSpec]:
+def load_all_playbooks() -> dict[str, PlaySpec]:
     """Discovers playbooks via AST scanning with pyproject.toml fallbacks."""
-    specs: dict[str, PlaybookSpec] = {}
+    specs: dict[str, PlaySpec] = {}
 
     # 1. AST Auto-Scan built-in & local workspace playbooks
     import pirlo
 
     pkg_playbooks_dir: Path = Path(pirlo.__file__).resolve().parent / "playbooks"
-    specs.update(PlaybookScanner.scan_directory(pkg_playbooks_dir))
+    specs.update(PlayScanner.scan_directory(pkg_playbooks_dir))
 
     cwd_playbooks_dir: Path = Path.cwd() / "playbooks"
     if cwd_playbooks_dir.exists() and cwd_playbooks_dir != pkg_playbooks_dir:
-        specs.update(PlaybookScanner.scan_directory(cwd_playbooks_dir))
+        specs.update(PlayScanner.scan_directory(cwd_playbooks_dir))
 
     # 2. Fallback: Pyproject.toml overrides for 3rd-party installed playbooks
     pyproject_playbooks: dict[str, str] = load_pyproject_playbooks()
@@ -60,7 +60,7 @@ def load_all_playbooks() -> dict[str, PlaybookSpec]:
             module_name: str
             class_name: str
             module_name, class_name = entrypoint.split(":")
-            specs[name] = PlaybookSpec(
+            specs[name] = PlaySpec(
                 name=name,
                 description="",
                 module_path=module_name,
@@ -79,7 +79,7 @@ def main() -> None:
     if cwd_dir not in sys.path:
         sys.path.insert(0, cwd_dir)
 
-    specs: dict[str, PlaybookSpec] = load_all_playbooks()
+    specs: dict[str, PlaySpec] = load_all_playbooks()
 
     if len(sys.argv) < 2 or sys.argv[1] in ("-h", "--help"):
         print("Usage: pirlo <command> [<args>]")
@@ -89,7 +89,7 @@ def main() -> None:
         print("  run           - Manage execution run history (list, show)")
         if specs:
             command_name: str
-            spec: PlaybookSpec
+            spec: PlaySpec
             for command_name, spec in sorted(specs.items()):
                 desc_str: str = f" - {spec.description}" if spec.description else ""
                 print(f"  {command_name:<13}{desc_str}")
@@ -147,7 +147,7 @@ def main() -> None:
         target_playbook = sys.argv[0].split(" ")[1]
 
     if target_playbook in specs:
-        target_spec: PlaybookSpec = specs[target_playbook]
+        target_spec: PlaySpec = specs[target_playbook]
         try:
             local_src_dir: str = str(Path.cwd() / "src")
             local_cwd_dir: str = str(Path.cwd())

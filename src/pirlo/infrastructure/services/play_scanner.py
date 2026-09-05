@@ -9,8 +9,8 @@ type DecoratorValue = str | int | float | bool
 
 
 @dataclass(frozen=True)
-class PlaybookSpec:
-    """Immutable data record representing a discovered playbook specification."""
+class PlaySpec:
+    """Immutable data record representing a discovered play specification."""
 
     name: str
     description: str
@@ -20,13 +20,13 @@ class PlaybookSpec:
     extra_kwargs: dict[str, DecoratorValue] = field(default_factory=dict)
 
 
-class PlaybookScanner:
-    """Fast AST scanner that recursively discovers @playbook definitions without importing code."""
+class PlayScanner:
+    """Fast AST scanner that recursively discovers @play definitions without importing code."""
 
     @classmethod
-    def scan_directory(cls, directory: Path) -> dict[str, PlaybookSpec]:
-        """Recursively traverses directory for .py files containing @playbook decorators."""
-        specs: dict[str, PlaybookSpec] = {}
+    def scan_directory(cls, directory: Path) -> dict[str, PlaySpec]:
+        """Recursively traverses directory for .py files containing @play decorators."""
+        specs: dict[str, PlaySpec] = {}
         if not directory.exists():
             return specs
 
@@ -34,7 +34,7 @@ class PlaybookScanner:
         for py_file in directory.glob("**/*.py"):
             if cls._should_skip_file(py_file):
                 continue
-            file_specs: list[PlaybookSpec] = cls.scan_file_specs(
+            file_specs: list[PlaySpec] = cls.scan_file_specs(
                 py_file, root_dir=directory
             )
             for spec in file_specs:
@@ -42,8 +42,8 @@ class PlaybookScanner:
         return specs
 
     @classmethod
-    def get_playbook_class(cls, playbook_name: str) -> type[object]:
-        """Dynamically imports and returns the Python class for a given playbook_name."""
+    def get_play_class(cls, play_name: str) -> type[object]:
+        """Dynamically imports and returns the Python class for a given play_name."""
         import importlib
 
         from pirlo.core.config import get_workspace_path
@@ -51,22 +51,24 @@ class PlaybookScanner:
         workspace_path = get_workspace_path()
         playbooks_dir = workspace_path / "src" / "pirlo" / "playbooks"
         specs = cls.scan_directory(playbooks_dir)
-        spec = specs.get(playbook_name)
+        spec = specs.get(play_name)
         if not spec:
-            raise KeyError(f"Playbook '{playbook_name}' not found.")
+            raise KeyError(f"Play '{play_name}' not found.")
 
         module = importlib.import_module(spec.module_path)
         return getattr(module, spec.class_name)  # type: ignore[no-any-return]
 
+    get_playbook_class = get_play_class
+
     @classmethod
-    def scan_file(cls, file_path: Path, root_dir: Path) -> PlaybookSpec | None:
-        """Backward-compatible helper returning the first playbook spec in a single python file."""
-        specs: list[PlaybookSpec] = cls.scan_file_specs(file_path, root_dir=root_dir)
+    def scan_file(cls, file_path: Path, root_dir: Path) -> PlaySpec | None:
+        """Backward-compatible helper returning the first play spec in a single python file."""
+        specs: list[PlaySpec] = cls.scan_file_specs(file_path, root_dir=root_dir)
         return specs[0] if specs else None
 
     @classmethod
-    def scan_file_specs(cls, file_path: Path, root_dir: Path) -> list[PlaybookSpec]:
-        """Main orchestrator for scanning ALL @playbook definitions in a single python file AST."""
+    def scan_file_specs(cls, file_path: Path, root_dir: Path) -> list[PlaySpec]:
+        """Main orchestrator for scanning ALL @play definitions in a single python file AST."""
         tree: ast.AST | None = cls._parse_ast_tree(file_path)
         if not tree:
             return []
@@ -77,7 +79,7 @@ class PlaybookScanner:
         if not matches:
             return []
 
-        results: list[PlaybookSpec] = []
+        results: list[PlaySpec] = []
         class_node: ast.ClassDef
         decorator_call: ast.Call
         for class_node, decorator_call in matches:
@@ -85,12 +87,12 @@ class PlaybookScanner:
                 decorator_call
             )
 
-            # Strict validation: 'name' keyword argument is required in @playbook(name="...")
+            # Strict validation: 'name' keyword argument is required in @play(name="...")
             name_val: DecoratorValue | None = kwargs.pop("name", None)
             if not isinstance(name_val, str) or not name_val:
                 sys.stderr.write(
-                    f"Warning: Playbook class '{class_node.name}' in {file_path} "
-                    "has a @playbook decorator missing the required 'name' argument.\n"
+                    f"Warning: Play class '{class_node.name}' in {file_path} "
+                    "has a @play decorator missing the required 'name' argument.\n"
                 )
                 continue
 
@@ -101,7 +103,7 @@ class PlaybookScanner:
             module_path: str = cls._resolve_module_path(file_path, root_dir)
 
             results.append(
-                PlaybookSpec(
+                PlaySpec(
                     name=name,
                     description=description,
                     module_path=module_path,
@@ -135,7 +137,7 @@ class PlaybookScanner:
     def _find_all_playbook_decorator_matches(
         cls, tree: ast.AST
     ) -> list[tuple[ast.ClassDef, ast.Call]]:
-        """Traverses AST nodes to locate ALL ClassDefs with @playbook(...) decorators."""
+        """Traverses AST nodes to locate ALL ClassDefs with @play(...) decorators."""
         matches: list[tuple[ast.ClassDef, ast.Call]] = []
         ast_node: ast.AST
         for ast_node in ast.walk(tree):
@@ -150,7 +152,7 @@ class PlaybookScanner:
 
     @classmethod
     def _is_playbook_decorator(cls, decorator_node: ast.AST) -> bool:
-        """Checks if an AST decorator node matches @playbook(...) or @module.playbook(...)."""
+        """Checks if an AST decorator node matches @playbook(...) or @play(...)."""
         if not isinstance(decorator_node, ast.Call):
             return False
         # Case 1: @playbook(...) or @play(...) -> func is ast.Name
@@ -169,7 +171,7 @@ class PlaybookScanner:
     def _extract_decorator_kwargs(
         cls, decorator_call: ast.Call
     ) -> dict[str, DecoratorValue]:
-        """Generic future-proof extraction of keyword arguments from @playbook(...) call."""
+        """Generic future-proof extraction of keyword arguments from @play(...) call."""
         kwargs: dict[str, DecoratorValue] = {}
 
         kw: ast.keyword
@@ -195,6 +197,6 @@ class PlaybookScanner:
         return ".".join(module_parts_fallback)
 
 
-# Play terminology aliases
-PlaySpec = PlaybookSpec
-PlayScanner = PlaybookScanner
+# Backward-compatibility aliases
+PlaybookSpec = PlaySpec
+PlaybookScanner = PlayScanner
