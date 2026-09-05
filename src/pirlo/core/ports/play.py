@@ -105,7 +105,7 @@ class Play[OutputT](ABC):
         blueprint: PlayBlueprint = BlueprintExtractor.extract_from_play(
             cls, user_kwargs=kwargs
         )
-        play_runner: PlayRunner[PlayBlueprint] = PlayRunnerFactory.get_runner(runner)
+        play_runner: PlayRunner = PlayRunnerFactory.get_runner(runner)
         raw_result: PlayOutput | None = await play_runner.run(blueprint)
         return cast(OutputT, raw_result)
 

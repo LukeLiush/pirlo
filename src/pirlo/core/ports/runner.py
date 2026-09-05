@@ -4,16 +4,16 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any
 
-from pirlo.core.models.blueprint import PlayOutput
+from pirlo.core.models.blueprint import PlayBlueprint, PlayOutput
 
 
-class PlayRunner[WorkflowT](ABC):
+class PlayRunner(ABC):
     """Abstract Port for executing a workflow model."""
 
     @abstractmethod
     async def run(
         self,
-        workflow: WorkflowT,
+        blueprint: PlayBlueprint,
         **kwargs: Any,
     ) -> PlayOutput | None:
         """Executes the workflow and returns the output of the terminal Play node."""

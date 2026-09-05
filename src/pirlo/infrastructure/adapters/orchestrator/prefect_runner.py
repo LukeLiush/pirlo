@@ -25,23 +25,23 @@ from pirlo.infrastructure.adapters.orchestrator.prefect_model import (
 logger = logging.getLogger(__name__)
 
 
-class PrefectRunner(PlayRunner[PlayBlueprint]):
+class PrefectRunner(PlayRunner):
     """Executes a PrefectWorkflow in ephemeral or connected server mode."""
 
     def __init__(
-            self,
-            compiler: PrefectCompiler,
-            mode: Literal["auto", "ephemeral", "server"] = "auto",
-            server_url: str | None = None,
+        self,
+        compiler: PrefectCompiler,
+        mode: Literal["auto", "ephemeral", "server"] = "auto",
+        server_url: str | None = None,
     ) -> None:
         self.compiler: PrefectCompiler = compiler
         self.mode: Literal["auto", "ephemeral", "server"] = mode
         self.server_url: str | None = server_url
 
     async def run(
-            self,
-            blueprint: PlayBlueprint,
-            **kwargs: Any,
+        self,
+        blueprint: PlayBlueprint,
+        **kwargs: Any,
     ) -> PlayOutput | None:
         """Executes the compiled PrefectWorkflow model."""
         workflow: PrefectWorkflow = self.compiler.compile(blueprint)

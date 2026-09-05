@@ -94,9 +94,7 @@ class CliPlayRunner:
             if play_invocation.orchestrator_args
             else "prefect"
         )
-        runner_instance: PlayRunner[PlayBlueprint] = (
-            PlayRunnerFactory.get_runner(runner_name)
-        )
+        runner_instance: PlayRunner = PlayRunnerFactory.get_runner(runner_name)
 
         async def _play() -> RunResult[Any]:
             blueprint: PlayBlueprint = BlueprintExtractor.extract_from_play(
