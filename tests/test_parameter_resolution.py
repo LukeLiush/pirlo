@@ -5,17 +5,17 @@ from typing import Annotated, Any
 
 import pytest
 
-from pirlo.core.decorators import playbook
+from pirlo.core.decorators import play
 from pirlo.core.models.parameters import Parameter
 from pirlo.core.models.run_result import RunResult
-from pirlo.core.ports.playbook import Playbook
+from pirlo.core.ports.play import Play
 
 
-@playbook(
+@play(
     name="dummy_resolution",
     description="Session subclass for testing parameter resolution.",
 )
-class DummyResolutionSession(Playbook):
+class DummyResolutionSession(Play[RunResult[Any]]):
     """Session subclass for testing parameter resolution."""
 
     async def execute(
@@ -43,7 +43,7 @@ class DummyResolutionSession(Playbook):
         **kwargs: Any,
     ) -> RunResult[Any]:
         return RunResult(
-            run_id=(await self.prepared_run()).run_id,
+            run_id="test-run",
             data={
                 "task": task,
                 "count": count,

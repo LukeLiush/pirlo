@@ -1,43 +1,7 @@
-from abc import ABC, abstractmethod
-from contextlib import AbstractContextManager
-from typing import Any
+"""Backward compatibility module forwarding to play_ui."""
 
+from __future__ import annotations
 
-class PlaybookUI(ABC):
-    """Pure Abstract Port representing presentation rendering and user interaction."""
+from pirlo.core.ports.play_ui import PlaybookUI, PlayUI
 
-    @abstractmethod
-    def header(self, title: str, subtitle: str | None = None) -> None:
-        """Draw a banner/header."""
-
-    @abstractmethod
-    def status(self, message: str) -> AbstractContextManager[Any]:
-        """Context manager for loading/pending status indicator."""
-
-    @abstractmethod
-    def lineup(self, title: str, columns: list[str], rows: list[list[str]]) -> None:
-        """Draw starting lineup table/data structure."""
-
-    @abstractmethod
-    def commentary(self, message: str, detail: str | None = None) -> None:
-        """Draw standard informational log message / live match commentary."""
-
-    @abstractmethod
-    async def var_check(self, message: str) -> None:
-        """Halts play to pause and wait for user confirmation."""
-
-    @abstractmethod
-    async def prompt_password(self, prompt_message: str) -> str:
-        """Prompt user securely for password / hidden text input."""
-
-    @abstractmethod
-    def goal(self, message: str, detail: str | None = None) -> None:
-        """Draw success panel/message (Scoring a goal!)."""
-
-    @abstractmethod
-    def red_card(self, message: str, detail: str | None = None) -> None:
-        """Draw error panel/message (Red Card!)."""
-
-    @abstractmethod
-    def yellow_card(self, message: Any, detail: str | None = None) -> None:
-        """Draw warning panel/message (Yellow Card!)."""
+__all__ = ["PlayUI", "PlaybookUI"]

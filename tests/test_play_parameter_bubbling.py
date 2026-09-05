@@ -7,8 +7,7 @@ from typing import Annotated
 from pirlo.core.decorators import play
 from pirlo.core.models.blueprint import PlaybookBlueprint, PlaybookOutput
 from pirlo.core.models.parameters import Parameter
-from pirlo.core.ports.play import Play, requires
-from pirlo.core.ports.playbook import each
+from pirlo.core.ports.play import Play, each, requires
 from pirlo.core.services.blueprint_extractor import (
     BlueprintExtractor,
 )

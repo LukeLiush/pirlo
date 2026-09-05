@@ -6,7 +6,7 @@ from typing import Any
 
 from pirlo.core.models.link import LlmLink
 from pirlo.core.models.parameters import LinkParameter
-from pirlo.core.models.playbook_invocation import PlaybookInvocation
+from pirlo.core.models.play_invocation import PlaybookInvocation
 from pirlo.core.ports.link_repository import LinkRepository
 from pirlo.infrastructure.adapters.cli.parameter_sources import (
     ArgumentSource,

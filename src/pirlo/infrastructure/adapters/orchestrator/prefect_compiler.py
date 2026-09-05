@@ -17,8 +17,7 @@ from pirlo.core.models.blueprint import (
 from pirlo.core.models.run_result import RunResult
 from pirlo.core.ports.compiler import BlueprintCompiler
 from pirlo.core.ports.play import Play
-from pirlo.core.ports.playbook import Playbook
-from pirlo.infrastructure.adapters.cli.terminal_playbook_ui import TerminalPlaybookUI
+from pirlo.infrastructure.adapters.cli.terminal_play_ui import TerminalPlayUI
 
 logger = logging.getLogger(__name__)
 
@@ -82,19 +81,14 @@ class PrefectCompiler(
                     **kwargs: object,
                 ) -> PlaybookOutput:
                     try:
-                        instance: Any = target_cls(ui=TerminalPlaybookUI())
+                        instance: Any = target_cls(ui=TerminalPlayUI())
                     except TypeError:
                         instance = target_cls()
 
                     exec_kwargs = dict(kwargs)
                     import inspect
 
-                    fn_to_call = (
-                        instance.execute
-                        if hasattr(instance, "execute")
-                        else instance.play
-                    )
-                    sig = inspect.signature(fn_to_call)
+                    sig = inspect.signature(instance.execute)
                     has_var_keyword = any(
                         p.kind == inspect.Parameter.VAR_KEYWORD
                         for p in sig.parameters.values()
@@ -115,11 +109,8 @@ class PrefectCompiler(
                             k: v for k, v in exec_kwargs.items() if k in sig.parameters
                         }
 
-                    # Executes execute() for Play, or play() for legacy Playbook
-                    if hasattr(instance, "execute"):
-                        playbook_result: Any = await instance.execute(**exec_kwargs)
-                    else:
-                        playbook_result = await instance.play(**exec_kwargs)
+                    # Executes execute() for Play
+                    playbook_result: Any = await instance.execute(**exec_kwargs)
 
                     return (
                         playbook_result.data
@@ -220,7 +211,7 @@ class PrefectCompiler(
                 for obj in module_dict.values():
                     if (
                         isinstance(obj, type)
-                        and (issubclass(obj, Playbook) or issubclass(obj, Play))
+                        and issubclass(obj, Play)
                         and obj.__name__ == playbook_name
                     ):
                         return cast(type[Any], obj)

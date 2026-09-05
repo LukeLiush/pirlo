@@ -1,12 +1,11 @@
-import pytest
 from rich.console import Console
 
-from pirlo.core.ports.playbook import Playbook
-from pirlo.core.ports.playbook_ui import PlaybookUI
-from pirlo.infrastructure.adapters.cli.terminal_playbook_ui import TerminalPlaybookUI
+from pirlo.core.ports.play import Play
+from pirlo.core.ports.play_ui import PlayUI
+from pirlo.infrastructure.adapters.cli.terminal_play_ui import TerminalPlayUI
 
 
-class MockPlaybookUI(PlaybookUI):
+class MockPlayUI(PlayUI):
     def __init__(self) -> None:
         self.calls: list[str] = []
 
@@ -48,21 +47,21 @@ class MockPlaybookUI(PlaybookUI):
         self.calls.append(f"commentary:{message}")
 
 
-class CustomPlaybook(Playbook):
-    async def play(self, *args, **kwargs):
+class CustomPlay(Play[None]):
+    async def execute(self) -> None:
         pass
 
 
 def test_pitch_ui_delegation():
-    mock_ui = MockPlaybookUI()
-    pitch = CustomPlaybook(ui=mock_ui)
+    mock_ui = MockPlayUI()
+    play = CustomPlay(ui=mock_ui)
 
-    pitch.ui.header("Test Header", subtitle="Sub")
-    pitch.ui.goal("Goal scored!")
-    pitch.ui.red_card("Error!")
-    pitch.ui.yellow_card("Warning!")
-    pitch.ui.commentary("Match commentary log")
-    pitch.ui.lineup("Lineup", ["Col"], [["Val"]])
+    play.ui.header("Test Header", subtitle="Sub")
+    play.ui.goal("Goal scored!")
+    play.ui.red_card("Error!")
+    play.ui.yellow_card("Warning!")
+    play.ui.commentary("Match commentary log")
+    play.ui.lineup("Lineup", ["Col"], [["Val"]])
 
     assert "header:Test Header:Sub" in mock_ui.calls
     assert "goal:Goal scored!" in mock_ui.calls
@@ -72,24 +71,9 @@ def test_pitch_ui_delegation():
     assert "lineup:Lineup" in mock_ui.calls
 
 
-def test_playbook_uninitialized_error_guards():
-    playbook = CustomPlaybook()
-    with pytest.raises(
-        RuntimeError, match="Playbook orchestrator has not been initialized"
-    ):
-        _ = playbook.orchestrator
-
-    with pytest.raises(
-        RuntimeError, match="Playbook prepared_run accessed before preparation"
-    ):
-        import asyncio
-
-        asyncio.run(playbook.prepared_run())
-
-
-def test_terminal_pitch_ui_console():
+def test_terminal_play_ui_console():
     console = Console(record=True)
-    ui = TerminalPlaybookUI(console=console)
+    ui = TerminalPlayUI(console=console)
     ui.header("Terminal Banner", subtitle="Rich Output")
     ui.goal("Scored!")
     ui.red_card("Failed!")

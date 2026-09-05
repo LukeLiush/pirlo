@@ -9,11 +9,8 @@ from typing import Annotated, Any, get_args, get_origin, get_type_hints
 from pirlo.core.models.parameters import LinkParameter, Parameter
 from pirlo.core.ports.orchestrator import TaskOrchestrator
 from pirlo.core.ports.play import Play
-from pirlo.core.ports.playbook import Playbook
 
-TargetSignatureSource = (
-    type[Playbook] | type[Play] | type[TaskOrchestrator] | Callable[..., Any]
-)
+TargetSignatureSource = type[Play] | type[TaskOrchestrator] | Callable[..., Any]
 
 
 def extract_signature_parameters(
@@ -107,8 +104,6 @@ class ArgumentParserBuilder:
             )
             if hasattr(target_fn_or_cls, "execute"):
                 self._target_fn = target_fn_or_cls.execute
-            elif hasattr(target_fn_or_cls, "play"):
-                self._target_fn = target_fn_or_cls.play
             else:
                 self._target_fn = target_fn_or_cls
         else:
@@ -134,7 +129,7 @@ class ArgumentParserBuilder:
                 continue
             visited.add(upstream_cls)
 
-            fn = getattr(upstream_cls, "execute", getattr(upstream_cls, "play", None))
+            fn = getattr(upstream_cls, "execute", None)
             if fn:
                 upstream_params = extract_signature_parameters(fn)
                 self._upstream_params_by_cls[upstream_cls] = upstream_params

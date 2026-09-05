@@ -5,91 +5,43 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from pirlo.core.decorators import playbook
+from pirlo.core.decorators import play
 from pirlo.core.models.parameters import Parameter
-from pirlo.core.models.run_result import RunResult
-from pirlo.core.ports.playbook import Playbook
+from pirlo.core.ports.play import Play
 
 
-@playbook(name="mock", description="Mock session for testing CLI subcommands.")
-class MockSubcommandSession(Playbook):
-    """Mock session for testing CLI subcommands."""
+@play(name="mock", description="Mock play for testing CLI subcommands.")
+class MockSubcommandPlay(Play[dict[str, Any]]):
+    """Mock play for testing CLI subcommands."""
 
     async def execute(
         self,
         task: Annotated[str, Parameter(help="Task prompt")] = "Test Task",
-        *args,
-        **kwargs,
-    ) -> RunResult[dict[str, Any]]:
-        return RunResult(
-            run_id=(await self.prepared_run()).run_id,
-            data={"task_prompt": task, "final_message": "Done"},
-        )
-
-    play = execute
+    ) -> dict[str, Any]:
+        return {"task_prompt": task, "final_message": "Done"}
 
 
 @pytest.mark.anyio
-async def test_subcommand_default_orchestrator(monkeypatch, tmp_path):
+async def test_subcommand_cli_execution(monkeypatch, tmp_path):
     monkeypatch.setenv("PIRLO_WORKSPACE", str(tmp_path))
     with (
         patch.object(sys, "argv", ["pirlo mock", "--task", "Search Google"]),
         patch(
-            "pirlo.infrastructure.adapters.orchestrator.factory.OrchestratorFactory.create"
-        ) as mock_factory,
+            "pirlo.infrastructure.adapters.orchestrator.prefect_compiler.PrefectCompiler.run_ephemeral",
+            new_callable=AsyncMock,
+        ) as mock_run_ephemeral,
     ):
-        mock_orchestrator = AsyncMock()
-        mock_orchestrator.execute = AsyncMock(
-            return_value=RunResult(run_id="test-run", data="Success")
-        )
-        mock_factory.return_value = mock_orchestrator
+        mock_run_ephemeral.return_value = {
+            "task_prompt": "Search Google",
+            "final_message": "Done",
+        }
 
-        result = MockSubcommandSession.cli("mock")
+        result = MockSubcommandPlay.cli("mock")
         if inspect.isawaitable(result):
-            await result
+            result = await result
 
-        mock_factory.assert_called_once_with(
-            name="prefect",
-            config_path=None,
-        )
-
-
-@pytest.mark.anyio
-async def test_subcommand_orchestrator_override(monkeypatch, tmp_path):
-    monkeypatch.setenv("PIRLO_WORKSPACE", str(tmp_path))
-    with (
-        patch.object(
-            sys,
-            "argv",
-            [
-                "pirlo mock",
-                "--task",
-                "Search Google",
-                "--",
-                "prefect",
-                "--server-url",
-                "http://localhost:4200/api",
-                "--work-pool",
-                "my-pool",
-            ],
-        ),
-        patch(
-            "pirlo.infrastructure.adapters.orchestrator.factory.OrchestratorFactory.create"
-        ) as mock_factory,
-    ):
-        mock_orchestrator = AsyncMock()
-        mock_orchestrator.execute = AsyncMock(
-            return_value=RunResult(run_id="test-run", data="Success")
-        )
-        mock_factory.return_value = mock_orchestrator
-
-        result = MockSubcommandSession.cli("mock")
-        if inspect.isawaitable(result):
-            await result
-
-        mock_factory.assert_called_once_with(
-            name="prefect",
-            config_path=None,
-            server_url="http://localhost:4200/api",
-            work_pool="my-pool",
-        )
+        assert result is not None
+        mock_run_ephemeral.assert_called_once()
+        blueprint = mock_run_ephemeral.call_args[0][0]
+        assert blueprint.name == "MockSubcommandPlay"
+        assert blueprint.nodes[0].static_kwargs["task"] == "Search Google"

@@ -5,10 +5,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from pirlo.core.models.playbook_invocation import PlaybookInvocation
+from pirlo.core.models.play_invocation import PlaybookInvocation
 from pirlo.core.models.run import PreparedRun
 from pirlo.core.ports.play import Play
-from pirlo.core.ports.playbook import Playbook
 from pirlo.infrastructure.services.parameter_provider import discover_parameters
 from pirlo.infrastructure.services.parameter_resolution import ParameterResolver
 from pirlo.infrastructure.services.run_id_generator import IdentityFactory
@@ -19,7 +18,7 @@ class RunPreparer:
 
     def __init__(
         self,
-        playbook_cls: type[Playbook | Play[Any]],
+        playbook_cls: type[Play[Any]],
         pirlo_workspace: Path,
         parameter_resolver: ParameterResolver,
     ) -> None:

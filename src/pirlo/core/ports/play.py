@@ -2,43 +2,65 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 
-from pirlo.core.ports.playbook_ui import PlaybookUI
-from pirlo.infrastructure.adapters.cli.terminal_playbook_ui import TerminalPlaybookUI
+from pirlo.core.models.blueprint import ParameterValue, ProxyRef, ScalarValue
+from pirlo.core.ports.play_ui import PlayUI
+from pirlo.infrastructure.adapters.cli.terminal_play_ui import TerminalPlayUI
+
+if TYPE_CHECKING:
+    from pirlo.core.models.blueprint import PlaybookBlueprint, PlaybookOutput
+
+
+class MappedParameter:
+    """Wrapper marking a parameter for dynamic subtask fan-in mapping."""
+
+    def __init__(self, target: ProxyRef | list[ScalarValue]) -> None:
+        self.target: ProxyRef | list[ScalarValue] = target
+
+
+def each(target: ProxyRef | list[ScalarValue]) -> MappedParameter:
+    """Marks a parameter for dynamic subtask fan-in mapping across items."""
+    return MappedParameter(target)
 
 
 class RequireDescriptor[OutputT]:
-    """Declares an upstream play dependency on a Play class."""
+    """Declares an upstream play dependency directly within a Play class."""
 
-    def __init__(self, play_cls: type[Play[OutputT]], **kwargs: Any) -> None:
+    def __init__(
+        self,
+        play_cls: type[Play[OutputT]],
+        **kwargs: ParameterValue | MappedParameter,
+    ) -> None:
         self.play_cls: type[Play[OutputT]] = play_cls
-        self.kwargs: dict[str, Any] = kwargs
+        self.kwargs: dict[str, ParameterValue | MappedParameter] = kwargs
         self.attr_name: str = ""
 
-    def __set_name__(self, owner: type[Any], name: str) -> None:
+    def __set_name__(self, owner: type[object], name: str) -> None:
         self.attr_name = name
 
-    def __get__(self, instance: Any, owner: type[Any]) -> OutputT:
+    def __get__(self, instance: object | None, owner: type[object]) -> OutputT:
         if instance is None:
             return self  # type: ignore[return-value]
-        # Injected at runtime by the orchestrator / task runner
-        return instance.__dict__.get(self.attr_name)  # type: ignore[no-any-return]
+        return cast(OutputT, instance.__dict__.get(self.attr_name))
 
 
-def requires[OutputT](play_cls: type[Play[OutputT]], **kwargs: Any) -> OutputT:
-    """Declaratively requires an upstream play output."""
+def requires[OutputT](
+    play_cls: type[Play[OutputT]],
+    **kwargs: ParameterValue | MappedParameter,
+) -> OutputT:
+    """Declaratively declares an upstream Play dependency inside a Play class."""
     return RequireDescriptor(play_cls, **kwargs)  # type: ignore[return-value]
 
 
 class Play[OutputT](ABC):
     """Atomic tactical unit of execution containing pure business logic."""
 
-    def __init__(self, ui: PlaybookUI | None = None) -> None:
-        self._ui: PlaybookUI = ui if ui is not None else TerminalPlaybookUI()
+    def __init__(self, ui: PlayUI | None = None) -> None:
+        self._ui: PlayUI = ui if ui is not None else TerminalPlayUI()
 
     @property
-    def ui(self) -> PlaybookUI:
+    def ui(self) -> PlayUI:
         """Interactive terminal telemetry reporting commentary, goals, and headers."""
         return self._ui
 
@@ -48,8 +70,10 @@ class Play[OutputT](ABC):
         raise NotImplementedError
 
     @classmethod
-    def get_upstream_requirements(cls) -> dict[str, RequireDescriptor[Any]]:
-        """Discovers all requires(...) descriptors declared on this play."""
+    def get_upstream_requirements(
+        cls,
+    ) -> dict[str, RequireDescriptor[Any]]:
+        """Discovers all requires(...) descriptors declared on this play class."""
         requirements: dict[str, RequireDescriptor[Any]] = {}
         for base in reversed(cls.__mro__):
             for key, value in base.__dict__.items():
@@ -58,8 +82,8 @@ class Play[OutputT](ABC):
         return requirements
 
     @classmethod
-    async def run_play(cls, **kwargs: Any) -> OutputT:
-        """Executes the Play and all its upstream dependencies via Prefect in ephemeral mode."""
+    async def run_play(cls, **kwargs: ParameterValue) -> OutputT:
+        """Executes the Play and all upstream dependencies via Prefect in ephemeral mode."""
         from typing import cast
 
         from pirlo.core.services.blueprint_extractor import BlueprintExtractor
@@ -67,21 +91,29 @@ class Play[OutputT](ABC):
             PrefectCompiler,
         )
 
-        blueprint = BlueprintExtractor.extract_from_play(cls, user_kwargs=kwargs)
-        res = await PrefectCompiler.run_ephemeral(blueprint)
-        return cast(OutputT, res)
+        blueprint: PlaybookBlueprint = BlueprintExtractor.extract_from_play(
+            cls, user_kwargs=kwargs
+        )
+        raw_result: PlaybookOutput | None = await PrefectCompiler.run_ephemeral(
+            blueprint
+        )
+        return cast(OutputT, raw_result)
 
-    def extract_blueprint(self, **kwargs: Any) -> Any:
+    def extract_blueprint(
+        self, user_kwargs: dict[str, ParameterValue] | None = None
+    ) -> PlaybookBlueprint:
         """Extracts the PlaybookBlueprint IR for this Play and its upstream requirements."""
         from pirlo.core.services.blueprint_extractor import BlueprintExtractor
 
-        return BlueprintExtractor.extract_from_play(self.__class__, user_kwargs=kwargs)
-
-    @classmethod
-    def cli(cls, playbook_name: str | None = None) -> Any:
-        """Parse CLI parameters using POSIX '--' delimiter and execute the play."""
-        from pirlo.infrastructure.adapters.cli.cli_playbook_runner import (
-            CliPlaybookRunner,
+        return BlueprintExtractor.extract_from_play(
+            self.__class__, user_kwargs=user_kwargs
         )
 
-        return CliPlaybookRunner.run(cls, playbook_name=playbook_name)
+    @classmethod
+    def cli(cls, play_name: str | None = None) -> Any:
+        """Parse CLI parameters and execute the play."""
+        from pirlo.infrastructure.adapters.cli.cli_play_runner import (
+            CliPlayRunner,
+        )
+
+        return CliPlayRunner.run(cls, play_name=play_name)

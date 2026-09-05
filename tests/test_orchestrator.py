@@ -1,27 +1,13 @@
 from pathlib import Path
-from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from pirlo.core.decorators import playbook
 from pirlo.core.models.run import PreparedRun
-from pirlo.core.models.run_result import RunResult
-from pirlo.core.ports.playbook import Playbook
 from pirlo.infrastructure.adapters.orchestrator.factory import OrchestratorFactory
 from pirlo.infrastructure.adapters.orchestrator.prefect_orchestrator import (
     SmartPrefectTaskOrchestrator,
 )
-
-
-@playbook(name="autopass", description="Mock Autopass pitch for testing.")
-class DummyAutopassPlaybook(Playbook):
-    """Mock Autopass pitch for testing."""
-
-    task = "Search Google for OpenAI"
-
-    async def play(self, *args, **kwargs) -> RunResult[Any]:
-        return RunResult(run_id=(await self.prepared_run()).run_id)
 
 
 @pytest.mark.anyio

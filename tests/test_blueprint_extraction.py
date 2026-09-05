@@ -3,13 +3,12 @@ from __future__ import annotations
 
 import asyncio
 
-from pirlo.core.decorators import playbook
+from pirlo.core.decorators import play
 from pirlo.core.models.blueprint import (
-    BlueprintNode,
     PlaybookBlueprint,
     PlaybookOutput,
 )
-from pirlo.core.ports.playbook import Playbook, PlayerNode, players
+from pirlo.core.ports.play import Play, requires
 
 
 class LoginOutput(PlaybookOutput):
@@ -25,112 +24,58 @@ class CheckoutOutput(PlaybookOutput):
     order_id: str
 
 
-class LoginTestPlaybook(Playbook[LoginOutput]):
-    async def play(self, profile: str = "default") -> LoginOutput:
+class LoginTestPlay(Play[LoginOutput]):
+    async def execute(self, profile: str = "default") -> LoginOutput:
         return LoginOutput(auth_token="token_test_123", user_id="user_test_99")
 
 
-class VerifyTestPlaybook(Playbook[VerifyOutput]):
-    async def play(self, user_id: str = "") -> VerifyOutput:
+class VerifyTestPlay(Play[VerifyOutput]):
+    login: LoginOutput = requires(LoginTestPlay)
+
+    async def execute(self) -> VerifyOutput:
         return VerifyOutput(verification_code="code_777")
 
 
-class CheckoutTestPlaybook(Playbook[CheckoutOutput]):
-    async def play(
-        self, auth_token: str = "", verification_code: str = "", item_id: str = ""
-    ) -> CheckoutOutput:
-        return CheckoutOutput(order_id=f"order_{item_id}_{auth_token}")
+@play(name="test_checkout_dag")
+class CheckoutDAGPlay(Play[CheckoutOutput]):
+    login: LoginOutput = requires(LoginTestPlay, profile="prod")
+    verify: VerifyOutput = requires(VerifyTestPlay)
 
-
-@playbook(name="test_checkout_dag")
-class CheckoutDAGPlaybook(Playbook[CheckoutOutput]):
-    async def play(self, item_id: str = "item_42") -> PlayerNode:
-        player_login: PlayerNode = self.player(LoginTestPlaybook, profile="prod")
-        player_verify: PlayerNode = self.player(
-            VerifyTestPlaybook, user_id=player_login.ball.user_id
+    async def execute(self, item_id: str = "item_42") -> CheckoutOutput:
+        return CheckoutOutput(
+            order_id=f"order_{item_id}_{self.login.auth_token}_{self.verify.verification_code}"
         )
-        return self.player(
-            CheckoutTestPlaybook,
-            auth_token=player_login.ball.auth_token,
-            verification_code=player_verify.ball.verification_code,
-            item_id=item_id,
-        ).after(player_login, player_verify)
 
 
-def test_extract_blueprint_and_ball_proxy():
-    workflow = CheckoutDAGPlaybook()
+def test_extract_blueprint():
+    workflow = CheckoutDAGPlay()
     blueprint: PlaybookBlueprint = workflow.extract_blueprint()
 
-    assert blueprint.name == "CheckoutDAGPlaybook"
+    assert blueprint.name == "CheckoutDAGPlay"
     assert len(blueprint.nodes) == 3
 
-    node1: BlueprintNode = blueprint.nodes[0]
-    assert node1.playbook_name == "LoginTestPlaybook"
-    assert node1.static_kwargs == {"profile": "prod"}
-    assert node1.param_bindings == {}
-    assert node1.depends_on == []
+    node_names = [n.playbook_name for n in blueprint.nodes]
+    assert "LoginTestPlay" in node_names
+    assert "VerifyTestPlay" in node_names
+    assert "CheckoutDAGPlay" in node_names
 
-    node2: BlueprintNode = blueprint.nodes[1]
-    assert node2.playbook_name == "VerifyTestPlaybook"
-    assert node2.static_kwargs == {}
-    assert "user_id" in node2.param_bindings
-    assert node2.param_bindings["user_id"].source_node_id == node1.node_id
-    assert node2.param_bindings["user_id"].source_field == "user_id"
-    assert node2.depends_on == [node1.node_id]
-
-    node3: BlueprintNode = blueprint.nodes[2]
-    assert node3.playbook_name == "CheckoutTestPlaybook"
-    assert node3.static_kwargs == {"item_id": "item_42"}
-    assert "auth_token" in node3.param_bindings
-    assert node3.param_bindings["auth_token"].source_node_id == node1.node_id
-    assert node3.depends_on == [node1.node_id, node2.node_id]
-
-
-def test_players_group_operator_syntax():
-    class GroupDAGPlaybook(Playbook[CheckoutOutput]):
-        async def play(self, item_id: str = "item_99") -> CheckoutOutput:
-            p1: PlayerNode = self.player(LoginTestPlaybook, profile="dev")
-            p2: PlayerNode = self.player(VerifyTestPlaybook, user_id=p1.ball.user_id)
-            p3: PlayerNode = self.player(
-                CheckoutTestPlaybook,
-                auth_token=p1.ball.auth_token,
-                verification_code=p2.ball.verification_code,
-                item_id=item_id,
-            )
-
-            # Use players() helper with >> operator
-            players(p1, p2) >> p3
-
-            return p3
-
-    blueprint: PlaybookBlueprint = GroupDAGPlaybook().extract_blueprint()
-    assert len(blueprint.nodes) == 3
-    node3: BlueprintNode = blueprint.nodes[2]
-    assert sorted(node3.depends_on) == sorted(
-        [blueprint.nodes[0].node_id, blueprint.nodes[1].node_id]
+    login_node = next(n for n in blueprint.nodes if n.playbook_name == "LoginTestPlay")
+    verify_node = next(
+        n for n in blueprint.nodes if n.playbook_name == "VerifyTestPlay"
     )
+    checkout_node = next(
+        n for n in blueprint.nodes if n.playbook_name == "CheckoutDAGPlay"
+    )
+
+    assert login_node.static_kwargs == {"profile": "prod"}
+    assert login_node.node_id in verify_node.depends_on
+    assert login_node.node_id in checkout_node.depends_on
+    assert verify_node.node_id in checkout_node.depends_on
 
 
 def test_practice_run_local_execution():
-    workflow = CheckoutDAGPlaybook()
+    workflow = CheckoutDAGPlay()
     result: CheckoutOutput = asyncio.run(workflow.run_play(item_id="item_777"))
 
     assert isinstance(result, CheckoutOutput)
-    assert result.order_id == "order_item_777_token_test_123"
-
-
-def test_out_of_order_kickoff_topological_sort():
-    class OutOfOrderDAG(Playbook[CheckoutOutput]):
-        async def play(self, item_id: str = "item_999") -> PlayerNode:
-            p1: PlayerNode = self.player(LoginTestPlaybook, profile="dev")
-            p2: PlayerNode = self.player(VerifyTestPlaybook, user_id=p1.ball.user_id)
-            return self.player(
-                CheckoutTestPlaybook,
-                auth_token=p1.ball.auth_token,
-                verification_code=p2.ball.verification_code,
-                item_id=item_id,
-            ).after(p1, p2)
-
-    result: CheckoutOutput = asyncio.run(OutOfOrderDAG().run_play())
-    assert isinstance(result, CheckoutOutput)
-    assert result.order_id == "order_item_999_token_test_123"
+    assert result.order_id == "order_item_777_token_test_123_code_777"
