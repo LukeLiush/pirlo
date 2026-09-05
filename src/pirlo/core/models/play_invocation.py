@@ -41,7 +41,3 @@ class PlayInvocation:
             play_args=canonical[:split_index],
             orchestrator_args=canonical[split_index + 1 :],
         )
-
-
-# Backward-compatibility alias
-PlaybookInvocation = PlayInvocation

@@ -195,8 +195,3 @@ class PlayScanner:
         rel_path: Path = file_path.relative_to(root_dir.parent)
         module_parts_fallback: list[str] = list(rel_path.with_suffix("").parts)
         return ".".join(module_parts_fallback)
-
-
-# Backward-compatibility aliases
-PlaybookSpec = PlaySpec
-PlaybookScanner = PlayScanner

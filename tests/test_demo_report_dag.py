@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import asyncio
 
-from pirlo.core.models.blueprint import BlueprintNode, PlaybookBlueprint
+from pirlo.core.models.blueprint import BlueprintNode, PlayBlueprint
 from pirlo.infrastructure.adapters.orchestrator.prefect_compiler import (
     PrefectCompiler,
 )
@@ -15,7 +15,7 @@ from pirlo.playbooks.demo.report_dag import (
 
 def test_demo_report_dag_blueprint_extraction():
     dag = SendAlertPlay()
-    blueprint: PlaybookBlueprint = dag.extract_blueprint()
+    blueprint: PlayBlueprint = dag.extract_blueprint()
 
     assert blueprint.name == "SendAlertPlay"
     assert len(blueprint.nodes) == 3
@@ -51,7 +51,7 @@ def test_demo_report_dag_local_practice_run():
 
 def test_demo_report_dag_prefect_compilation():
     dag = SendAlertPlay()
-    blueprint: PlaybookBlueprint = dag.extract_blueprint()
+    blueprint: PlayBlueprint = dag.extract_blueprint()
 
     prefect_workflow = PrefectCompiler().compile(blueprint)
     assert prefect_workflow is not None

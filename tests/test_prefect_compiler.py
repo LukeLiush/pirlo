@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from pirlo.core.decorators import play
-from pirlo.core.models.blueprint import PlaybookBlueprint, PlayOutput
+from pirlo.core.models.blueprint import PlayBlueprint, PlayOutput
 from pirlo.core.ports.play import Play, requires
 from pirlo.infrastructure.adapters.orchestrator.prefect_compiler import (
     PrefectCompiler,
@@ -47,7 +47,7 @@ class PrefectCompilerDAGPlay(Play[CheckoutOutput]):
 
 def test_prefect_compiler_flow_generation():
     workflow = PrefectCompilerDAGPlay()
-    blueprint: PlaybookBlueprint = workflow.extract_blueprint()
+    blueprint: PlayBlueprint = workflow.extract_blueprint()
 
     # Compile PlayBlueprint to PrefectWorkflow
     compiler = PrefectCompiler()

@@ -87,7 +87,3 @@ class TerminalPlayUI(PlayUI):
         if det_str:
             text += f"\n[dim]{det_str}[/dim]"
         self._console.print(Panel(text, border_style="yellow", expand=False))
-
-
-# Backward-compatibility alias
-TerminalPlaybookUI = TerminalPlayUI

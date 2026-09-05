@@ -5,7 +5,7 @@ import asyncio
 
 from pirlo.core.decorators import play
 from pirlo.core.models.blueprint import (
-    PlaybookBlueprint,
+    PlayBlueprint,
     PlayOutput,
 )
 from pirlo.core.ports.play import Play, requires
@@ -49,7 +49,7 @@ class CheckoutDAGPlay(Play[CheckoutOutput]):
 
 def test_extract_blueprint():
     workflow = CheckoutDAGPlay()
-    blueprint: PlaybookBlueprint = workflow.extract_blueprint()
+    blueprint: PlayBlueprint = workflow.extract_blueprint()
 
     assert blueprint.name == "CheckoutDAGPlay"
     assert len(blueprint.nodes) == 3

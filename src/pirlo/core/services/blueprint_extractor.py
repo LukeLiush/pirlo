@@ -8,7 +8,7 @@ from pirlo.core.models.blueprint import (
     BlueprintNode,
     ParamBinding,
     ParameterValue,
-    PlaybookBlueprint,
+    PlayBlueprint,
     ProxyRef,
 )
 from pirlo.core.ports.play import MappedParameter
@@ -18,15 +18,15 @@ if TYPE_CHECKING:
 
 
 class BlueprintExtractor:
-    """Extracts an engine-agnostic PlaybookBlueprint IR by resolving requires() dependencies."""
+    """Extracts an engine-agnostic PlayBlueprint IR by resolving requires() dependencies."""
 
     @classmethod
     def extract_from_play(
         cls,
         play_cls: type[Play[object]],
         user_kwargs: dict[str, ParameterValue] | None = None,
-    ) -> PlaybookBlueprint:
-        blueprint = PlaybookBlueprint(
+    ) -> PlayBlueprint:
+        blueprint = PlayBlueprint(
             name=play_cls.__name__,
             entry_playbook=play_cls.__name__,
         )
@@ -119,5 +119,5 @@ class BlueprintExtractor:
         cls,
         play_cls: type[Play[object]],
         user_kwargs: dict[str, ParameterValue] | None = None,
-    ) -> PlaybookBlueprint:
+    ) -> PlayBlueprint:
         return cls.extract_from_play(play_cls, user_kwargs=user_kwargs)

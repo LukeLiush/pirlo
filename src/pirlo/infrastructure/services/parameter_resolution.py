@@ -6,7 +6,7 @@ from typing import Any
 
 from pirlo.core.models.link import LlmLink
 from pirlo.core.models.parameters import LinkParameter
-from pirlo.core.models.play_invocation import PlaybookInvocation
+from pirlo.core.models.play_invocation import PlayInvocation
 from pirlo.core.ports.link_repository import LinkRepository
 from pirlo.infrastructure.adapters.cli.parameter_sources import (
     ArgumentSource,
@@ -54,7 +54,7 @@ class ParameterResolver:
     def create(
         cls,
         playbook_parser: argparse.ArgumentParser,
-        playbook_invocation: PlaybookInvocation,
+        playbook_invocation: PlayInvocation,
         pirlo_workspace: Path,
         toml_config: dict[str, Any] | None = None,
     ) -> ParameterResolver:

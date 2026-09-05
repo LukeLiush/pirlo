@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from pirlo.core.models.play_invocation import PlaybookInvocation
+from pirlo.core.models.play_invocation import PlayInvocation
 from pirlo.core.models.run import PreparedRun
 from pirlo.core.ports.play import Play
 from pirlo.infrastructure.services.parameter_provider import discover_parameters
@@ -29,7 +29,7 @@ class RunPreparer:
     def prepare(
         self,
         playbook_name: str,
-        playbook_invocation: PlaybookInvocation,
+        playbook_invocation: PlayInvocation,
         toml_config: dict[str, Any] | None = None,
     ) -> PreparedRun:
         parameters: dict[str, Any] = self._resolve_parameters(
@@ -52,7 +52,7 @@ class RunPreparer:
     def _resolve_parameters(
         self,
         playbook_name: str,
-        playbook_invocation: PlaybookInvocation,
+        playbook_invocation: PlayInvocation,
         toml_config: dict[str, Any] | None,
     ) -> dict[str, Any]:
         parameters: list[dict[str, Any]] = discover_parameters(self._playbook_cls)

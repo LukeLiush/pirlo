@@ -5,7 +5,7 @@ import asyncio
 from typing import Annotated
 
 from pirlo.core.decorators import play
-from pirlo.core.models.blueprint import PlaybookBlueprint, PlayOutput
+from pirlo.core.models.blueprint import PlayBlueprint, PlayOutput
 from pirlo.core.models.parameters import Parameter
 from pirlo.core.ports.play import Play, each, requires
 from pirlo.core.services.blueprint_extractor import (
@@ -80,7 +80,7 @@ class MockAlertPlay(Play[AlertDispatchedOutput]):
 
 def test_pull_extractor_strategy():
     """Verify that PullBasedPlayExtractorStrategy resolves the full DAG backwards."""
-    blueprint: PlaybookBlueprint = BlueprintExtractor.extract_from_play(MockAlertPlay)
+    blueprint: PlayBlueprint = BlueprintExtractor.extract_from_play(MockAlertPlay)
 
     assert blueprint.name == "MockAlertPlay"
     assert len(blueprint.nodes) == 3

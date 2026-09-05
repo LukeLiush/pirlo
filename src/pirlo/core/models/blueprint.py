@@ -101,10 +101,6 @@ class PlayBlueprint:
         return self.render_ascii()
 
 
-# Backward-compatibility alias
-PlaybookBlueprint = PlayBlueprint
-
-
 @dataclass(frozen=True)
 class ProxyRef:
     """Symbolic reference captured during dry-run tracing."""
