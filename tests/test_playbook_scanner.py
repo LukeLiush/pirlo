@@ -22,7 +22,7 @@ def test_scan_existing_playbooks_dir():
 
     dummy_key = "demo_dummy" if "demo_dummy" in specs else "dummy"
     dummy_spec = specs[dummy_key]
-    assert dummy_spec.class_name == "DummySession"
+    assert dummy_spec.class_name == "DummyPlay"
     assert "Dummy test session" in dummy_spec.description
 
     autopass_spec = specs["autopass"]

@@ -13,7 +13,7 @@ class DummyOutput(PlaybookOutput):
 
 
 @play(name="demo_dummy", description="Dummy test session for console verification.")
-class DummySession(Play[DummyOutput]):
+class DummyPlay(Play[DummyOutput]):
     """Dummy test session for console verification."""
 
     async def execute(
@@ -64,7 +64,5 @@ class DummySession(Play[DummyOutput]):
         return DummyOutput(target=target, retries=retries)
 
 
-DummyPlay = DummySession
-
 if __name__ == "__main__":
-    DummySession.cli()
+    DummyPlay.cli()

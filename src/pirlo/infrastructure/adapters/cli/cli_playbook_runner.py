@@ -104,13 +104,6 @@ class CliPlaybookRunner:
             playbook_invocation=playbook_invocation,
         )
 
-        # Step B: Instantiate orchestrator engine service directly via OrchestratorFactory
-        orchestrator: TaskOrchestrator = OrchestratorFactory.create_from_invocation(
-            name=orchestrator_name,
-            playbook_name=resolved_playbook_name,
-            orchestrator_flags=playbook_invocation.orchestrator_args,
-        )
-
         from pirlo.core.ports.play import Play
 
         is_play_cls = issubclass(playbook_cls, Play)
@@ -118,6 +111,13 @@ class CliPlaybookRunner:
             play_instance = playbook_cls(ui=TerminalPlaybookUI())
             bound_playbook = None
         else:
+            # Step B (Legacy Playbook): Instantiate orchestrator engine service directly via OrchestratorFactory
+            orchestrator: TaskOrchestrator = OrchestratorFactory.create_from_invocation(
+                name=orchestrator_name,
+                playbook_name=resolved_playbook_name,
+                orchestrator_flags=playbook_invocation.orchestrator_args,
+            )
+
             # Step C: Instantiate playbook with injected TerminalPlaybookUI and orchestrator
             legacy_cls = cast(type[Playbook[Any]], playbook_cls)
             playbook_instance: Playbook[Any] = legacy_cls(
