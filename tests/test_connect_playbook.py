@@ -27,7 +27,7 @@ async def test_connect_session_playbook_connect_success(tmp_path):
         ),
         patch.object(session, "_monitor_health_loop", new_callable=AsyncMock),
     ):
-        result = await session.play(remote_host="ubuntu@gpu-server.local")
+        result = await session.execute(remote_host="ubuntu@gpu-server.local")
         assert result.status.name == "COMPLETED"
         assert result.data["remote_host"] == "gpu-server.local"
         mock_service.connect.assert_called_once_with(
@@ -45,7 +45,7 @@ async def test_connect_session_playbook_disconnect(tmp_path):
         "pirlo.playbooks.connect.main.ConnectService.create_default",
         return_value=mock_service,
     ):
-        result = await session.play(down=True)
+        result = await session.execute(down=True)
         assert result.status.name == "COMPLETED"
         assert result.data["status"] == "disconnected"
         mock_service.disconnect.assert_called_once()
@@ -71,7 +71,7 @@ async def test_connect_session_playbook_status(tmp_path):
         "pirlo.playbooks.connect.main.ConnectService.create_default",
         return_value=mock_service,
     ):
-        result = await session.play(status=True)
+        result = await session.execute(status=True)
         assert result.status.name == "COMPLETED"
         assert result.data["active"]
         assert result.data["remote_host"] == "gpu-server.local"
@@ -100,7 +100,7 @@ async def test_connect_session_playbook_circuit_breaker(tmp_path):
         ),
         patch("pirlo.playbooks.connect.main.HEALTH_CHECK_INTERVAL_SECONDS", 0.01),
     ):
-        result = await session.play(remote_host="ubuntu@gpu-server.local")
+        result = await session.execute(remote_host="ubuntu@gpu-server.local")
         assert result.status.name == "FAILED"
         assert "3 consecutive health check failures" in result.error
         mock_service.disconnect.assert_called_once()
@@ -135,7 +135,7 @@ async def test_connect_session_playbook_password_fallback(tmp_path):
             return_value="mysecretpass",
         ),
     ):
-        result = await session.play(remote_host="ubuntu@gpu-server.local")
+        result = await session.execute(remote_host="ubuntu@gpu-server.local")
         assert result.status.name == "COMPLETED"
         assert result.data["remote_host"] == "gpu-server.local"
         assert mock_service.connect.call_count == 2

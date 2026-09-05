@@ -60,6 +60,7 @@ class BlueprintNode:
     static_kwargs: dict[str, ParameterValue] = field(default_factory=dict)
     param_bindings: dict[str, ParamBinding] = field(default_factory=dict)
     mapped_bindings: dict[str, ParamBinding] = field(default_factory=dict)
+    mapped_static_kwargs: list[str] = field(default_factory=list)
     is_mapped: bool = False
     depends_on: list[str] = field(default_factory=list)
 

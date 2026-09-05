@@ -13,11 +13,16 @@ def playbook(name: str, description: str | None = None) -> Callable[[T], T]:
 
     def decorator(cls: T) -> T:
         cls.playbook_name = name
+        cls.play_name = name
         doc_desc = cls.__doc__.strip().split("\n")[0] if cls.__doc__ else None
         cls.playbook_description = description or doc_desc or ""
+        cls.play_description = cls.playbook_description
         return cls
 
     return decorator
+
+
+play = playbook
 
 
 def orchestrator(

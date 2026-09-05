@@ -3,33 +3,34 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from pirlo.core.decorators import playbook
+from pirlo.core.decorators import play
 from pirlo.core.instructions import AutopassInstructions
 from pirlo.core.models.link import LlmLink
 from pirlo.core.models.parameters import LinkParameter, Parameter
-from pirlo.core.ports.playbook import Playbook, PlayerNode, each
+from pirlo.core.ports.play import Play
 from pirlo.infrastructure.services.profile_manager import ProfileManager
 from pirlo.playbooks.autopass.models import (
     AutopassRunOutput,
+    SubtaskExecutionOutput,
 )
 from pirlo.playbooks.autopass.subplaybooks import (
-    DecomposeTaskPlaybook,
-    ExecuteSubtaskPlaybook,
-    MergeResultsPlaybook,
+    DecomposeTaskPlay,
+    ExecuteSubtaskPlay,
+    MergeResultsPlay,
     QuickProgressListener,
 )
 
 __all__ = ["AutopassSession", "QuickProgressListener"]
 
 
-@playbook(
+@play(
     name="autopass",
     description="Run self-healing decomposed browser automation workflows.",
 )
-class AutopassSession(Playbook[AutopassRunOutput]):
-    """Top-level Autopass orchestration Pitch executing decomposed subtasks."""
+class AutopassSession(Play[AutopassRunOutput]):
+    """Top-level Autopass orchestration Play executing decomposed subtasks."""
 
-    async def play(
+    async def execute(
         self,
         profile: Annotated[str, Parameter(help="Browser profile name")] = "default",
         headless: Annotated[
@@ -52,49 +53,52 @@ class AutopassSession(Playbook[AutopassRunOutput]):
         ] = 5,
         *args: object,
         **kwargs: object,
-    ) -> PlayerNode:
-        if not self._is_tracing:
-            if not ProfileManager.exists(profile):
-                instruction = AutopassInstructions.PROFILE_MISSING.format(
-                    profile=profile, existing_info=""
-                )
-                self.ui.yellow_card(instruction)
-                raise ValueError(str(instruction))
+    ) -> AutopassRunOutput:
+        if not ProfileManager.exists(profile):
+            instruction = AutopassInstructions.PROFILE_MISSING.format(
+                profile=profile, existing_info=""
+            )
+            self.ui.yellow_card(instruction)
+            raise ValueError(str(instruction))
 
-            if not task:
-                self.ui.yellow_card(AutopassInstructions.TASK_REQUIRED)
-                raise ValueError(str(AutopassInstructions.TASK_REQUIRED))
+        if not task:
+            self.ui.yellow_card(AutopassInstructions.TASK_REQUIRED)
+            raise ValueError(str(AutopassInstructions.TASK_REQUIRED))
+
+        self.ui.header("Autopass Execution", subtitle=f"Task: {task}")
 
         # ---------------------------------------------------------------------
-        # Step 1: Draft task_decomposer
+        # Step 1: Decompose task into subtasks
         # ---------------------------------------------------------------------
-        task_decomposer: PlayerNode = self.player(
-            DecomposeTaskPlaybook,
+        decomposer = DecomposeTaskPlay(ui=self.ui)
+        decomp_output = await decomposer.execute(
             task_prompt=task,
             playmaker=playmaker,
         )
 
         # ---------------------------------------------------------------------
-        # Step 2: Draft subtask_executors using each(...) for dynamic fan-out
+        # Step 2: Execute subtasks sequentially
         # ---------------------------------------------------------------------
-        subtask_executors: PlayerNode = self.player(
-            ExecuteSubtaskPlaybook,
-            subtask_prompt=each(task_decomposer.ball.task_prompts),
-            profile=profile,
-            headless=headless,
-            playmaker=playmaker,
-            use_vision=use_vision,
-        )
+        executor = ExecuteSubtaskPlay(ui=self.ui)
+        subtask_results: list[SubtaskExecutionOutput] = []
+        for subtask_prompt in decomp_output.task_prompts:
+            sub_res = await executor.execute(
+                subtask_prompt=subtask_prompt,
+                profile=profile,
+                headless=headless,
+                playmaker=playmaker,
+                use_vision=use_vision,
+            )
+            subtask_results.append(sub_res)
 
         # ---------------------------------------------------------------------
-        # Step 3: Draft result_summarizer (implicit dataflow + terminal return)
+        # Step 3: Merge results into final output
         # ---------------------------------------------------------------------
-        summarizer = self.player(
-            MergeResultsPlaybook,
+        merger = MergeResultsPlay(ui=self.ui)
+        return await merger.execute(
             original_task=task,
-            subtask_results=subtask_executors.ball,
+            subtask_results=subtask_results,
         )
-        return summarizer
 
 
 if __name__ == "__main__":

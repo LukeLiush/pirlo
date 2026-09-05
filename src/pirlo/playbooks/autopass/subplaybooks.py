@@ -9,12 +9,12 @@ from contextlib import contextmanager
 from typing import Annotated, Any, cast
 
 from pirlo.core.config import get_workspace_path
-from pirlo.core.decorators import playbook
+from pirlo.core.decorators import play
 from pirlo.core.models.browser_config import BrowserConfig
 from pirlo.core.models.link import LlmLink
 from pirlo.core.models.parameters import LinkParameter, Parameter
 from pirlo.core.ports.browser_agent_factory import BrowserAgentFactory
-from pirlo.core.ports.playbook import Playbook
+from pirlo.core.ports.play import Play
 from pirlo.core.repository.workflow_repository import WorkflowRepository
 from pirlo.core.services.workflow_runner import WorkflowRunner
 from pirlo.infrastructure.adapters.browser.browser_agent_factory import (
@@ -78,12 +78,12 @@ def find_free_port() -> int:
         return cast(int, s.getsockname()[1])
 
 
-@playbook(
+@play(
     name="autopass_decompose",
     description="Decomposes user task prompt into discrete subtask steps",
 )
-class DecomposeTaskPlaybook(Playbook[TaskDecompositionOutput]):
-    async def play(
+class DecomposeTaskPlay(Play[TaskDecompositionOutput]):
+    async def execute(
         self,
         task_prompt: Annotated[str, Parameter(help="Task prompt to decompose")] = "",
         playmaker: Annotated[
@@ -119,12 +119,12 @@ class DecomposeTaskPlaybook(Playbook[TaskDecompositionOutput]):
         )
 
 
-@playbook(
+@play(
     name="autopass_execute_subtask",
     description="Executes browser automation for ONE single subtask prompt",
 )
-class ExecuteSubtaskPlaybook(Playbook[SubtaskExecutionOutput]):
-    async def play(
+class ExecuteSubtaskPlay(Play[SubtaskExecutionOutput]):
+    async def execute(
         self,
         subtask_prompt: Annotated[
             str, Parameter(help="Single subtask prompt string to execute")
@@ -217,12 +217,12 @@ class ExecuteSubtaskPlaybook(Playbook[SubtaskExecutionOutput]):
             )
 
 
-@playbook(
+@play(
     name="autopass_merge_results",
     description="Merges subtask execution results into final report",
 )
-class MergeResultsPlaybook(Playbook[AutopassRunOutput]):
-    async def play(
+class MergeResultsPlay(Play[AutopassRunOutput]):
+    async def execute(
         self,
         original_task: Annotated[
             str, Parameter(help="Original high-level task prompt")

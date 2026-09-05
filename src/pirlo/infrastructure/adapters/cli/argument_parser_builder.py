@@ -8,9 +8,12 @@ from typing import Annotated, Any, get_args, get_origin, get_type_hints
 
 from pirlo.core.models.parameters import LinkParameter, Parameter
 from pirlo.core.ports.orchestrator import TaskOrchestrator
+from pirlo.core.ports.play import Play
 from pirlo.core.ports.playbook import Playbook
 
-TargetSignatureSource = type[Playbook] | type[TaskOrchestrator] | Callable[..., Any]
+TargetSignatureSource = (
+    type[Playbook] | type[Play] | type[TaskOrchestrator] | Callable[..., Any]
+)
 
 
 def extract_signature_parameters(
@@ -87,17 +90,27 @@ def extract_signature_parameters(
 
 
 class ArgumentParserBuilder:
-    """Builds an ``argparse.ArgumentParser`` by inspecting function signatures."""
+    """Builds an ``argparse.ArgumentParser`` by inspecting function signatures and bubbling upstream parameters."""
 
     def __init__(self, target_fn_or_cls: TargetSignatureSource) -> None:
+        self._target_cls: type[Any] | None = None
+        self._target_fn: Callable[..., Any]
+        self._description: str | None = None
+        self._upstream_params_by_cls: dict[type[Any], list[dict[str, Any]]] = {}
+
         if inspect.isclass(target_fn_or_cls):
-            if hasattr(target_fn_or_cls, "play"):
-                self._target_fn = target_fn_or_cls.play
-            elif hasattr(target_fn_or_cls, "execute"):
+            self._target_cls = target_fn_or_cls
+            self._description = (
+                getattr(target_fn_or_cls, "playbook_description", None)
+                or getattr(target_fn_or_cls, "play_description", None)
+                or target_fn_or_cls.__doc__
+            )
+            if hasattr(target_fn_or_cls, "execute"):
                 self._target_fn = target_fn_or_cls.execute
+            elif hasattr(target_fn_or_cls, "play"):
+                self._target_fn = target_fn_or_cls.play
             else:
                 self._target_fn = target_fn_or_cls
-            self._description = target_fn_or_cls.__doc__
         else:
             self._target_fn = target_fn_or_cls
             self._description = getattr(target_fn_or_cls, "__doc__", None)
@@ -105,6 +118,39 @@ class ArgumentParserBuilder:
         self._parameters: list[dict[str, Any]] = extract_signature_parameters(
             self._target_fn
         )
+
+        # Bubble upstream parameters if target_cls has get_upstream_requirements
+        if self._target_cls and hasattr(self._target_cls, "get_upstream_requirements"):
+            self._discover_upstream_parameters(self._target_cls)
+
+    def _discover_upstream_parameters(self, target_cls: type[Any]) -> None:
+        visited: set[type[Any]] = {target_cls}
+        queue: list[type[Any]] = [
+            req.play_cls for req in target_cls.get_upstream_requirements().values()
+        ]
+        while queue:
+            upstream_cls = queue.pop(0)
+            if upstream_cls in visited:
+                continue
+            visited.add(upstream_cls)
+
+            fn = getattr(upstream_cls, "execute", getattr(upstream_cls, "play", None))
+            if fn:
+                upstream_params = extract_signature_parameters(fn)
+                self._upstream_params_by_cls[upstream_cls] = upstream_params
+                for p in upstream_params:
+                    # Bubble parameter to self._parameters if not already present
+                    if not any(
+                        existing["name"] == p["name"] for existing in self._parameters
+                    ):
+                        p_copy = dict(p)
+                        p_copy["source_cls"] = upstream_cls
+                        self._parameters.append(p_copy)
+
+            if hasattr(upstream_cls, "get_upstream_requirements"):
+                for req in upstream_cls.get_upstream_requirements().values():
+                    if req.play_cls not in visited:
+                        queue.append(req.play_cls)
 
     @property
     def parameters(self) -> list[dict[str, Any]]:
@@ -122,13 +168,31 @@ class ArgumentParserBuilder:
             formatter_class=argparse.RawDescriptionHelpFormatter,
         )
         added_flags: set[str] = set()
-        for param in self._parameters:
-            self._add_argument(parser, param, added_flags)
+
+        if self._upstream_params_by_cls:
+            target_name = self._target_cls.__name__ if self._target_cls else prog_name
+            target_group = parser.add_argument_group(
+                f"Target Play Options ({target_name})"
+            )
+            target_params = extract_signature_parameters(self._target_fn)
+            for param in target_params:
+                self._add_argument(target_group, param, added_flags)
+
+            for upstream_cls, up_params in self._upstream_params_by_cls.items():
+                upstream_group = parser.add_argument_group(
+                    f"Upstream Dependency Options ({upstream_cls.__name__})"
+                )
+                for param in up_params:
+                    self._add_argument(upstream_group, param, added_flags)
+        else:
+            for param in self._parameters:
+                self._add_argument(parser, param, added_flags)
+
         return parser
 
     @staticmethod
     def _add_argument(
-        parser: argparse.ArgumentParser,
+        parser: argparse.ArgumentParser | argparse._ArgumentGroup,
         param_info: dict[str, Any],
         added_flags: set[str],
     ) -> None:

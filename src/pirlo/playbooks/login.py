@@ -4,22 +4,28 @@ from typing import Annotated, Any
 
 from cloakbrowser import launch_persistent_context_async
 
-from pirlo.core.decorators import playbook
+from pirlo.core.decorators import play
+from pirlo.core.models.blueprint import PlaybookOutput
 from pirlo.core.models.parameters import Parameter
-from pirlo.core.models.run import RunStatus
-from pirlo.core.models.run_result import RunResult
-from pirlo.core.ports.playbook import Playbook
+from pirlo.core.ports.play import Play
 from pirlo.infrastructure.services.profile_manager import ProfileManager
 
 
-@playbook(
+class LoginOutput(PlaybookOutput):
+    profile: str
+    urls: list[str]
+    success: bool = True
+    error: str | None = None
+
+
+@play(
     name="login",
     description="Launch a browser to authenticate and save persistent cookies.",
 )
-class LoginSession(Playbook):
+class LoginSession(Play[LoginOutput]):
     """Launch a browser to authenticate and save persistent cookies."""
 
-    async def play(
+    async def execute(
         self,
         profile: Annotated[
             str,
@@ -42,7 +48,7 @@ class LoginSession(Playbook):
         ] = None,
         *args: Any,
         **kwargs: Any,
-    ) -> RunResult[Any]:
+    ) -> LoginOutput:
         # 1. Header (Banner)
         self.ui.header(
             "Pirlo Login Manager",
@@ -62,9 +68,10 @@ class LoginSession(Playbook):
                     "URLs file not found",
                     detail=instruction,
                 )
-                return RunResult(
-                    run_id=(await self.prepared_run()).run_id,
-                    status=RunStatus.FAILED,
+                return LoginOutput(
+                    profile=profile,
+                    urls=[],
+                    success=False,
                     error=instruction,
                 )
 
@@ -83,9 +90,10 @@ class LoginSession(Playbook):
                 "No URLs to open",
                 detail=no_urls_msg,
             )
-            return RunResult(
-                run_id=(await self.prepared_run()).run_id,
-                status=RunStatus.FAILED,
+            return LoginOutput(
+                profile=profile,
+                urls=[],
+                success=False,
                 error=no_urls_msg,
             )
 
@@ -144,14 +152,16 @@ class LoginSession(Playbook):
                         f"Expires At: {metadata.expires_at} (TTL: {ttl_days} days)"
                     ),
                 )
-                return RunResult(
-                    run_id=(await self.prepared_run()).run_id,
-                    status=RunStatus.COMPLETED,
-                    data={"profile": profile, "urls": target_urls},
+                return LoginOutput(
+                    profile=profile,
+                    urls=target_urls,
+                    success=True,
                 )
             finally:
                 await ctx.close()
 
+
+LoginPlay = LoginSession
 
 if __name__ == "__main__":
     LoginSession.cli()

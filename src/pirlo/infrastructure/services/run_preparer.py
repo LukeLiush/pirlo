@@ -7,6 +7,7 @@ from typing import Any
 
 from pirlo.core.models.playbook_invocation import PlaybookInvocation
 from pirlo.core.models.run import PreparedRun
+from pirlo.core.ports.play import Play
 from pirlo.core.ports.playbook import Playbook
 from pirlo.infrastructure.services.parameter_provider import discover_parameters
 from pirlo.infrastructure.services.parameter_resolution import ParameterResolver
@@ -18,7 +19,7 @@ class RunPreparer:
 
     def __init__(
         self,
-        playbook_cls: type[Playbook],
+        playbook_cls: type[Playbook | Play[Any]],
         pirlo_workspace: Path,
         parameter_resolver: ParameterResolver,
     ) -> None:

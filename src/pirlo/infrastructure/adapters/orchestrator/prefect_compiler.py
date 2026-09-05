@@ -15,12 +15,17 @@ from pirlo.core.models.blueprint import (
     PlaybookOutput,
 )
 from pirlo.core.models.run_result import RunResult
+from pirlo.core.ports.compiler import BlueprintCompiler
+from pirlo.core.ports.play import Play
 from pirlo.core.ports.playbook import Playbook
+from pirlo.infrastructure.adapters.cli.terminal_playbook_ui import TerminalPlaybookUI
 
 logger = logging.getLogger(__name__)
 
 
-class PrefectCompiler:
+class PrefectCompiler(
+    BlueprintCompiler[Callable[..., Awaitable[PlaybookOutput | None]]]
+):
     """Compiles a PlaybookBlueprint into executable Prefect 3 Flows & Tasks."""
 
     @classmethod
@@ -65,19 +70,57 @@ class PrefectCompiler:
                         else parent_result
                     )
 
-                playbook_cls: type[Playbook[PlaybookOutput]] = (
-                    cls._resolve_playbook_class(blueprint_node.playbook_name)
+                playbook_cls: type[Any] = cls._resolve_playbook_class(
+                    blueprint_node.playbook_name
                 )
 
                 @task(
                     name=f"Task: {blueprint_node.playbook_name}",
                 )
                 async def subflow_runner(
-                    target_cls: type[Playbook[Any]] = playbook_cls,
+                    target_cls: type[Any] = playbook_cls,
                     **kwargs: object,
                 ) -> PlaybookOutput:
-                    instance: Playbook[PlaybookOutput] = target_cls()
-                    playbook_result: Any = await instance.play(**kwargs)
+                    try:
+                        instance: Any = target_cls(ui=TerminalPlaybookUI())
+                    except TypeError:
+                        instance = target_cls()
+
+                    exec_kwargs = dict(kwargs)
+                    import inspect
+
+                    fn_to_call = (
+                        instance.execute
+                        if hasattr(instance, "execute")
+                        else instance.play
+                    )
+                    sig = inspect.signature(fn_to_call)
+                    has_var_keyword = any(
+                        p.kind == inspect.Parameter.VAR_KEYWORD
+                        for p in sig.parameters.values()
+                    )
+
+                    # Injects resolved upstream requirements into instance.__dict__
+                    if hasattr(target_cls, "get_upstream_requirements"):
+                        reqs = target_cls.get_upstream_requirements()
+                        for field_name in reqs:
+                            if field_name in kwargs:
+                                setattr(instance, field_name, kwargs[field_name])
+                                if field_name not in sig.parameters:
+                                    exec_kwargs.pop(field_name, None)
+
+                    # Filter exec_kwargs to only accepted parameters if no **kwargs
+                    if not has_var_keyword:
+                        exec_kwargs = {
+                            k: v for k, v in exec_kwargs.items() if k in sig.parameters
+                        }
+
+                    # Executes execute() for Play, or play() for legacy Playbook
+                    if hasattr(instance, "execute"):
+                        playbook_result: Any = await instance.execute(**exec_kwargs)
+                    else:
+                        playbook_result = await instance.play(**exec_kwargs)
+
                     return (
                         playbook_result.data
                         if isinstance(playbook_result, RunResult)
@@ -109,9 +152,13 @@ class PrefectCompiler:
 
                     from prefect import unmapped
 
-                    unmapped_kwargs = {
-                        k: unmapped(v) for k, v in resolved_kwargs.items()
-                    }
+                    unmapped_kwargs = {}
+                    for k, v in resolved_kwargs.items():
+                        if k in getattr(blueprint_node, "mapped_static_kwargs", []):
+                            mapped_kwargs[k] = v
+                        else:
+                            unmapped_kwargs[k] = unmapped(v)
+
                     mapped_future: Any = subflow_runner.map(  # type: ignore[call-overload]
                         wait_for=parent_futures,
                         **mapped_kwargs,
@@ -136,16 +183,35 @@ class PrefectCompiler:
         return prefect_master_flow
 
     @classmethod
-    def _resolve_playbook_class(
-        cls, playbook_name: str
-    ) -> type[Playbook[PlaybookOutput]]:
+    async def run_ephemeral(cls, blueprint: PlaybookBlueprint) -> PlaybookOutput | None:
+        """Executes the PlaybookBlueprint in local ephemeral mode."""
+        from prefect.settings import (
+            PREFECT_API_URL,
+            PREFECT_SERVER_ALLOW_EPHEMERAL_MODE,
+            temporary_settings,
+        )
+
+        from pirlo.infrastructure.adapters.orchestrator.prefect_discovery import (
+            discover_prefect_server_url,
+        )
+
+        active_api_url: str | None = discover_prefect_server_url()
+        override_settings = (
+            {PREFECT_API_URL: active_api_url}
+            if active_api_url
+            else {PREFECT_API_URL: None, PREFECT_SERVER_ALLOW_EPHEMERAL_MODE: True}
+        )
+
+        with temporary_settings(override_settings):
+            master_flow = cls.compile(blueprint)
+            return await master_flow()
+
+    @classmethod
+    def _resolve_playbook_class(cls, playbook_name: str) -> type[Any]:
         import contextlib
         import sys
 
-        from pirlo.core.ports.playbook import Playbook
-        from pirlo.infrastructure.services.playbook_scanner import PlaybookScanner
-
-        # 1. Search sys.modules for loaded Playbook subclasses
+        # 1. Search sys.modules for loaded Playbook or Play subclasses
         for module in list(sys.modules.values()):
             if not module:
                 continue
@@ -154,11 +220,13 @@ class PrefectCompiler:
                 for obj in module_dict.values():
                     if (
                         isinstance(obj, type)
-                        and issubclass(obj, Playbook)
+                        and (issubclass(obj, Playbook) or issubclass(obj, Play))
                         and obj.__name__ == playbook_name
                     ):
-                        return cast(type[Playbook[PlaybookOutput]], obj)
+                        return cast(type[Any], obj)
 
         # 2. Fallback to PlaybookScanner disk scanner
+        from pirlo.infrastructure.services.playbook_scanner import PlaybookScanner
+
         class_object: type[object] = PlaybookScanner().get_playbook_class(playbook_name)
-        return cast(type[Playbook[PlaybookOutput]], class_object)
+        return cast(type[Any], class_object)

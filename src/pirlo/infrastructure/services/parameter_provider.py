@@ -16,9 +16,7 @@ TargetSignatureSource = type[Playbook] | type[TaskOrchestrator] | Callable[..., 
 def discover_parameters(
     target_cls_or_fn: TargetSignatureSource,
 ) -> list[dict[str, Any]]:
-    """Collect parameter metadata dicts declared on a playbook/orchestrator signature."""
-    if hasattr(target_cls_or_fn, "play"):
-        return extract_signature_parameters(target_cls_or_fn.play)
+    """Collect parameter metadata dicts declared on a play/orchestrator signature."""
     if hasattr(target_cls_or_fn, "execute"):
         return extract_signature_parameters(target_cls_or_fn.execute)
     return extract_signature_parameters(target_cls_or_fn)

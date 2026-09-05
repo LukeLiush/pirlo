@@ -4,9 +4,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from pirlo.core.decorators import playbook
-
-PLAYBOOK_DECORATOR_NAME: str = playbook.__name__
+PLAYBOOK_DECORATOR_NAMES: set[str] = {"playbook", "play"}
 type DecoratorValue = str | int | float | bool
 
 
@@ -155,16 +153,16 @@ class PlaybookScanner:
         """Checks if an AST decorator node matches @playbook(...) or @module.playbook(...)."""
         if not isinstance(decorator_node, ast.Call):
             return False
-        # Case 1: @playbook(...) -> func is ast.Name(id="playbook")
+        # Case 1: @playbook(...) or @play(...) -> func is ast.Name
         if (
             isinstance(decorator_node.func, ast.Name)
-            and decorator_node.func.id == PLAYBOOK_DECORATOR_NAME
+            and decorator_node.func.id in PLAYBOOK_DECORATOR_NAMES
         ):
             return True
-        # Case 2: @decorators.playbook(...) -> func is ast.Attribute(attr="playbook")
+        # Case 2: @decorators.playbook(...) or @decorators.play(...) -> func is ast.Attribute
         return (
             isinstance(decorator_node.func, ast.Attribute)
-            and decorator_node.func.attr == PLAYBOOK_DECORATOR_NAME
+            and decorator_node.func.attr in PLAYBOOK_DECORATOR_NAMES
         )
 
     @classmethod

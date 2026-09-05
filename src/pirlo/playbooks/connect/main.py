@@ -7,13 +7,13 @@ from tenacity import (
     RetryError,
 )
 
-from pirlo.core.decorators import playbook
+from pirlo.core.decorators import play
 from pirlo.core.models.parameters import Parameter
 from pirlo.core.models.run import RunStatus
 from pirlo.core.models.run_result import RunResult
 from pirlo.core.models.serve_manifest import ActiveSession
 from pirlo.core.ports.health_checker import HealthStatus
-from pirlo.core.ports.playbook import Playbook
+from pirlo.core.ports.play import Play
 from pirlo.playbooks.connect.domain.connect_service import ConnectService
 
 HEALTH_CHECK_INTERVAL_SECONDS: float = 15.0
@@ -28,12 +28,12 @@ class UnhealthyServiceError(Exception):
         super().__init__(status.message)
 
 
-@playbook(
+@play(
     name="connect",
     description="Connects to a remote pirlo serve instance via Paramiko SSH tunnels.",
 )
-class ConnectSession(Playbook):
-    """Connect playbook that establishes SSH tunnels and registers link overlays."""
+class ConnectSession(Play[RunResult[Any]]):
+    """Connect play that establishes SSH tunnels and registers link overlays."""
 
     async def _monitor_health_loop(
         self, session: ActiveSession, service: ConnectService
@@ -59,7 +59,7 @@ class ConnectSession(Playbook):
                 if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
                     raise UnhealthyServiceError(status)
 
-    async def play(
+    async def execute(
         self,
         remote_host: Annotated[
             str,
@@ -78,9 +78,7 @@ class ConnectSession(Playbook):
         *args: Any,
         **kwargs: Any,
     ) -> RunResult[Any]:
-        run_id_val: str = (
-            (await self.prepared_run()).run_id if self._prepared_run else "connect-run"
-        )
+        run_id_val: str = "connect-run"
         service: ConnectService = ConnectService.create_default()
 
         # 1. Disconnect Handler (pirlo connect --down / --disconnect)
@@ -277,6 +275,9 @@ class ConnectSession(Playbook):
                 "ollama_base_url": session.ollama_base_url,
             },
         )
+
+
+ConnectPlay = ConnectSession
 
 
 if __name__ == "__main__":

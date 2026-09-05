@@ -4,13 +4,14 @@ import argparse
 import asyncio
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from pirlo.core.config import get_workspace_path
 from pirlo.core.models.playbook_invocation import PlaybookInvocation
 from pirlo.core.models.run import PreparedRun, RunStatus
 from pirlo.core.models.run_result import RunResult
 from pirlo.core.ports.orchestrator import TaskOrchestrator
+from pirlo.core.ports.play import Play
 from pirlo.core.ports.playbook import Playbook
 from pirlo.infrastructure.adapters.cli.argument_parser_builder import (
     ArgumentParserBuilder,
@@ -36,7 +37,7 @@ class CliPlaybookRunner:
     @classmethod
     def run(
         cls,
-        playbook_cls: type[Playbook],
+        playbook_cls: type[Playbook | Play[Any]],
         playbook_name: str | None = None,
     ) -> RunResult[Any]:
         """Parse CLI parameters using the POSIX '--' delimiter and play the pitch."""
@@ -71,7 +72,7 @@ class CliPlaybookRunner:
 
         # Step A: Prepare pure data run spec
         argument_parser_builder: ArgumentParserBuilder = ArgumentParserBuilder(
-            playbook_cls.play
+            playbook_cls
         )
         epilog_text = (
             "Orchestrator Options:\n"
@@ -110,28 +111,54 @@ class CliPlaybookRunner:
             orchestrator_flags=playbook_invocation.orchestrator_args,
         )
 
-        # Step C: Instantiate playbook with injected TerminalPlaybookUI and orchestrator
-        playbook_instance: Playbook = playbook_cls(
-            prepared_run=prepared_run,
-            orchestrator=orchestrator,
-            ui=TerminalPlaybookUI(),
-        )
+        from pirlo.core.ports.play import Play
 
-        parameter_provider: ParameterProvider = ParameterProvider(parameter_resolver)
-        parameter_snapshot_writer: ParameterSnapshotWriter = ParameterSnapshotWriter(
-            parameter_provider
-        )
+        is_play_cls = issubclass(playbook_cls, Play)
+        if is_play_cls:
+            play_instance = playbook_cls(ui=TerminalPlaybookUI())
+            bound_playbook = None
+        else:
+            # Step C: Instantiate playbook with injected TerminalPlaybookUI and orchestrator
+            legacy_cls = cast(type[Playbook[Any]], playbook_cls)
+            playbook_instance: Playbook[Any] = legacy_cls(
+                prepared_run=prepared_run,
+                orchestrator=orchestrator,
+                ui=TerminalPlaybookUI(),
+            )
 
-        bound_playbook: Playbook = ParameterBinder.bind_values(
-            playbook_instance, prepared_run.parameters
-        )
+            parameter_provider: ParameterProvider = ParameterProvider(
+                parameter_resolver
+            )
+            parameter_snapshot_writer: ParameterSnapshotWriter = (
+                ParameterSnapshotWriter(parameter_provider)
+            )
 
-        parameter_snapshot_writer.write(
-            bound_playbook, prepared_run.parameter_file_path
-        )
+            bound_playbook = ParameterBinder.bind_values(
+                playbook_instance, prepared_run.parameters
+            )
+
+            parameter_snapshot_writer.write(
+                bound_playbook, prepared_run.parameter_file_path
+            )
 
         async def _play() -> RunResult[Any]:
-            raw_result: Any = await bound_playbook.run_play(**prepared_run.parameters)
+            if is_play_cls:
+                from pirlo.core.services.blueprint_extractor import BlueprintExtractor
+                from pirlo.infrastructure.adapters.orchestrator.prefect_compiler import (
+                    PrefectCompiler,
+                )
+
+                blueprint = BlueprintExtractor.extract_from_play(
+                    cast(type[Play[Any]], playbook_cls),
+                    user_kwargs=prepared_run.parameters,
+                )
+                raw_result: Any = await PrefectCompiler.run_ephemeral(blueprint)
+                active_ui = play_instance.ui
+            else:
+                assert bound_playbook is not None
+                raw_result = await bound_playbook.run_play(**prepared_run.parameters)
+                active_ui = bound_playbook.ui
+
             if isinstance(raw_result, RunResult):
                 final_run_result: RunResult[Any] = raw_result
             else:
@@ -141,7 +168,7 @@ class CliPlaybookRunner:
                     data=raw_result,
                 )
 
-            bound_playbook.ui.goal(
+            active_ui.goal(
                 message=f"Run '{prepared_run.run_id}' completed!",
                 detail=f"Result:\n{final_run_result.data}",
             )

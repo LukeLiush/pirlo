@@ -17,7 +17,7 @@ def test_autopass_dag_execution():
 
     with (
         patch(
-            "pirlo.playbooks.autopass.subplaybooks.DecomposeTaskPlaybook.play",
+            "pirlo.playbooks.autopass.subplaybooks.DecomposeTaskPlay.execute",
             new_callable=AsyncMock,
             return_value=decomp_result,
         ),

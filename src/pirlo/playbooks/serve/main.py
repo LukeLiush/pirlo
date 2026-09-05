@@ -18,12 +18,12 @@ from pirlo.core.config import (
     DEFAULT_PREFECT_PORT,
     get_workspace_path,
 )
-from pirlo.core.decorators import playbook
+from pirlo.core.decorators import play
 from pirlo.core.models.parameters import Parameter
 from pirlo.core.models.run import RunStatus
 from pirlo.core.models.run_result import RunResult
 from pirlo.core.models.serve_manifest import ServeManifest
-from pirlo.core.ports.playbook import Playbook
+from pirlo.core.ports.play import Play
 from pirlo.infrastructure.adapters.docker.docker_compose_manager import (
     DockerComposeManager,
 )
@@ -47,12 +47,12 @@ def _get_live_ollama_models(ollama_port: int) -> list[str]:
     return []
 
 
-@playbook(
+@play(
     name="serve",
     description="Starts Pirlo serve (Prefect dev server + Ollama multi-model) using Docker.",
 )
-class ServeSession(Playbook):
-    """Serve playbook that launches Prefect dev server and Ollama via Docker Compose."""
+class ServePlay(Play[RunResult[Any]]):
+    """Serve play that launches Prefect dev server and Ollama via Docker Compose."""
 
     def _find_free_port(self, preferred_port: int) -> int:
         """Checks if preferred_port is occupied on server host; returns free port if busy."""
@@ -63,7 +63,7 @@ class ServeSession(Playbook):
             s.bind(("0.0.0.0", 0))
             return s.getsockname()[1]
 
-    async def play(
+    async def execute(
         self,
         stop: Annotated[
             bool,
@@ -98,9 +98,7 @@ class ServeSession(Playbook):
     ) -> RunResult[Any]:
         compose_file = Path(__file__).parent / "docker-compose.yml"
         compose_manager = DockerComposeManager(compose_file=compose_file)
-        run_id_val = (
-            (await self.prepared_run()).run_id if self._prepared_run else "serve-run"
-        )
+        run_id_val = "serve-run"
 
         is_teardown = stop or down or purge or purge_all
 
@@ -279,4 +277,4 @@ class ServeSession(Playbook):
 
 
 if __name__ == "__main__":
-    ServeSession.cli()
+    ServePlay.cli()

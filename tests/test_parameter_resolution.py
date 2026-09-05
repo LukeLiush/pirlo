@@ -18,7 +18,7 @@ from pirlo.core.ports.playbook import Playbook
 class DummyResolutionSession(Playbook):
     """Session subclass for testing parameter resolution."""
 
-    async def play(
+    async def execute(
         self,
         task: Annotated[
             str, Parameter(help="Task", env_name="TEST_TASK")
@@ -54,6 +54,8 @@ class DummyResolutionSession(Playbook):
                 "multi_env": multi_env,
             },
         )
+
+    play = execute
 
 
 @pytest.mark.anyio
@@ -99,6 +101,7 @@ async def test_default_values_fallback(monkeypatch, tmp_path):
         )
         return RunResult(run_id="test", data=captured_data)
 
+    monkeypatch.setattr(DummyResolutionSession, "execute", mock_play)
     monkeypatch.setattr(DummyResolutionSession, "play", mock_play)
     res = DummyResolutionSession.cli("dummy_resolution")
     if inspect.isawaitable(res):
@@ -163,6 +166,7 @@ async def test_env_variables_resolution(monkeypatch, tmp_path):
         )
         return RunResult(run_id="test", data=captured_data)
 
+    monkeypatch.setattr(DummyResolutionSession, "execute", mock_play)
     monkeypatch.setattr(DummyResolutionSession, "play", mock_play)
     res = DummyResolutionSession.cli("dummy_resolution")
     if inspect.isawaitable(res):
@@ -237,6 +241,7 @@ async def test_cli_overrides_env_and_default(monkeypatch, tmp_path):
         )
         return RunResult(run_id="test", data=captured_data)
 
+    monkeypatch.setattr(DummyResolutionSession, "execute", mock_play)
     monkeypatch.setattr(DummyResolutionSession, "play", mock_play)
     res = DummyResolutionSession.cli("dummy_resolution")
     if inspect.isawaitable(res):

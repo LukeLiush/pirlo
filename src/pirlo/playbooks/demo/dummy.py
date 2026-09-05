@@ -1,17 +1,22 @@
 import asyncio
 from typing import Annotated, Any
 
-from pirlo.core.decorators import playbook
+from pirlo.core.decorators import play
+from pirlo.core.models.blueprint import PlaybookOutput
 from pirlo.core.models.parameters import Parameter
-from pirlo.core.models.run_result import RunResult
-from pirlo.core.ports.playbook import Playbook
+from pirlo.core.ports.play import Play
 
 
-@playbook(name="demo_dummy", description="Dummy test session for console verification.")
-class DummySession(Playbook):
+class DummyOutput(PlaybookOutput):
+    target: str
+    retries: int
+
+
+@play(name="demo_dummy", description="Dummy test session for console verification.")
+class DummySession(Play[DummyOutput]):
     """Dummy test session for console verification."""
 
-    async def play(
+    async def execute(
         self,
         target: Annotated[
             str, Parameter(help="Target host and port")
@@ -23,7 +28,7 @@ class DummySession(Playbook):
         ] = "Initialization sequence started...",
         *args: Any,
         **kwargs: Any,
-    ) -> RunResult[Any]:
+    ) -> DummyOutput:
         # 1. Header (Banner)
         self.ui.header(
             "Dummy Session CLI",
@@ -56,13 +61,10 @@ class DummySession(Playbook):
             "Dummy command completed successfully!",
             detail=f"Target {target} is fully initialized.",
         )
-        return RunResult(
-            run_id=(await self.prepared_run()).run_id
-            if self._prepared_run
-            else "dummy-run",
-            data={"target": target, "retries": retries},
-        )
+        return DummyOutput(target=target, retries=retries)
 
+
+DummyPlay = DummySession
 
 if __name__ == "__main__":
     DummySession.cli()

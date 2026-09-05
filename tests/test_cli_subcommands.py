@@ -15,7 +15,7 @@ from pirlo.core.ports.playbook import Playbook
 class MockSubcommandSession(Playbook):
     """Mock session for testing CLI subcommands."""
 
-    async def play(
+    async def execute(
         self,
         task: Annotated[str, Parameter(help="Task prompt")] = "Test Task",
         *args,
@@ -25,6 +25,8 @@ class MockSubcommandSession(Playbook):
             run_id=(await self.prepared_run()).run_id,
             data={"task_prompt": task, "final_message": "Done"},
         )
+
+    play = execute
 
 
 @pytest.mark.anyio
