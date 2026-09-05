@@ -98,9 +98,6 @@ class Play[OutputT](ABC):
 
         from pirlo.core.ports.runner import PlayRunner
         from pirlo.core.services.blueprint_extractor import BlueprintExtractor
-        from pirlo.infrastructure.adapters.orchestrator.prefect_runner import (
-            PrefectRunner,
-        )
         from pirlo.infrastructure.adapters.runner_factory import (
             PlayRunnerFactory,
         )
@@ -108,12 +105,8 @@ class Play[OutputT](ABC):
         blueprint: PlayBlueprint = BlueprintExtractor.extract_from_play(
             cls, user_kwargs=kwargs
         )
-        play_runner: PlayRunner[Any] = PlayRunnerFactory.get_runner(runner)
-
-        if isinstance(play_runner, PrefectRunner):
-            raw_result: PlayOutput | None = await play_runner.run_blueprint(blueprint)
-        else:
-            raw_result = await play_runner.run(blueprint)
+        play_runner: PlayRunner[PlayBlueprint] = PlayRunnerFactory.get_runner(runner)
+        raw_result: PlayOutput | None = await play_runner.run(blueprint)
         return cast(OutputT, raw_result)
 
     def extract_blueprint(

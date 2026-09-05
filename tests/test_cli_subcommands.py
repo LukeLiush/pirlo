@@ -27,11 +27,11 @@ async def test_subcommand_cli_execution(monkeypatch, tmp_path):
     with (
         patch.object(sys, "argv", ["pirlo mock", "--task", "Search Google"]),
         patch(
-            "pirlo.infrastructure.adapters.orchestrator.prefect_runner.PrefectRunner.run_blueprint",
+            "pirlo.infrastructure.adapters.orchestrator.prefect_runner.PrefectRunner.run",
             new_callable=AsyncMock,
-        ) as mock_run_blueprint,
+        ) as mock_run,
     ):
-        mock_run_blueprint.return_value = {
+        mock_run.return_value = {
             "task_prompt": "Search Google",
             "final_message": "Done",
         }
@@ -41,7 +41,7 @@ async def test_subcommand_cli_execution(monkeypatch, tmp_path):
             result = await result
 
         assert result is not None
-        mock_run_blueprint.assert_called_once()
-        blueprint = mock_run_blueprint.call_args[0][0]
+        mock_run.assert_called_once()
+        blueprint = mock_run.call_args[0][0]
         assert blueprint.name == "MockSubcommandPlay"
         assert blueprint.nodes[0].static_kwargs["task"] == "Search Google"

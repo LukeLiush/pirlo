@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from pirlo.core.models.blueprint import PlayBlueprint
 from pirlo.core.ports.runner import PlayRunner
 from pirlo.infrastructure.adapters.orchestrator.prefect_compiler import (
     PrefectCompiler,
@@ -18,7 +19,7 @@ class PlayRunnerFactory:
     @classmethod
     def get_runner(
         cls, runner_name: str = "prefect", **kwargs: Any
-    ) -> PlayRunner[Any]:
+    ) -> PlayRunner[PlayBlueprint]:
         normalized_name: str = runner_name.lower().strip()
         if normalized_name == "prefect":
             compiler: PrefectCompiler = (

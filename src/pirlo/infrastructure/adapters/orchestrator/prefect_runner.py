@@ -25,25 +25,26 @@ from pirlo.infrastructure.adapters.orchestrator.prefect_model import (
 logger = logging.getLogger(__name__)
 
 
-class PrefectRunner(PlayRunner[PrefectWorkflow]):
+class PrefectRunner(PlayRunner[PlayBlueprint]):
     """Executes a PrefectWorkflow in ephemeral or connected server mode."""
 
     def __init__(
-        self,
-        compiler: PrefectCompiler,
-        mode: Literal["auto", "ephemeral", "server"] = "auto",
-        server_url: str | None = None,
+            self,
+            compiler: PrefectCompiler,
+            mode: Literal["auto", "ephemeral", "server"] = "auto",
+            server_url: str | None = None,
     ) -> None:
         self.compiler: PrefectCompiler = compiler
         self.mode: Literal["auto", "ephemeral", "server"] = mode
         self.server_url: str | None = server_url
 
     async def run(
-        self,
-        workflow: PrefectWorkflow,
-        **kwargs: Any,
+            self,
+            blueprint: PlayBlueprint,
+            **kwargs: Any,
     ) -> PlayOutput | None:
         """Executes the compiled PrefectWorkflow model."""
+        workflow: PrefectWorkflow = self.compiler.compile(blueprint)
         active_api_url: str | None = self.server_url
         if active_api_url is None and self.mode in ("auto", "server"):
             active_api_url = discover_prefect_server_url()
@@ -58,12 +59,3 @@ class PrefectRunner(PlayRunner[PrefectWorkflow]):
 
         with temporary_settings(override_settings):
             return await workflow(**kwargs)
-
-    async def run_blueprint(
-        self,
-        blueprint: PlayBlueprint,
-        **kwargs: Any,
-    ) -> PlayOutput | None:
-        """Convenience method to compile and run a PlayBlueprint in one step."""
-        workflow: PrefectWorkflow = self.compiler.compile(blueprint)
-        return await self.run(workflow, **kwargs)

@@ -9,12 +9,10 @@ from pirlo.core.ports.play import Play, requires
 from pirlo.infrastructure.adapters.orchestrator.prefect_compiler import (
     PrefectCompiler,
 )
-from pirlo.infrastructure.adapters.orchestrator.prefect_model import (
-    PrefectWorkflow,
-)
 from pirlo.infrastructure.adapters.orchestrator.prefect_runner import (
     PrefectRunner,
 )
+from pirlo.infrastructure.adapters.runner_factory import PlayRunnerFactory
 
 
 class StepOneOutput(PlayOutput):
@@ -44,26 +42,21 @@ async def test_prefect_runner_ephemeral_execution():
     play_instance = StepTwoPlay()
     blueprint: PlayBlueprint = play_instance.extract_blueprint()
 
-    # Test 1: Compile then run
     compiler = PrefectCompiler()
-    workflow: PrefectWorkflow = compiler.compile(blueprint)
-    assert isinstance(workflow, PrefectWorkflow)
-
     runner = PrefectRunner(compiler=compiler, mode="ephemeral")
-    result = await runner.run(workflow)
+    result = await runner.run(blueprint)
 
     assert isinstance(result, StepTwoOutput)
     assert result.message == "Received tok_123"
 
 
 @pytest.mark.anyio
-async def test_prefect_runner_run_blueprint_shortcut():
+async def test_prefect_runner_via_factory():
     play_instance = StepTwoPlay()
     blueprint: PlayBlueprint = play_instance.extract_blueprint()
 
-    compiler = PrefectCompiler()
-    runner = PrefectRunner(compiler=compiler, mode="ephemeral")
-    result = await runner.run_blueprint(blueprint)
+    runner = PlayRunnerFactory.get_runner("prefect", mode="ephemeral")
+    result = await runner.run(blueprint)
 
     assert isinstance(result, StepTwoOutput)
     assert result.message == "Received tok_123"

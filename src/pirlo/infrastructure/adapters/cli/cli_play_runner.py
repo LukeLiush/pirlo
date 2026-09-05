@@ -19,9 +19,6 @@ from pirlo.infrastructure.adapters.cli.argument_parser_builder import (
     ArgumentParserBuilder,
 )
 from pirlo.infrastructure.adapters.cli.terminal_play_ui import TerminalPlayUI
-from pirlo.infrastructure.adapters.orchestrator.prefect_runner import (
-    PrefectRunner,
-)
 from pirlo.infrastructure.adapters.runner_factory import (
     PlayRunnerFactory,
 )
@@ -97,19 +94,16 @@ class CliPlayRunner:
             if play_invocation.orchestrator_args
             else "prefect"
         )
-        runner_instance: PlayRunner[Any] = PlayRunnerFactory.get_runner(runner_name)
+        runner_instance: PlayRunner[PlayBlueprint] = (
+            PlayRunnerFactory.get_runner(runner_name)
+        )
 
         async def _play() -> RunResult[Any]:
             blueprint: PlayBlueprint = BlueprintExtractor.extract_from_play(
                 play_cls,
                 user_kwargs=prepared_run.parameters,
             )
-            if isinstance(runner_instance, PrefectRunner):
-                raw_result: PlayOutput | None = await runner_instance.run_blueprint(
-                    blueprint
-                )
-            else:
-                raw_result = await runner_instance.run(blueprint)
+            raw_result: PlayOutput | None = await runner_instance.run(blueprint)
 
             if isinstance(raw_result, RunResult):
                 final_run_result: RunResult[Any] = raw_result
