@@ -13,7 +13,7 @@ from pirlo.playbooks.autopass.models import (
     AutopassRunOutput,
     SubtaskExecutionOutput,
 )
-from pirlo.playbooks.autopass.subplaybooks import (
+from pirlo.playbooks.autopass.subplays import (
     DecomposeTaskPlay,
     ExecuteSubtaskPlay,
     MergeResultsPlay,

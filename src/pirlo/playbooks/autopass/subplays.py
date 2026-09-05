@@ -1,4 +1,4 @@
-# src/pirlo/playbooks/autopass/subplaybooks.py
+# src/pirlo/playbooks/autopass/subplays.py
 from __future__ import annotations
 
 import logging
