@@ -112,14 +112,12 @@ def test_cli_argument_groups():
     parser = builder.build_parser(prog_name="test_alert")
 
     group_titles = [g.title for g in parser._action_groups]
-    assert any("Target Play Options (MockAlertPlay)" in title for title in group_titles)
+    assert any("Target Play Options (test_alert)" in title for title in group_titles)
     assert any(
-        "Upstream Dependency Options (MockExtractPlay)" in title
-        for title in group_titles
+        "Upstream Dependency Options (test_extract)" in title for title in group_titles
     )
     assert any(
-        "Upstream Dependency Options (MockDownloadPlay)" in title
-        for title in group_titles
+        "Upstream Dependency Options (test_download)" in title for title in group_titles
     )
 
     # Check that parameters are bubbled into the parser

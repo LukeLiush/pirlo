@@ -17,14 +17,14 @@ class GrandalfBlueprintRenderer(BlueprintRenderer):
             return ""
 
         if len(blueprint.nodes) == 1:
-            return f"\nWorkflow DAG:\n  [{blueprint.nodes[0].playbook_name}]\n"
+            return f"\nWorkflow DAG:\n  [{blueprint.nodes[0].display_name}]\n"
 
         from langchain_core.runnables.graph import Edge
         from langchain_core.runnables.graph_ascii import draw_ascii
 
         vertices: dict[str, str] = {
             node.node_id: (
-                f"{node.playbook_name} [map]" if node.is_mapped else node.playbook_name
+                f"{node.display_name} [map]" if node.is_mapped else node.display_name
             )
             for node in blueprint.nodes
         }

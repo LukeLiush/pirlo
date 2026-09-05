@@ -3115,38 +3115,6 @@ wheels = [
 ]
 
 [[package]]
-name = "phart"
-version = "1.1.4"
-source = { registry = "https://pypi.org/simple" }
-resolution-markers = [
-    "python_full_version == '3.13.*'",
-    "python_full_version < '3.13'",
-]
-dependencies = [
-    { name = "networkx", marker = "python_full_version < '3.14'" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/14/f4/ab90e7d22b38cc1bad5a72683f8739137fa42f9e2336c92b82dee4cea87e/phart-1.1.4.tar.gz", hash = "sha256:2691e31152a938f48d51d5236715811ede80142a5c8b59d24568435f11ba9f2c", size = 264815, upload-time = "2025-01-25T12:59:36.687Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/c5/20/dc20da33dd3f3fffa5584d35bdfe0dd31847d4f0443495dba6b2cd4ae70a/phart-1.1.4-py3-none-any.whl", hash = "sha256:b34fd91dfb61fc60a2704d9ee2e12bc89a95291efe6e114c7b191244bc5ad8f1", size = 19542, upload-time = "2025-01-25T12:59:35.107Z" },
-]
-
-[[package]]
-name = "phart"
-version = "2.1.0"
-source = { registry = "https://pypi.org/simple" }
-resolution-markers = [
-    "python_full_version >= '3.15'",
-    "python_full_version == '3.14.*'",
-]
-dependencies = [
-    { name = "networkx", marker = "python_full_version >= '3.14'" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/a8/85/8861d0d7f7cc298c973b2cbf9f52dc9d0ebd11c767aacbd7462a548714a3/phart-2.1.0.tar.gz", hash = "sha256:b7d8676bc79945e1cab61a3f9a788b395806d63e6c458143183de89f6bf7c763", size = 645976, upload-time = "2026-08-02T10:06:02.406Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/6b/28/97f1634c542b51692830b8e9e2007441b155bce647b54b6d769fa9ecb7f3/phart-2.1.0-py3-none-any.whl", hash = "sha256:8b703973a66ba72c1616d464cf7610688e2357bd7f9a98d57d2fa2bb35b0267d", size = 111502, upload-time = "2026-08-02T10:06:00.992Z" },
-]
-
-[[package]]
 name = "pillow"
 version = "12.2.0"
 source = { registry = "https://pypi.org/simple" }
@@ -3234,8 +3202,6 @@ dependencies = [
     { name = "ollama" },
     { name = "openai" },
     { name = "paramiko" },
-    { name = "phart", version = "1.1.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.14'" },
-    { name = "phart", version = "2.1.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.14'" },
     { name = "playwright" },
     { name = "prefect" },
     { name = "pydantic" },
@@ -3268,7 +3234,6 @@ requires-dist = [
     { name = "ollama", specifier = ">=0.4.0" },
     { name = "openai", specifier = ">=2.16.0" },
     { name = "paramiko", specifier = ">=3.4.0" },
-    { name = "phart", specifier = ">=1.1.4" },
     { name = "playwright", specifier = ">=1.61.0" },
     { name = "prefect", specifier = ">=3.0.0" },
     { name = "pydantic", specifier = ">=2.12.5" },

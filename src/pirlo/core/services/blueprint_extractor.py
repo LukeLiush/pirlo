@@ -151,9 +151,11 @@ class BlueprintExtractor:
                 else:
                     static_kwargs[parameter_name] = parameter_value
 
+            registered_play_name = getattr(target_play, "play_name", None)
             node = BlueprintNode(
                 node_id=node_id,
                 playbook_name=target_play.__name__,
+                play_name=registered_play_name,
                 static_kwargs=static_kwargs,
                 param_bindings=param_bindings,
                 mapped_bindings=mapped_bindings,

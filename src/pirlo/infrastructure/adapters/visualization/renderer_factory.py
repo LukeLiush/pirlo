@@ -16,11 +16,4 @@ class BlueprintRendererFactory:
 
             return GrandalfBlueprintRenderer()
 
-        if name == "phart":
-            from pirlo.infrastructure.adapters.visualization.phart_renderer import (
-                PhartBlueprintRenderer,
-            )
-
-            return PhartBlueprintRenderer()
-
         raise ValueError(f"Unknown blueprint renderer '{name}'.")

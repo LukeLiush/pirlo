@@ -11,9 +11,6 @@ from pirlo.infrastructure.adapters.cli.argument_parser_builder import (
 from pirlo.infrastructure.adapters.visualization.grandalf_renderer import (
     GrandalfBlueprintRenderer,
 )
-from pirlo.infrastructure.adapters.visualization.phart_renderer import (
-    PhartBlueprintRenderer,
-)
 from pirlo.infrastructure.adapters.visualization.renderer_factory import (
     BlueprintRendererFactory,
 )
@@ -26,7 +23,7 @@ def test_grandalf_renderer_empty_blueprint():
     assert renderer.render(bp) == ""
 
 
-def test_grandalf_renderer_single_node():
+def test_grandalf_renderer_single_node_fallback():
     renderer = GrandalfBlueprintRenderer()
     bp = PlayBlueprint(
         name="single",
@@ -38,71 +35,74 @@ def test_grandalf_renderer_single_node():
     assert "[SinglePlay]" in res
 
 
-def test_grandalf_renderer_mapped_pipeline():
+def test_grandalf_renderer_single_node_with_play_name():
+    renderer = GrandalfBlueprintRenderer()
+    bp = PlayBlueprint(
+        name="single",
+        entry_playbook="single_cmd",
+        nodes=[
+            BlueprintNode(
+                node_id="n1", playbook_name="SinglePlay", play_name="single_cmd"
+            )
+        ],
+    )
+    res = renderer.render(bp)
+    assert "Workflow DAG:" in res
+    assert "[single_cmd]" in res
+
+
+def test_grandalf_renderer_mapped_pipeline_with_play_names():
     renderer = GrandalfBlueprintRenderer()
     bp = PlayBlueprint(
         name="mapped_flow",
-        entry_playbook="FinalPlay",
+        entry_playbook="final_cmd",
         nodes=[
-            BlueprintNode(node_id="n1", playbook_name="FirstPlay"),
+            BlueprintNode(
+                node_id="n1", playbook_name="FirstPlay", play_name="first_cmd"
+            ),
             BlueprintNode(
                 node_id="n2",
                 playbook_name="MappedPlay",
+                play_name="mapped_cmd",
                 depends_on=["n1"],
                 is_mapped=True,
             ),
             BlueprintNode(
                 node_id="n3",
                 playbook_name="FinalPlay",
+                play_name="final_cmd",
                 depends_on=["n2"],
             ),
         ],
     )
     res = renderer.render(bp)
     assert "Workflow DAG:" in res
-    assert "FirstPlay" in res
-    assert "MappedPlay [map]" in res
-    assert "FinalPlay" in res
+    assert "first_cmd" in res
+    assert "mapped_cmd [map]" in res
+    assert "final_cmd" in res
 
 
 def test_grandalf_renderer_multi_parent_join():
     renderer = GrandalfBlueprintRenderer()
     bp = PlayBlueprint(
         name="multi_parent",
-        entry_playbook="JoinPlay",
+        entry_playbook="join_cmd",
         nodes=[
-            BlueprintNode(node_id="n1", playbook_name="BranchA"),
-            BlueprintNode(node_id="n2", playbook_name="BranchB"),
+            BlueprintNode(node_id="n1", playbook_name="BranchA", play_name="branch_a"),
+            BlueprintNode(node_id="n2", playbook_name="BranchB", play_name="branch_b"),
             BlueprintNode(
                 node_id="n3",
                 playbook_name="JoinPlay",
+                play_name="join_cmd",
                 depends_on=["n1", "n2"],
             ),
         ],
     )
     res = renderer.render(bp)
     assert "Workflow DAG:" in res
-    assert "BranchA" in res
-    assert "BranchB" in res
-    assert "JoinPlay" in res
-
-
-def test_phart_renderer_empty_blueprint():
-    renderer = PhartBlueprintRenderer()
-    bp = PlayBlueprint(name="empty", entry_playbook="empty", nodes=[])
-    assert renderer.render(bp) == ""
-
-
-def test_phart_renderer_single_node():
-    renderer = PhartBlueprintRenderer()
-    bp = PlayBlueprint(
-        name="single",
-        entry_playbook="SinglePlay",
-        nodes=[BlueprintNode(node_id="n1", playbook_name="SinglePlay")],
-    )
-    res = renderer.render(bp)
-    assert "Workflow DAG:" in res
-    assert "[SinglePlay]" in res
+    assert "branch_a" in res
+    assert "branch_b" in res
+    assert "join_cmd" in res
 
 
 def test_renderer_factory_defaults_and_substitution():
@@ -111,9 +111,6 @@ def test_renderer_factory_defaults_and_substitution():
 
     grandalf_renderer = BlueprintRendererFactory.get_renderer("grandalf")
     assert isinstance(grandalf_renderer, GrandalfBlueprintRenderer)
-
-    phart_renderer = BlueprintRendererFactory.get_renderer("phart")
-    assert isinstance(phart_renderer, PhartBlueprintRenderer)
 
     with pytest.raises(ValueError, match="Unknown blueprint renderer 'unknown'"):
         BlueprintRendererFactory.get_renderer("unknown")
@@ -130,12 +127,15 @@ def test_solid_renderer_substitution_on_blueprint():
     assert bp.to_ascii(renderer=custom_renderer) == "MOCK_RENDERED:TestBP"
 
 
-def test_argument_parser_builder_includes_dag_in_help():
+def test_argument_parser_builder_includes_dag_and_play_names_in_help():
     builder = ArgumentParserBuilder(AutopassPlay)
     parser = builder.build_parser("autopass")
     help_text = parser.format_help()
 
     assert "Workflow DAG:" in help_text
-    assert "DecomposeTaskPlay" in help_text
-    assert "ExecuteSubtaskPlay [map]" in help_text
-    assert "AutopassPlay" in help_text
+    assert "autopass_decompose" in help_text
+    assert "autopass_execute_subtask [map]" in help_text
+    assert "autopass" in help_text
+    assert "Target Play Options (autopass)" in help_text
+    assert "Upstream Dependency Options (autopass_execute_subtask)" in help_text
+    assert "Upstream Dependency Options (autopass_decompose)" in help_text

@@ -50,12 +50,18 @@ class BlueprintNode:
 
     node_id: str
     playbook_name: str
+    play_name: str | None = None
     static_kwargs: dict[str, ParameterValue] = field(default_factory=dict)
     param_bindings: dict[str, ParamBinding] = field(default_factory=dict)
     mapped_bindings: dict[str, ParamBinding] = field(default_factory=dict)
     mapped_static_kwargs: list[str] = field(default_factory=list)
     is_mapped: bool = False
     depends_on: list[str] = field(default_factory=list)
+
+    @property
+    def display_name(self) -> str:
+        """Returns the registered play_name if available, otherwise class playbook_name."""
+        return self.play_name or self.playbook_name
 
     def render_ascii(self) -> str:
         """Renders ASCII diagnostic summary of this single node."""

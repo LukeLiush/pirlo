@@ -195,7 +195,9 @@ class ArgumentParserBuilder:
         added_flags: set[str] = set()
 
         if self._upstream_params_by_cls:
-            target_name = self._target_cls.__name__ if self._target_cls else prog_name
+            target_name = getattr(self._target_cls, "play_name", None) or (
+                self._target_cls.__name__ if self._target_cls else prog_name
+            )
             target_group = parser.add_argument_group(
                 f"Target Play Options ({target_name})"
             )
@@ -204,8 +206,11 @@ class ArgumentParserBuilder:
                 self._add_argument(target_group, param, added_flags)
 
             for upstream_cls, up_params in self._upstream_params_by_cls.items():
+                upstream_name = getattr(
+                    upstream_cls, "play_name", upstream_cls.__name__
+                )
                 upstream_group = parser.add_argument_group(
-                    f"Upstream Dependency Options ({upstream_cls.__name__})"
+                    f"Upstream Dependency Options ({upstream_name})"
                 )
                 for param in up_params:
                     self._add_argument(upstream_group, param, added_flags)
