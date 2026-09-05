@@ -4,16 +4,54 @@ import sys
 import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 import ftfy
 from rich.text import Text
 
+from pirlo.core.logging_context import resolve_log_prefix
+
+ANSI_PATTERN = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]|\b\[\d+m")
+
+
+class PirloLogFilter(logging.Filter):
+    """Enriches LogRecord with contextual prefix and process PID."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        prefix, pid = resolve_log_prefix()
+        msg_str = str(record.msg)
+        if msg_str.startswith("Workflow starting"):
+            record.prefix = ""
+        else:
+            record.prefix = prefix
+        record.pid = pid
+        return True
+
+
+class PirloLogFormatter(logging.Formatter):
+    """Logging Formatter producing millisecond precision timestamps:
+    'YYYY-MM-DD HH:MM:SS.mmm [3a4f8c9b/subtask#1235 (pid 5678)] message'
+    and stripping ANSI escape codes.
+    """
+
+    def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
+        ct = self.converter(record.created)
+        t = time.strftime(datefmt or "%Y-%m-%d %H:%M:%S", ct)
+        return f"{t}.{int(record.msecs):03d}"
+
+    def format(self, record: logging.LogRecord) -> str:
+        msg = super().format(record)
+        clean_msg = ANSI_PATTERN.sub("", msg)
+        return re.sub(r"  +", " ", clean_msg)
+
+
+AnsiStrippingFormatter = PirloLogFormatter
+
 
 class StdioTee:
-    """Tees stdout/stderr output: sends raw ANSI to terminal, uses line-buffering and Rich for log_file."""
+    """Tees stdout/stderr output: sends raw ANSI to terminal, writes formatted text to log_file."""
 
     def __init__(
         self,
@@ -48,11 +86,14 @@ class StdioTee:
                     prefix = self.get_prefix_fn() or ""
                 except Exception:  # noqa: BLE001
                     prefix = ""
+            if not prefix:
+                prefix, _ = resolve_log_prefix()
 
-            now_str = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
-            formatted_prefix = f"[{now_str}] {prefix} " if prefix else f"[{now_str}] "
+            now = datetime.now()
+            now_str = now.strftime("%Y-%m-%d %H:%M:%S") + f".{now.microsecond // 1000:03d}"
+            formatted_prefix = f"{prefix} " if prefix else ""
             if self.log_file:
-                self.log_file.write(formatted_prefix + line_content + "\n")
+                self.log_file.write(f"{now_str} {formatted_prefix}{line_content}\n")
                 self.log_file.flush()
 
     def write(self, data: str) -> int:
@@ -86,17 +127,6 @@ class StdioTee:
         return self.original_stream.fileno()
 
 
-ANSI_PATTERN = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]|\b\[\d+m")
-
-
-class AnsiStrippingFormatter(logging.Formatter):
-    """Logging Formatter that strips raw ANSI escape codes from log records before saving to file."""
-
-    def format(self, record: logging.LogRecord) -> str:
-        formatted_message = super().format(record)
-        return ANSI_PATTERN.sub("", formatted_message)
-
-
 @contextmanager
 def capture_run_logs(
     run_dir: Path, get_prefix_fn: Callable[[], str] | None = None
@@ -116,14 +146,13 @@ def capture_run_logs(
         sys.stdout = tee_stdout
         sys.stderr = tee_stderr
 
-        # 2. Attach FileHandler directly to root_logger
-        # (All child loggers including prefect propagate up to root_logger)
+        # 2. Attach FileHandler directly to root_logger with PirloLogFormatter and PirloLogFilter
         file_handler = logging.FileHandler(log_path, encoding="utf-8")
-        formatter = AnsiStrippingFormatter(
-            "[%(asctime)s UTC] %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
+        formatter = PirloLogFormatter(
+            "%(asctime)s %(prefix)s %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
         )
-        formatter.converter = time.gmtime
         file_handler.setFormatter(formatter)
+        file_handler.addFilter(PirloLogFilter())
 
         root_logger = logging.getLogger()
         root_logger.setLevel(logging.INFO)

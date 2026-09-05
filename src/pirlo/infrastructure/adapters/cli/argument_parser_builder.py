@@ -8,12 +8,11 @@ from pathlib import Path
 from typing import Annotated, Any, get_args, get_origin, get_type_hints
 
 from pirlo.core.models.parameters import LinkParameter, Parameter
-from pirlo.core.ports.orchestrator import TaskOrchestrator
 from pirlo.core.ports.play import Play
 
 logger = logging.getLogger(__name__)
 
-TargetSignatureSource = type[Play] | type[TaskOrchestrator] | Callable[..., Any]
+TargetSignatureSource = type[Play] | Callable[..., Any]
 
 
 def extract_signature_parameters(

@@ -7,6 +7,12 @@ from typing import Any, cast
 from prefect import flow, task
 from prefect.futures import PrefectFuture
 
+from pirlo.core.logging_context import (
+    generate_short_run_id,
+    get_current_run_id,
+    play_logging_context,
+    workflow_logging_context,
+)
 from pirlo.core.models.blueprint import (
     BlueprintError,
     BlueprintNode,
@@ -39,10 +45,19 @@ class PrefectCompiler(BlueprintCompiler[PrefectWorkflow]):
         if not blueprint.nodes:
             raise BlueprintError(f"Cannot compile empty blueprint '{blueprint.name}'.")
 
-        @flow(name=blueprint.name, validate_parameters=self.validate_parameters)
+        active_run_id = get_current_run_id() or generate_short_run_id()
+
+        @flow(
+            name=blueprint.name,
+            flow_run_name=active_run_id,
+            validate_parameters=self.validate_parameters,
+        )
         async def prefect_master_flow(
             **workflow_kwargs: object,
         ) -> PlayOutput | None:
+            with workflow_logging_context(active_run_id):
+                logger.info("Workflow starting (run-id %s):", active_run_id)
+
             futures: dict[str, PrefectFuture[PlayOutput]] = {}
 
             async def _resolve_future_result(fut: Any) -> Any:
@@ -83,58 +98,61 @@ class PrefectCompiler(BlueprintCompiler[PrefectWorkflow]):
                 @task(
                     name=f"Task: {play_name}",
                 )
-                async def subflow_runner(
+                async def execute_play_task(
                     target_cls: type[Any] = play_cls,
                     node_name: str = blueprint_node.playbook_name,
                     **kwargs: object,
                 ) -> PlayOutput:
                     active_play_name = getattr(target_cls, "play_name", node_name)
                     identity = compute_play_identity(active_play_name, kwargs)
-                    try:
-                        instance: Any = target_cls(
-                            ui=TerminalPlayUI(play_name=identity.short_id),
-                            play_id=identity.full_id,
-                        )
-                    except TypeError:
+                    with play_logging_context(identity.short_id, run_id=active_run_id):
+                        logger.info("Task is starting.")
                         try:
-                            instance = target_cls(
-                                ui=TerminalPlayUI(play_name=identity.short_id)
+                            instance: Any = target_cls(
+                                ui=TerminalPlayUI(play_name=identity.short_id),
+                                play_id=identity.full_id,
                             )
                         except TypeError:
-                            instance = target_cls()
+                            try:
+                                instance = target_cls(
+                                    ui=TerminalPlayUI(play_name=identity.short_id)
+                                )
+                            except TypeError:
+                                instance = target_cls()
 
-                    exec_kwargs = dict(kwargs)
-                    import inspect
+                        exec_kwargs = dict(kwargs)
+                        import inspect
 
-                    sig = inspect.signature(instance.execute)
-                    has_var_keyword = any(
-                        p.kind == inspect.Parameter.VAR_KEYWORD
-                        for p in sig.parameters.values()
-                    )
+                        sig = inspect.signature(instance.execute)
+                        has_var_keyword = any(
+                            p.kind == inspect.Parameter.VAR_KEYWORD
+                            for p in sig.parameters.values()
+                        )
 
-                    # Injects resolved upstream requirements into instance.__dict__
-                    if hasattr(target_cls, "get_upstream_requirements"):
-                        reqs = target_cls.get_upstream_requirements()
-                        for field_name in reqs:
-                            if field_name in kwargs:
-                                setattr(instance, field_name, kwargs[field_name])
-                                if field_name not in sig.parameters:
-                                    exec_kwargs.pop(field_name, None)
+                        # Injects resolved upstream requirements into instance.__dict__
+                        if hasattr(target_cls, "get_upstream_requirements"):
+                            reqs = target_cls.get_upstream_requirements()
+                            for field_name in reqs:
+                                if field_name in kwargs:
+                                    setattr(instance, field_name, kwargs[field_name])
+                                    if field_name not in sig.parameters:
+                                        exec_kwargs.pop(field_name, None)
 
-                    # Filter exec_kwargs to only accepted parameters if no **kwargs
-                    if not has_var_keyword:
-                        exec_kwargs = {
-                            k: v for k, v in exec_kwargs.items() if k in sig.parameters
-                        }
+                        # Filter exec_kwargs to only accepted parameters if no **kwargs
+                        if not has_var_keyword:
+                            exec_kwargs = {
+                                k: v for k, v in exec_kwargs.items() if k in sig.parameters
+                            }
 
-                    # Executes execute() for Play
-                    play_result: Any = await instance.execute(**exec_kwargs)
+                        # Executes execute() for Play
+                        play_result: Any = await instance.execute(**exec_kwargs)
+                        logger.info("Task finished successfully.")
 
-                    return (
-                        play_result.data
-                        if isinstance(play_result, RunResult) and play_result.data
-                        else cast(PlayOutput, play_result)
-                    )
+                        return (
+                            play_result.data
+                            if isinstance(play_result, RunResult) and play_result.data
+                            else cast(PlayOutput, play_result)
+                        )
 
                 parent_futures: list[PrefectFuture[PlayOutput]] = [
                     futures[parent_id] for parent_id in blueprint_node.depends_on
@@ -167,14 +185,22 @@ class PrefectCompiler(BlueprintCompiler[PrefectWorkflow]):
                         else:
                             unmapped_kwargs[k] = unmapped(v)
 
-                    mapped_future: Any = subflow_runner.map(  # type: ignore[call-overload]
+                    configured_task = execute_play_task.with_options(
+                        name=f"Task: {play_name}",
+                    )
+                    mapped_future: Any = configured_task.map(  # type: ignore[call-overload]
                         wait_for=parent_futures,
                         **mapped_kwargs,
                         **unmapped_kwargs,
                     )
                     futures[blueprint_node.node_id] = mapped_future
                 else:
-                    prefect_future: PrefectFuture[PlayOutput] = subflow_runner.submit(  # type: ignore[call-overload]
+                    identity = compute_play_identity(play_name, resolved_kwargs)
+                    configured_task = execute_play_task.with_options(
+                        name=f"Task: {play_name}",
+                        task_run_name=identity.short_id,
+                    )
+                    prefect_future: PrefectFuture[PlayOutput] = configured_task.submit(  # type: ignore[call-overload]
                         wait_for=parent_futures, **resolved_kwargs
                     )
                     futures[blueprint_node.node_id] = prefect_future
@@ -183,7 +209,13 @@ class PrefectCompiler(BlueprintCompiler[PrefectWorkflow]):
                 final_prefect_future: PrefectFuture[PlayOutput] = futures[
                     blueprint.output_node_id
                 ]
-                return await _resolve_future_result(final_prefect_future)
+                final_result = await _resolve_future_result(final_prefect_future)
+                with workflow_logging_context(active_run_id):
+                    logger.info("Done!")
+                return final_result
+
+            with workflow_logging_context(active_run_id):
+                logger.info("Done!")
             return None
 
         return PrefectWorkflow(

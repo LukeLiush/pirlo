@@ -11,6 +11,7 @@ class ExecutionContext(Generic[PageT]):  # noqa: UP046
     page: PageT | None = None
     cache_key: str | None = None
     run_id: str | None = None
+    play_id: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
