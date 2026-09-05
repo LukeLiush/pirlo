@@ -10,10 +10,6 @@ class PlayOutput(BaseModel):
     """Base class for all strongly-typed play output payloads."""
 
 
-# Backward-compatibility alias
-PlaybookOutput = PlayOutput
-
-
 from pathlib import Path
 from typing import TYPE_CHECKING
 
