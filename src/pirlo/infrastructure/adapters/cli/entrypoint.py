@@ -140,14 +140,14 @@ def main() -> None:
                 sys.exit(1)
             sys.exit(0)
 
-    target_playbook: str = (
+    target_play_name: str = (
         sys.argv[0].split(" ")[-1] if " " in sys.argv[0] else sys.argv[1]
     )
     if " " in sys.argv[0]:
-        target_playbook = sys.argv[0].split(" ")[1]
+        target_play_name = sys.argv[0].split(" ")[1]
 
-    if target_playbook in specs:
-        target_spec: PlaySpec = specs[target_playbook]
+    if target_play_name in specs:
+        target_spec: PlaySpec = specs[target_play_name]
         try:
             local_src_dir: str = str(Path.cwd() / "src")
             local_cwd_dir: str = str(Path.cwd())
@@ -159,11 +159,11 @@ def main() -> None:
             module = importlib.import_module(target_spec.module_path)
             session_cls = getattr(module, target_spec.class_name)
 
-            session_cls.cli(play_name=target_playbook)
+            session_cls.cli(play_name=target_play_name)
 
         except Exception as e:  # noqa: BLE001
             sys.stderr.write(
-                f"Error: Failed to load playbook '{target_playbook}' ({target_spec.module_path}:{target_spec.class_name}): {e}\n"
+                f"Error: Failed to load playbook '{target_play_name}' ({target_spec.module_path}:{target_spec.class_name}): {e}\n"
             )
             import traceback
 

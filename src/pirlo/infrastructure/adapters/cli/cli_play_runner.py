@@ -45,12 +45,13 @@ class CliPlayRunner:
         play_name: str | None = None,
     ) -> RunResult[Any]:
         """Parse CLI parameters using the POSIX '--' delimiter and execute the play."""
-        resolved_play_name: str = (
-            play_name
-            or getattr(play_cls, "play_name", None)
-            or getattr(play_cls, "playbook_name", None)
-            or play_cls.__name__.lower().replace("session", "").replace("play", "")
+        resolved_play_name: str | None = play_name or getattr(
+            play_cls, "play_name", None
         )
+        if resolved_play_name is None:
+            raise ValueError(
+                f"Play class {play_cls} does not have a @play name attribute."
+            )
 
         raw_arguments: list[str] = extract_raw_arguments_excluding_command(
             sys.argv, resolved_play_name

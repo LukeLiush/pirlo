@@ -8,21 +8,16 @@ T = TypeVar("T", bound=type[Any])
 O = TypeVar("O", bound=type["TaskOrchestrator"])
 
 
-def playbook(name: str, description: str | None = None) -> Callable[[T], T]:
+def play(name: str, description: str | None = None) -> Callable[[T], T]:
     """Class decorator to register a playbook command name and description."""
 
     def decorator(cls: T) -> T:
-        cls.playbook_name = name
         cls.play_name = name
         doc_desc = cls.__doc__.strip().split("\n")[0] if cls.__doc__ else None
-        cls.playbook_description = description or doc_desc or ""
-        cls.play_description = cls.playbook_description
+        cls.play_description = description or doc_desc or ""
         return cls
 
     return decorator
-
-
-play = playbook
 
 
 def orchestrator(
