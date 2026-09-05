@@ -8,18 +8,22 @@ from pathlib import Path
 from typing import Any
 
 from pirlo.core.config import get_workspace_path
-from pirlo.core.models.blueprint import PlaybookBlueprint, PlayOutput
+from pirlo.core.models.blueprint import PlayBlueprint, PlayOutput
 from pirlo.core.models.play_invocation import PlayInvocation
 from pirlo.core.models.run import PreparedRun, RunStatus
 from pirlo.core.models.run_result import RunResult
 from pirlo.core.ports.play import Play
+from pirlo.core.ports.runner import PlayRunner
 from pirlo.core.services.blueprint_extractor import BlueprintExtractor
 from pirlo.infrastructure.adapters.cli.argument_parser_builder import (
     ArgumentParserBuilder,
 )
 from pirlo.infrastructure.adapters.cli.terminal_play_ui import TerminalPlayUI
-from pirlo.infrastructure.adapters.orchestrator.prefect_compiler import (
-    PrefectCompiler,
+from pirlo.infrastructure.adapters.orchestrator.prefect_runner import (
+    PrefectRunner,
+)
+from pirlo.infrastructure.adapters.runner_factory import (
+    PlayRunnerFactory,
 )
 from pirlo.infrastructure.services.parameter_resolution import ParameterResolver
 from pirlo.infrastructure.services.run_preparer import RunPreparer
@@ -88,14 +92,24 @@ class CliPlayRunner:
         # Step B: Instantiate play with injected TerminalPlayUI
         play_instance: Play[Any] = play_cls(ui=TerminalPlayUI())
 
+        runner_name: str = (
+            play_invocation.orchestrator_args[0]
+            if play_invocation.orchestrator_args
+            else "prefect"
+        )
+        runner_instance: PlayRunner[Any] = PlayRunnerFactory.get_runner(runner_name)
+
         async def _play() -> RunResult[Any]:
-            blueprint: PlaybookBlueprint = BlueprintExtractor.extract_from_play(
+            blueprint: PlayBlueprint = BlueprintExtractor.extract_from_play(
                 play_cls,
                 user_kwargs=prepared_run.parameters,
             )
-            raw_result: PlayOutput | None = await PrefectCompiler.run_ephemeral(
-                blueprint
-            )
+            if isinstance(runner_instance, PrefectRunner):
+                raw_result: PlayOutput | None = await runner_instance.run_blueprint(
+                    blueprint
+                )
+            else:
+                raw_result = await runner_instance.run(blueprint)
 
             if isinstance(raw_result, RunResult):
                 final_run_result: RunResult[Any] = raw_result

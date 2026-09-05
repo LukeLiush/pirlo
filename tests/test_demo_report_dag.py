@@ -2,8 +2,6 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable
-from typing import Any
 
 from pirlo.core.models.blueprint import BlueprintNode, PlaybookBlueprint
 from pirlo.infrastructure.adapters.orchestrator.prefect_compiler import (
@@ -42,10 +40,10 @@ def test_demo_report_dag_blueprint_extraction():
 
 
 def test_demo_report_dag_local_practice_run():
+    # Test execution via Prefect runner (ephemeral)
     result: AlertOutput = asyncio.run(
         SendAlertPlay.run_play(report_month="2026-09", channel="#testing")
     )
-
     assert isinstance(result, AlertOutput)
     assert result.alert_sent is True
     assert result.channel == "#testing"
@@ -55,6 +53,7 @@ def test_demo_report_dag_prefect_compilation():
     dag = SendAlertPlay()
     blueprint: PlaybookBlueprint = dag.extract_blueprint()
 
-    master_flow: Callable[..., Any] = PrefectCompiler.compile(blueprint)
-    assert master_flow is not None
-    assert getattr(master_flow, "name", None) == blueprint.name
+    prefect_workflow = PrefectCompiler().compile(blueprint)
+    assert prefect_workflow is not None
+    assert prefect_workflow.name == blueprint.name
+    assert callable(prefect_workflow.flow)

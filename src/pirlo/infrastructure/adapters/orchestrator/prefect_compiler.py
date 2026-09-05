@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Awaitable, Callable
 from typing import Any, cast
 
 from prefect import flow, task
@@ -11,29 +10,35 @@ from prefect.futures import PrefectFuture
 from pirlo.core.models.blueprint import (
     BlueprintError,
     BlueprintNode,
-    PlaybookBlueprint,
+    PlayBlueprint,
     PlayOutput,
 )
 from pirlo.core.models.run_result import RunResult
 from pirlo.core.ports.compiler import BlueprintCompiler
 from pirlo.core.ports.play import Play
 from pirlo.infrastructure.adapters.cli.terminal_play_ui import TerminalPlayUI
+from pirlo.infrastructure.adapters.orchestrator.prefect_model import (
+    PrefectWorkflow,
+)
 
 logger = logging.getLogger(__name__)
 
 
-class PrefectCompiler(BlueprintCompiler[Callable[..., Awaitable[PlayOutput | None]]]):
-    """Compiles a PlaybookBlueprint into executable Prefect 3 Flows & Tasks."""
+class PrefectCompiler(BlueprintCompiler[PrefectWorkflow]):
+    """Compiles a PlayBlueprint into an executable PrefectWorkflow model."""
 
-    @classmethod
+    def __init__(self, validate_parameters: bool = False) -> None:
+        self.validate_parameters: bool = validate_parameters
+
     def compile(
-        cls, blueprint: PlaybookBlueprint
-    ) -> Callable[..., Awaitable[PlayOutput | None]]:
-        """Dynamically constructs a master Prefect Flow from the PlaybookBlueprint."""
+        self,
+        blueprint: PlayBlueprint,
+    ) -> PrefectWorkflow:
+        """Dynamically constructs a master PrefectWorkflow from the PlayBlueprint."""
         if not blueprint.nodes:
             raise BlueprintError(f"Cannot compile empty blueprint '{blueprint.name}'.")
 
-        @flow(name=blueprint.name, validate_parameters=False)
+        @flow(name=blueprint.name, validate_parameters=self.validate_parameters)
         async def prefect_master_flow(
             **workflow_kwargs: object,
         ) -> PlayOutput | None:
@@ -67,7 +72,7 @@ class PrefectCompiler(BlueprintCompiler[Callable[..., Awaitable[PlayOutput | Non
                         else parent_result
                     )
 
-                playbook_cls: type[Any] = cls._resolve_playbook_class(
+                play_cls: type[Any] = self._resolve_play_class(
                     blueprint_node.playbook_name
                 )
 
@@ -75,7 +80,7 @@ class PrefectCompiler(BlueprintCompiler[Callable[..., Awaitable[PlayOutput | Non
                     name=f"Task: {blueprint_node.playbook_name}",
                 )
                 async def subflow_runner(
-                    target_cls: type[Any] = playbook_cls,
+                    target_cls: type[Any] = play_cls,
                     **kwargs: object,
                 ) -> PlayOutput:
                     try:
@@ -108,13 +113,12 @@ class PrefectCompiler(BlueprintCompiler[Callable[..., Awaitable[PlayOutput | Non
                         }
 
                     # Executes execute() for Play
-                    playbook_result: Any = await instance.execute(**exec_kwargs)
+                    play_result: Any = await instance.execute(**exec_kwargs)
 
                     return (
-                        playbook_result.data
-                        if isinstance(playbook_result, RunResult)
-                        and playbook_result.data
-                        else cast(PlayOutput, playbook_result)
+                        play_result.data
+                        if isinstance(play_result, RunResult) and play_result.data
+                        else cast(PlayOutput, play_result)
                     )
 
                 parent_futures: list[PrefectFuture[PlayOutput]] = [
@@ -167,38 +171,17 @@ class PrefectCompiler(BlueprintCompiler[Callable[..., Awaitable[PlayOutput | Non
                 return await _resolve_future_result(final_prefect_future)
             return None
 
-        return prefect_master_flow
-
-    @classmethod
-    async def run_ephemeral(cls, blueprint: PlaybookBlueprint) -> PlayOutput | None:
-        """Executes the PlaybookBlueprint in local ephemeral mode."""
-        from prefect.settings import (
-            PREFECT_API_URL,
-            PREFECT_SERVER_ALLOW_EPHEMERAL_MODE,
-            temporary_settings,
+        return PrefectWorkflow(
+            name=blueprint.name,
+            flow=prefect_master_flow,
+            blueprint=blueprint,
         )
 
-        from pirlo.infrastructure.adapters.orchestrator.prefect_discovery import (
-            discover_prefect_server_url,
-        )
-
-        active_api_url: str | None = discover_prefect_server_url()
-        override_settings = (
-            {PREFECT_API_URL: active_api_url}
-            if active_api_url
-            else {PREFECT_API_URL: None, PREFECT_SERVER_ALLOW_EPHEMERAL_MODE: True}
-        )
-
-        with temporary_settings(override_settings):
-            master_flow = cls.compile(blueprint)
-            return await master_flow()
-
-    @classmethod
-    def _resolve_playbook_class(cls, playbook_name: str) -> type[Any]:
+    def _resolve_play_class(self, play_name: str) -> type[Any]:
         import contextlib
         import sys
 
-        # 1. Search sys.modules for loaded Playbook or Play subclasses
+        # 1. Search sys.modules for loaded Play subclasses
         for module in list(sys.modules.values()):
             if not module:
                 continue
@@ -208,12 +191,12 @@ class PrefectCompiler(BlueprintCompiler[Callable[..., Awaitable[PlayOutput | Non
                     if (
                         isinstance(obj, type)
                         and issubclass(obj, Play)
-                        and obj.__name__ == playbook_name
+                        and obj.__name__ == play_name
                     ):
                         return cast(type[Any], obj)
 
         # 2. Fallback to PlayScanner disk scanner
         from pirlo.infrastructure.services.play_scanner import PlayScanner
 
-        class_object: type[object] = PlayScanner().get_play_class(playbook_name)
+        class_object: type[object] = PlayScanner().get_play_class(play_name)
         return cast(type[Any], class_object)

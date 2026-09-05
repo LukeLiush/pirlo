@@ -8,7 +8,7 @@ from pirlo.core.models.blueprint import ParameterValue, ProxyRef, ScalarValue
 from pirlo.core.ports.play_ui import PlayUI
 
 if TYPE_CHECKING:
-    from pirlo.core.models.blueprint import PlaybookBlueprint, PlayOutput
+    from pirlo.core.models.blueprint import PlayBlueprint, PlayOutput
 
 
 class MappedParameter:
@@ -88,25 +88,38 @@ class Play[OutputT](ABC):
         return requirements
 
     @classmethod
-    async def run_play(cls, **kwargs: ParameterValue) -> OutputT:
-        """Executes the Play and all upstream dependencies via Prefect in ephemeral mode."""
+    async def run_play(
+        cls,
+        runner: str = "prefect",
+        **kwargs: ParameterValue,
+    ) -> OutputT:
+        """Executes the Play and all upstream dependencies via the specified runner."""
         from typing import cast
 
+        from pirlo.core.ports.runner import PlayRunner
         from pirlo.core.services.blueprint_extractor import BlueprintExtractor
-        from pirlo.infrastructure.adapters.orchestrator.prefect_compiler import (
-            PrefectCompiler,
+        from pirlo.infrastructure.adapters.orchestrator.prefect_runner import (
+            PrefectRunner,
+        )
+        from pirlo.infrastructure.adapters.runner_factory import (
+            PlayRunnerFactory,
         )
 
-        blueprint: PlaybookBlueprint = BlueprintExtractor.extract_from_play(
+        blueprint: PlayBlueprint = BlueprintExtractor.extract_from_play(
             cls, user_kwargs=kwargs
         )
-        raw_result: PlayOutput | None = await PrefectCompiler.run_ephemeral(blueprint)
+        play_runner: PlayRunner[Any] = PlayRunnerFactory.get_runner(runner)
+
+        if isinstance(play_runner, PrefectRunner):
+            raw_result: PlayOutput | None = await play_runner.run_blueprint(blueprint)
+        else:
+            raw_result = await play_runner.run(blueprint)
         return cast(OutputT, raw_result)
 
     def extract_blueprint(
         self, user_kwargs: dict[str, ParameterValue] | None = None
-    ) -> PlaybookBlueprint:
-        """Extracts the PlaybookBlueprint IR for this Play and its upstream requirements."""
+    ) -> PlayBlueprint:
+        """Extracts the PlayBlueprint IR for this Play and its upstream requirements."""
         from pirlo.core.services.blueprint_extractor import BlueprintExtractor
 
         return BlueprintExtractor.extract_from_play(

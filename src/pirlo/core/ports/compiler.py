@@ -3,20 +3,13 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
-from pirlo.core.models.blueprint import PlaybookBlueprint, PlayOutput
+from pirlo.core.models.blueprint import PlayBlueprint
 
 
-class BlueprintCompiler[TargetT](ABC):
-    """Abstract Port for compiling a PlaybookBlueprint IR into an orchestrator workflow."""
+class BlueprintCompiler[WorkflowT](ABC):
+    """Abstract Port for compiling a PlayBlueprint IR into an engine-specific workflow model."""
 
-    @classmethod
     @abstractmethod
-    def compile(cls, blueprint: PlaybookBlueprint) -> TargetT:
-        """Translates the PlaybookBlueprint IR into the target engine representation."""
-        raise NotImplementedError
-
-    @classmethod
-    @abstractmethod
-    async def run_ephemeral(cls, blueprint: PlaybookBlueprint) -> PlayOutput | None:
-        """Executes the PlaybookBlueprint in local ephemeral mode."""
+    def compile(self, blueprint: PlayBlueprint) -> WorkflowT:
+        """Translates the PlayBlueprint IR into the target engine workflow model."""
         raise NotImplementedError

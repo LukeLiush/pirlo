@@ -1,9 +1,6 @@
 # tests/test_prefect_compiler.py
 from __future__ import annotations
 
-from collections.abc import Callable
-from typing import Any
-
 from pirlo.core.decorators import play
 from pirlo.core.models.blueprint import PlaybookBlueprint, PlayOutput
 from pirlo.core.ports.play import Play, requires
@@ -52,8 +49,10 @@ def test_prefect_compiler_flow_generation():
     workflow = PrefectCompilerDAGPlay()
     blueprint: PlaybookBlueprint = workflow.extract_blueprint()
 
-    # Compile PlaybookBlueprint to master Prefect flow
-    master_flow: Callable[..., Any] = PrefectCompiler.compile(blueprint)
+    # Compile PlayBlueprint to PrefectWorkflow
+    compiler = PrefectCompiler()
+    prefect_workflow = compiler.compile(blueprint)
 
-    assert master_flow is not None
-    assert getattr(master_flow, "name", None) == blueprint.name
+    assert prefect_workflow is not None
+    assert prefect_workflow.name == blueprint.name
+    assert callable(prefect_workflow.flow)

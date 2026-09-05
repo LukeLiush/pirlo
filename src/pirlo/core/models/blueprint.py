@@ -73,18 +73,23 @@ class BlueprintNode:
 
 
 @dataclass
-class PlaybookBlueprint:
-    """The complete engine-agnostic blueprint of a Playbook DAG."""
+class PlayBlueprint:
+    """The complete engine-agnostic blueprint of a Play DAG."""
 
     name: str
     entry_playbook: str
     output_node_id: str | None = None
     nodes: list[BlueprintNode] = field(default_factory=list)
 
+    @property
+    def entry_play(self) -> str:
+        """Alias for entry_playbook."""
+        return self.entry_playbook
+
     def render_ascii(self) -> str:
         """Renders ASCII diagnostic summary of the complete DAG blueprint."""
         header = (
-            f"=== [PlaybookBlueprint: {self.name}] ===\n"
+            f"=== [PlayBlueprint: {self.name}] ===\n"
             f"Output Target: {self.output_node_id or 'none'}\n"
             f"Total Nodes:   {len(self.nodes)}\n" + "-" * 45
         )
@@ -94,6 +99,10 @@ class PlaybookBlueprint:
     def render_blueprint_ascii(self) -> str:
         """Alias for render_ascii()."""
         return self.render_ascii()
+
+
+# Backward-compatibility alias
+PlaybookBlueprint = PlayBlueprint
 
 
 @dataclass(frozen=True)
