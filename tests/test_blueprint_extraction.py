@@ -79,3 +79,29 @@ def test_practice_run_local_execution():
 
     assert isinstance(result, CheckoutOutput)
     assert result.order_id == "order_item_777_token_test_123_code_777"
+
+
+def test_blueprint_extraction_field_and_validation():
+    import pytest
+
+    from pirlo.core.models.blueprint import BlueprintError
+
+    class FieldTestPlay(Play[CheckoutOutput]):
+        token: str = requires(LoginTestPlay, field="auth_token")
+
+        async def execute(self) -> CheckoutOutput:
+            return CheckoutOutput(order_id=self.token)
+
+    blueprint = FieldTestPlay().extract_blueprint()
+    field_node = blueprint.nodes[1]
+    assert "token" in field_node.param_bindings
+    assert field_node.param_bindings["token"].source_field == "auth_token"
+
+    class InvalidFieldPlay(Play[CheckoutOutput]):
+        bad: str = requires(LoginTestPlay, field="non_existent_field")
+
+        async def execute(self) -> CheckoutOutput:
+            return CheckoutOutput(order_id="bad")
+
+    with pytest.raises(BlueprintError, match="does not exist on 'LoginOutput'"):
+        InvalidFieldPlay().extract_blueprint()

@@ -5,6 +5,7 @@ import inspect
 from typing import TYPE_CHECKING
 
 from pirlo.core.models.blueprint import (
+    BlueprintError,
     BlueprintNode,
     ParamBinding,
     ParameterValue,
@@ -15,6 +16,25 @@ from pirlo.core.ports.play import MappedParameter
 
 if TYPE_CHECKING:
     from pirlo.core.ports.play import Play
+
+
+def _get_output_type(play_cls: type[object]) -> type[object] | None:
+    import typing
+
+    from pirlo.core.models.blueprint import PlayOutput
+
+    for base in getattr(play_cls, "__orig_bases__", ()):
+        args = typing.get_args(base)
+        if args and isinstance(args[0], type) and issubclass(args[0], PlayOutput):
+            return args[0]
+    fn = getattr(play_cls, "execute", None)
+    if fn:
+        sig = inspect.signature(fn)
+        if isinstance(sig.return_annotation, type) and issubclass(
+            sig.return_annotation, PlayOutput
+        ):
+            return sig.return_annotation
+    return None
 
 
 class BlueprintExtractor:
@@ -51,10 +71,47 @@ class BlueprintExtractor:
                 upstream_id = _resolve(req_desc.play_cls, req_desc.kwargs)
                 if upstream_id not in depends_on:
                     depends_on.append(upstream_id)
-                param_bindings[field_name] = ParamBinding(
-                    source_node_id=upstream_id,
-                    source_field="",
-                )
+
+                upstream_output_type = _get_output_type(req_desc.play_cls)
+
+                if req_desc.each:
+                    if (
+                        upstream_output_type
+                        and hasattr(upstream_output_type, "model_fields")
+                        and req_desc.each not in upstream_output_type.model_fields
+                    ):
+                        fields = list(upstream_output_type.model_fields.keys())
+                        raise BlueprintError(
+                            f"Field '{req_desc.each}' declared in each= does not exist on "
+                            f"'{upstream_output_type.__name__}' of '{req_desc.play_cls.__name__}'. "
+                            f"Available fields: {fields}"
+                        )
+                    is_mapped = True
+                    mapped_bindings[field_name] = ParamBinding(
+                        source_node_id=upstream_id,
+                        source_field=req_desc.each,
+                    )
+                elif req_desc.field:
+                    if (
+                        upstream_output_type
+                        and hasattr(upstream_output_type, "model_fields")
+                        and req_desc.field not in upstream_output_type.model_fields
+                    ):
+                        fields = list(upstream_output_type.model_fields.keys())
+                        raise BlueprintError(
+                            f"Field '{req_desc.field}' declared in field= does not exist on "
+                            f"'{upstream_output_type.__name__}' of '{req_desc.play_cls.__name__}'. "
+                            f"Available fields: {fields}"
+                        )
+                    param_bindings[field_name] = ParamBinding(
+                        source_node_id=upstream_id,
+                        source_field=req_desc.field,
+                    )
+                else:
+                    param_bindings[field_name] = ParamBinding(
+                        source_node_id=upstream_id,
+                        source_field="",
+                    )
 
             # 2. Bubble user CLI parameters matching this play's execute signature
             fn = getattr(target_play, "execute", None)

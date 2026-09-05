@@ -18,25 +18,33 @@ def test_demo_report_dag_blueprint_extraction():
     blueprint: PlayBlueprint = dag.extract_blueprint()
 
     assert blueprint.name == "SendAlertPlay"
-    assert len(blueprint.nodes) == 3
+    assert len(blueprint.nodes) == 4
 
-    node1: BlueprintNode = blueprint.nodes[0]
+    node0: BlueprintNode = blueprint.nodes[0]
+    assert node0.playbook_name == "SelectReportDatesPlay"
+    assert node0.depends_on == []
+
+    node1: BlueprintNode = blueprint.nodes[1]
     assert node1.playbook_name == "DownloadReportPlay"
-    assert node1.depends_on == []
+    assert node1.is_mapped is True
+    assert "report_date" in node1.mapped_bindings
+    assert node1.mapped_bindings["report_date"].source_node_id == node0.node_id
+    assert node1.mapped_bindings["report_date"].source_field == "report_dates"
+    assert "dates" in node1.param_bindings
+    assert node1.param_bindings["dates"].source_node_id == node0.node_id
+    assert node1.depends_on == [node0.node_id]
 
-    node2: BlueprintNode = blueprint.nodes[1]
+    node2: BlueprintNode = blueprint.nodes[2]
     assert node2.playbook_name == "ExtractSummaryPlay"
-    assert "download" in node2.param_bindings
-    assert node2.param_bindings["download"].source_node_id == node1.node_id
+    assert "downloads" in node2.param_bindings
+    assert node2.param_bindings["downloads"].source_node_id == node1.node_id
     assert node2.depends_on == [node1.node_id]
 
-    node3: BlueprintNode = blueprint.nodes[2]
+    node3: BlueprintNode = blueprint.nodes[3]
     assert node3.playbook_name == "SendAlertPlay"
-    assert "download" in node3.param_bindings
-    assert node3.param_bindings["download"].source_node_id == node1.node_id
     assert "summary" in node3.param_bindings
     assert node3.param_bindings["summary"].source_node_id == node2.node_id
-    assert node3.depends_on == [node1.node_id, node2.node_id]
+    assert node3.depends_on == [node2.node_id]
 
 
 def test_demo_report_dag_local_practice_run():

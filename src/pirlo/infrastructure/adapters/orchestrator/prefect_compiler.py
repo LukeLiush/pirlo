@@ -16,6 +16,7 @@ from pirlo.core.models.blueprint import (
 from pirlo.core.models.run_result import RunResult
 from pirlo.core.ports.compiler import BlueprintCompiler
 from pirlo.core.ports.play import Play
+from pirlo.core.services.idempotency import compute_play_identity
 from pirlo.infrastructure.adapters.cli.terminal_play_ui import TerminalPlayUI
 from pirlo.infrastructure.adapters.orchestrator.prefect_model import (
     PrefectWorkflow,
@@ -75,18 +76,32 @@ class PrefectCompiler(BlueprintCompiler[PrefectWorkflow]):
                 play_cls: type[Any] = self._resolve_play_class(
                     blueprint_node.playbook_name
                 )
+                play_name: str = getattr(
+                    play_cls, "play_name", blueprint_node.playbook_name
+                )
 
                 @task(
-                    name=f"Task: {blueprint_node.playbook_name}",
+                    name=f"Task: {play_name}",
                 )
                 async def subflow_runner(
                     target_cls: type[Any] = play_cls,
+                    node_name: str = blueprint_node.playbook_name,
                     **kwargs: object,
                 ) -> PlayOutput:
+                    active_play_name = getattr(target_cls, "play_name", node_name)
+                    identity = compute_play_identity(active_play_name, kwargs)
                     try:
-                        instance: Any = target_cls(ui=TerminalPlayUI())
+                        instance: Any = target_cls(
+                            ui=TerminalPlayUI(play_name=identity.short_id),
+                            play_id=identity.full_id,
+                        )
                     except TypeError:
-                        instance = target_cls()
+                        try:
+                            instance = target_cls(
+                                ui=TerminalPlayUI(play_name=identity.short_id)
+                            )
+                        except TypeError:
+                            instance = target_cls()
 
                     exec_kwargs = dict(kwargs)
                     import inspect
