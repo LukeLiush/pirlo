@@ -6,21 +6,21 @@ import asyncio
 from pirlo.core.decorators import play
 from pirlo.core.models.blueprint import (
     PlaybookBlueprint,
-    PlaybookOutput,
+    PlayOutput,
 )
 from pirlo.core.ports.play import Play, requires
 
 
-class LoginOutput(PlaybookOutput):
+class LoginOutput(PlayOutput):
     auth_token: str
     user_id: str
 
 
-class VerifyOutput(PlaybookOutput):
+class VerifyOutput(PlayOutput):
     verification_code: str
 
 
-class CheckoutOutput(PlaybookOutput):
+class CheckoutOutput(PlayOutput):
     order_id: str
 
 

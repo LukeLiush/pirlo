@@ -5,7 +5,7 @@ import asyncio
 from typing import Annotated
 
 from pirlo.core.decorators import play
-from pirlo.core.models.blueprint import PlaybookBlueprint, PlaybookOutput
+from pirlo.core.models.blueprint import PlaybookBlueprint, PlayOutput
 from pirlo.core.models.parameters import Parameter
 from pirlo.core.ports.play import Play, each, requires
 from pirlo.core.services.blueprint_extractor import (
@@ -18,17 +18,17 @@ from pirlo.infrastructure.adapters.cli.argument_parser_builder import (
 # --- Test Output Models & Play Definitions ---
 
 
-class FileDownloadOutput(PlaybookOutput):
+class FileDownloadOutput(PlayOutput):
     file_path: str
     month: str
 
 
-class FileSummaryOutput(PlaybookOutput):
+class FileSummaryOutput(PlayOutput):
     total: float
     summary_text: str
 
 
-class AlertDispatchedOutput(PlaybookOutput):
+class AlertDispatchedOutput(PlayOutput):
     sent: bool
     channel: str
 
@@ -140,7 +140,7 @@ def test_pull_based_prefect_execution():
     assert result.channel == "#ops"
 
 
-class AggregatedQuarterOutput(PlaybookOutput):
+class AggregatedQuarterOutput(PlayOutput):
     quarter_count: int
     files: list[str]
 

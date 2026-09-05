@@ -5,23 +5,23 @@ from collections.abc import Callable
 from typing import Any
 
 from pirlo.core.decorators import play
-from pirlo.core.models.blueprint import PlaybookBlueprint, PlaybookOutput
+from pirlo.core.models.blueprint import PlaybookBlueprint, PlayOutput
 from pirlo.core.ports.play import Play, requires
 from pirlo.infrastructure.adapters.orchestrator.prefect_compiler import (
     PrefectCompiler,
 )
 
 
-class LoginOutput(PlaybookOutput):
+class LoginOutput(PlayOutput):
     auth_token: str
     user_id: str
 
 
-class VerifyOutput(PlaybookOutput):
+class VerifyOutput(PlayOutput):
     verification_code: str
 
 
-class CheckoutOutput(PlaybookOutput):
+class CheckoutOutput(PlayOutput):
     order_id: str
 
 

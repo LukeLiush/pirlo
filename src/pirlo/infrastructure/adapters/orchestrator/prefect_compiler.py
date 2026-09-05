@@ -12,7 +12,7 @@ from pirlo.core.models.blueprint import (
     BlueprintError,
     BlueprintNode,
     PlaybookBlueprint,
-    PlaybookOutput,
+    PlayOutput,
 )
 from pirlo.core.models.run_result import RunResult
 from pirlo.core.ports.compiler import BlueprintCompiler
@@ -22,15 +22,13 @@ from pirlo.infrastructure.adapters.cli.terminal_play_ui import TerminalPlayUI
 logger = logging.getLogger(__name__)
 
 
-class PrefectCompiler(
-    BlueprintCompiler[Callable[..., Awaitable[PlaybookOutput | None]]]
-):
+class PrefectCompiler(BlueprintCompiler[Callable[..., Awaitable[PlayOutput | None]]]):
     """Compiles a PlaybookBlueprint into executable Prefect 3 Flows & Tasks."""
 
     @classmethod
     def compile(
         cls, blueprint: PlaybookBlueprint
-    ) -> Callable[..., Awaitable[PlaybookOutput | None]]:
+    ) -> Callable[..., Awaitable[PlayOutput | None]]:
         """Dynamically constructs a master Prefect Flow from the PlaybookBlueprint."""
         if not blueprint.nodes:
             raise BlueprintError(f"Cannot compile empty blueprint '{blueprint.name}'.")
@@ -38,8 +36,8 @@ class PrefectCompiler(
         @flow(name=blueprint.name, validate_parameters=False)
         async def prefect_master_flow(
             **workflow_kwargs: object,
-        ) -> PlaybookOutput | None:
-            futures: dict[str, PrefectFuture[PlaybookOutput]] = {}
+        ) -> PlayOutput | None:
+            futures: dict[str, PrefectFuture[PlayOutput]] = {}
 
             async def _resolve_future_result(fut: Any) -> Any:
                 import inspect
@@ -57,10 +55,10 @@ class PrefectCompiler(
                 param_name: str
                 param_binding: Any
                 for param_name, param_binding in blueprint_node.param_bindings.items():
-                    parent_future: PrefectFuture[PlaybookOutput] = futures[
+                    parent_future: PrefectFuture[PlayOutput] = futures[
                         param_binding.source_node_id
                     ]
-                    parent_result: PlaybookOutput = await _resolve_future_result(
+                    parent_result: PlayOutput = await _resolve_future_result(
                         parent_future
                     )
                     resolved_kwargs[param_name] = (
@@ -79,7 +77,7 @@ class PrefectCompiler(
                 async def subflow_runner(
                     target_cls: type[Any] = playbook_cls,
                     **kwargs: object,
-                ) -> PlaybookOutput:
+                ) -> PlayOutput:
                     try:
                         instance: Any = target_cls(ui=TerminalPlayUI())
                     except TypeError:
@@ -116,10 +114,10 @@ class PrefectCompiler(
                         playbook_result.data
                         if isinstance(playbook_result, RunResult)
                         and playbook_result.data
-                        else cast(PlaybookOutput, playbook_result)
+                        else cast(PlayOutput, playbook_result)
                     )
 
-                parent_futures: list[PrefectFuture[PlaybookOutput]] = [
+                parent_futures: list[PrefectFuture[PlayOutput]] = [
                     futures[parent_id] for parent_id in blueprint_node.depends_on
                 ]
 
@@ -129,11 +127,11 @@ class PrefectCompiler(
                         param_name,
                         param_binding,
                     ) in blueprint_node.mapped_bindings.items():
-                        mapped_parent_future: PrefectFuture[PlaybookOutput] = futures[
+                        mapped_parent_future: PrefectFuture[PlayOutput] = futures[
                             param_binding.source_node_id
                         ]
-                        mapped_parent_result: PlaybookOutput = (
-                            await _resolve_future_result(mapped_parent_future)
+                        mapped_parent_result: PlayOutput = await _resolve_future_result(
+                            mapped_parent_future
                         )
                         mapped_kwargs[param_name] = (
                             getattr(mapped_parent_result, param_binding.source_field)
@@ -157,15 +155,13 @@ class PrefectCompiler(
                     )
                     futures[blueprint_node.node_id] = mapped_future
                 else:
-                    prefect_future: PrefectFuture[PlaybookOutput] = (
-                        subflow_runner.submit(  # type: ignore[call-overload]
-                            wait_for=parent_futures, **resolved_kwargs
-                        )
+                    prefect_future: PrefectFuture[PlayOutput] = subflow_runner.submit(  # type: ignore[call-overload]
+                        wait_for=parent_futures, **resolved_kwargs
                     )
                     futures[blueprint_node.node_id] = prefect_future
 
             if blueprint.output_node_id and blueprint.output_node_id in futures:
-                final_prefect_future: PrefectFuture[PlaybookOutput] = futures[
+                final_prefect_future: PrefectFuture[PlayOutput] = futures[
                     blueprint.output_node_id
                 ]
                 return await _resolve_future_result(final_prefect_future)
@@ -174,7 +170,7 @@ class PrefectCompiler(
         return prefect_master_flow
 
     @classmethod
-    async def run_ephemeral(cls, blueprint: PlaybookBlueprint) -> PlaybookOutput | None:
+    async def run_ephemeral(cls, blueprint: PlaybookBlueprint) -> PlayOutput | None:
         """Executes the PlaybookBlueprint in local ephemeral mode."""
         from prefect.settings import (
             PREFECT_API_URL,

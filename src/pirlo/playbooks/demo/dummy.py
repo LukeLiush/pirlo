@@ -2,12 +2,12 @@ import asyncio
 from typing import Annotated, Any
 
 from pirlo.core.decorators import play
-from pirlo.core.models.blueprint import PlaybookOutput
+from pirlo.core.models.blueprint import PlayOutput
 from pirlo.core.models.parameters import Parameter
 from pirlo.core.ports.play import Play
 
 
-class DummyOutput(PlaybookOutput):
+class DummyOutput(PlayOutput):
     target: str
     retries: int
 

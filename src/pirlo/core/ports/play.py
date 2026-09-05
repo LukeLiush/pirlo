@@ -6,10 +6,9 @@ from typing import TYPE_CHECKING, Any, cast
 
 from pirlo.core.models.blueprint import ParameterValue, ProxyRef, ScalarValue
 from pirlo.core.ports.play_ui import PlayUI
-from pirlo.infrastructure.adapters.cli.terminal_play_ui import TerminalPlayUI
 
 if TYPE_CHECKING:
-    from pirlo.core.models.blueprint import PlaybookBlueprint, PlaybookOutput
+    from pirlo.core.models.blueprint import PlaybookBlueprint, PlayOutput
 
 
 class MappedParameter:
@@ -57,7 +56,14 @@ class Play[OutputT](ABC):
     """Atomic tactical unit of execution containing pure business logic."""
 
     def __init__(self, ui: PlayUI | None = None) -> None:
-        self._ui: PlayUI = ui if ui is not None else TerminalPlayUI()
+        if ui is None:
+            from pirlo.infrastructure.adapters.cli.terminal_play_ui import (
+                TerminalPlayUI,
+            )
+
+            self._ui: PlayUI = TerminalPlayUI()
+        else:
+            self._ui = ui
 
     @property
     def ui(self) -> PlayUI:
@@ -94,9 +100,7 @@ class Play[OutputT](ABC):
         blueprint: PlaybookBlueprint = BlueprintExtractor.extract_from_play(
             cls, user_kwargs=kwargs
         )
-        raw_result: PlaybookOutput | None = await PrefectCompiler.run_ephemeral(
-            blueprint
-        )
+        raw_result: PlayOutput | None = await PrefectCompiler.run_ephemeral(blueprint)
         return cast(OutputT, raw_result)
 
     def extract_blueprint(

@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from pirlo.core.config import get_workspace_path
-from pirlo.core.models.blueprint import PlaybookBlueprint, PlaybookOutput
+from pirlo.core.models.blueprint import PlaybookBlueprint, PlayOutput
 from pirlo.core.models.play_invocation import PlayInvocation
 from pirlo.core.models.run import PreparedRun, RunStatus
 from pirlo.core.models.run_result import RunResult
@@ -92,7 +92,7 @@ class CliPlayRunner:
                 play_cls,
                 user_kwargs=prepared_run.parameters,
             )
-            raw_result: PlaybookOutput | None = await PrefectCompiler.run_ephemeral(
+            raw_result: PlayOutput | None = await PrefectCompiler.run_ephemeral(
                 blueprint
             )
 

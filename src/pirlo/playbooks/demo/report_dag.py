@@ -4,25 +4,25 @@ from __future__ import annotations
 from typing import Annotated
 
 from pirlo.core.decorators import play
-from pirlo.core.models.blueprint import PlaybookOutput
+from pirlo.core.models.blueprint import PlayOutput
 from pirlo.core.models.parameters import Parameter
 from pirlo.core.ports.play import Play, requires
 
 # --- 1. Sub-Play Output Models ---
 
 
-class DownloadOutput(PlaybookOutput):
+class DownloadOutput(PlayOutput):
     file_path: str
     report_date: str
 
 
-class SummaryOutput(PlaybookOutput):
+class SummaryOutput(PlayOutput):
     file_path: str
     total_revenue: float
     status_summary: str
 
 
-class AlertOutput(PlaybookOutput):
+class AlertOutput(PlayOutput):
     alert_sent: bool
     channel: str
 

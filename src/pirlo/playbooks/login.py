@@ -5,13 +5,13 @@ from typing import Annotated, Any
 from cloakbrowser import launch_persistent_context_async
 
 from pirlo.core.decorators import play
-from pirlo.core.models.blueprint import PlaybookOutput
+from pirlo.core.models.blueprint import PlayOutput
 from pirlo.core.models.parameters import Parameter
 from pirlo.core.ports.play import Play
 from pirlo.infrastructure.services.profile_manager import ProfileManager
 
 
-class LoginOutput(PlaybookOutput):
+class LoginOutput(PlayOutput):
     profile: str
     urls: list[str]
     success: bool = True

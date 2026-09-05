@@ -6,8 +6,12 @@ from dataclasses import dataclass, field
 from pydantic import BaseModel
 
 
-class PlaybookOutput(BaseModel):
-    """Base class for all strongly-typed playbook output payloads."""
+class PlayOutput(BaseModel):
+    """Base class for all strongly-typed play output payloads."""
+
+
+# Backward-compatibility alias
+PlaybookOutput = PlayOutput
 
 
 from pathlib import Path
@@ -18,15 +22,7 @@ if TYPE_CHECKING:
     from pirlo.core.ports.play import MappedParameter
 
 type ScalarValue = (
-    str
-    | int
-    | float
-    | bool
-    | Path
-    | LlmLink
-    | PlaybookOutput
-    | ProxyRef
-    | MappedParameter
+    str | int | float | bool | Path | LlmLink | PlayOutput | ProxyRef | MappedParameter
 )
 
 # Union type for strongly-typed static kwarg values

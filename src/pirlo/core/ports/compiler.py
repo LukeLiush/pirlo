@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
-from pirlo.core.models.blueprint import PlaybookBlueprint, PlaybookOutput
+from pirlo.core.models.blueprint import PlaybookBlueprint, PlayOutput
 
 
 class BlueprintCompiler[TargetT](ABC):
@@ -17,6 +17,6 @@ class BlueprintCompiler[TargetT](ABC):
 
     @classmethod
     @abstractmethod
-    async def run_ephemeral(cls, blueprint: PlaybookBlueprint) -> PlaybookOutput | None:
+    async def run_ephemeral(cls, blueprint: PlaybookBlueprint) -> PlayOutput | None:
         """Executes the PlaybookBlueprint in local ephemeral mode."""
         raise NotImplementedError
