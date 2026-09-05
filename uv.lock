@@ -3,7 +3,8 @@ revision = 3
 requires-python = ">=3.12"
 resolution-markers = [
     "python_full_version >= '3.15'",
-    "python_full_version >= '3.13' and python_full_version < '3.15'",
+    "python_full_version == '3.14.*'",
+    "python_full_version == '3.13.*'",
     "python_full_version < '3.13'",
 ]
 
@@ -1494,6 +1495,18 @@ wheels = [
 ]
 
 [[package]]
+name = "grandalf"
+version = "0.8"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pyparsing" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/95/0e/4ac934b416857969f9135dec17ac80660634327e003a870835dd1f382659/grandalf-0.8.tar.gz", hash = "sha256:2813f7aab87f0d20f334a3162ccfbcbf085977134a17a5b516940a93a77ea974", size = 38128, upload-time = "2023-01-26T07:37:06.668Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/61/30/44c7eb0a952478dbb5f2f67df806686d6a7e4b19f6204e091c4f49dc7c69/grandalf-0.8-py3-none-any.whl", hash = "sha256:793ca254442f4a79252ea9ff1ab998e852c1e071b863593e5383afee906b4185", size = 41802, upload-time = "2023-01-10T15:16:19.753Z" },
+]
+
+[[package]]
 name = "graphviz"
 version = "0.21"
 source = { registry = "https://pypi.org/simple" }
@@ -2760,6 +2773,15 @@ wheels = [
 ]
 
 [[package]]
+name = "networkx"
+version = "3.6.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/6a/51/63fe664f3908c97be9d2e4f1158eb633317598cfa6e1fc14af5383f17512/networkx-3.6.1.tar.gz", hash = "sha256:26b7c357accc0c8cde558ad486283728b65b6a95d85ee1cd66bafab4c8168509", size = 2517025, upload-time = "2025-12-08T17:02:39.908Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/9e/c9/b2622292ea83fbb4ec318f5b9ab867d0a28ab43c5717bb85b0a5f6b3b0a4/networkx-3.6.1-py3-none-any.whl", hash = "sha256:d47fbf302e7d9cbbb9e2555a0d267983d2aa476bac30e90dfbe5669bd57f3762", size = 2068504, upload-time = "2025-12-08T17:02:38.159Z" },
+]
+
+[[package]]
 name = "nexus-rpc"
 version = "1.2.0"
 source = { registry = "https://pypi.org/simple" }
@@ -3093,6 +3115,38 @@ wheels = [
 ]
 
 [[package]]
+name = "phart"
+version = "1.1.4"
+source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "python_full_version == '3.13.*'",
+    "python_full_version < '3.13'",
+]
+dependencies = [
+    { name = "networkx", marker = "python_full_version < '3.14'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/14/f4/ab90e7d22b38cc1bad5a72683f8739137fa42f9e2336c92b82dee4cea87e/phart-1.1.4.tar.gz", hash = "sha256:2691e31152a938f48d51d5236715811ede80142a5c8b59d24568435f11ba9f2c", size = 264815, upload-time = "2025-01-25T12:59:36.687Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c5/20/dc20da33dd3f3fffa5584d35bdfe0dd31847d4f0443495dba6b2cd4ae70a/phart-1.1.4-py3-none-any.whl", hash = "sha256:b34fd91dfb61fc60a2704d9ee2e12bc89a95291efe6e114c7b191244bc5ad8f1", size = 19542, upload-time = "2025-01-25T12:59:35.107Z" },
+]
+
+[[package]]
+name = "phart"
+version = "2.1.0"
+source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "python_full_version >= '3.15'",
+    "python_full_version == '3.14.*'",
+]
+dependencies = [
+    { name = "networkx", marker = "python_full_version >= '3.14'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/a8/85/8861d0d7f7cc298c973b2cbf9f52dc9d0ebd11c767aacbd7462a548714a3/phart-2.1.0.tar.gz", hash = "sha256:b7d8676bc79945e1cab61a3f9a788b395806d63e6c458143183de89f6bf7c763", size = 645976, upload-time = "2026-08-02T10:06:02.406Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/6b/28/97f1634c542b51692830b8e9e2007441b155bce647b54b6d769fa9ecb7f3/phart-2.1.0-py3-none-any.whl", hash = "sha256:8b703973a66ba72c1616d464cf7610688e2357bd7f9a98d57d2fa2bb35b0267d", size = 111502, upload-time = "2026-08-02T10:06:00.992Z" },
+]
+
+[[package]]
 name = "pillow"
 version = "12.2.0"
 source = { registry = "https://pypi.org/simple" }
@@ -3170,14 +3224,18 @@ dependencies = [
     { name = "cloakbrowser" },
     { name = "duckduckgo-search" },
     { name = "ftfy" },
+    { name = "grandalf" },
     { name = "html2text" },
     { name = "httpx" },
     { name = "langchain-core" },
     { name = "langchain-openai" },
     { name = "litellm" },
+    { name = "networkx" },
     { name = "ollama" },
     { name = "openai" },
     { name = "paramiko" },
+    { name = "phart", version = "1.1.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.14'" },
+    { name = "phart", version = "2.1.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.14'" },
     { name = "playwright" },
     { name = "prefect" },
     { name = "pydantic" },
@@ -3200,14 +3258,17 @@ requires-dist = [
     { name = "cloakbrowser", specifier = ">=0.5.5" },
     { name = "duckduckgo-search", specifier = ">=7.5.0" },
     { name = "ftfy", specifier = ">=6.3.1" },
+    { name = "grandalf", specifier = ">=0.8" },
     { name = "html2text", specifier = ">=2024.2.26" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "langchain-core", specifier = ">=1.5.1" },
     { name = "langchain-openai", specifier = ">=1.1.9" },
     { name = "litellm", specifier = ">=1.40.0" },
+    { name = "networkx", specifier = ">=3.6.1" },
     { name = "ollama", specifier = ">=0.4.0" },
     { name = "openai", specifier = ">=2.16.0" },
     { name = "paramiko", specifier = ">=3.4.0" },
+    { name = "phart", specifier = ">=1.1.4" },
     { name = "playwright", specifier = ">=1.61.0" },
     { name = "prefect", specifier = ">=3.0.0" },
     { name = "pydantic", specifier = ">=2.12.5" },

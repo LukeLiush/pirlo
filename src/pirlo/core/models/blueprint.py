@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from pirlo.core.models.link import LlmLink
+    from pirlo.core.ports.blueprint_renderer import BlueprintRenderer
     from pirlo.core.ports.play import MappedParameter
 
 type ScalarValue = (
@@ -99,6 +100,16 @@ class PlayBlueprint:
     def render_blueprint_ascii(self) -> str:
         """Alias for render_ascii()."""
         return self.render_ascii()
+
+    def to_ascii(self, renderer: BlueprintRenderer | None = None) -> str:
+        """Renders this blueprint into a DAG visualization using the configured renderer."""
+        if renderer is None:
+            from pirlo.infrastructure.adapters.visualization.renderer_factory import (
+                BlueprintRendererFactory,
+            )
+
+            renderer = BlueprintRendererFactory.get_renderer()
+        return renderer.render(self)
 
 
 @dataclass(frozen=True)

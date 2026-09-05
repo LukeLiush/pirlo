@@ -27,8 +27,17 @@ class MonthlySummary(PlayOutput):
     status_summary: str
 
 
+class BudgetOutput(PlayOutput):
+    target_revenue: float
+    fiscal_quarter: str
+    department: str
+
+
 class SummaryOutput(PlayOutput):
     total_revenue: float
+    target_revenue: float
+    variance: float
+    target_met: bool
     summaries: list[MonthlySummary]
 
 
@@ -36,6 +45,9 @@ class AlertOutput(PlayOutput):
     alert_sent: bool
     channel: str
     total_revenue: float
+    target_revenue: float
+    variance: float
+    target_met: bool
 
 
 # --- 2. Plays ---
@@ -56,6 +68,31 @@ class SelectReportDatesPlay(Play[DatesOutput]):
 
 
 @play(
+    name="demo_fetch_budget_target",
+    description="Fetches quarterly budget revenue target from financial planning system",
+)
+class FetchBudgetTargetPlay(Play[BudgetOutput]):
+    async def execute(
+        self,
+        quarter: Annotated[
+            str, Parameter(help="Fiscal quarter for budget target")
+        ] = "Q3-2026",
+    ) -> BudgetOutput:
+        self.ui.commentary(f"Fetching approved revenue budget for {quarter}...")
+        await asyncio.sleep(0.5)
+        target = 350000.00
+        self.ui.goal(
+            message=f"Budget target loaded for {quarter}",
+            detail=f"Target: ${target:,.2f} (Dept: Global Sales)",
+        )
+        return BudgetOutput(
+            target_revenue=target,
+            fiscal_quarter=quarter,
+            department="Global Sales",
+        )
+
+
+@play(
     name="demo_download_report",
     description="Downloads monthly PDF report concurrently from portal",
 )
@@ -66,7 +103,7 @@ class DownloadReportPlay(Play[DownloadOutput]):
     dates: DatesOutput = requires(SelectReportDatesPlay)
 
     async def execute(self) -> DownloadOutput:
-        # Simulated latencies: June takes 3.0s, July takes 1.0s, August takes 2.0s
+        # Simulated latencies: June takes 1.0s, July takes 2.0s, August takes 5.0s
         delays = {"2026-06": 1.0, "2026-07": 2.0, "2026-08": 5.0}
         simulated_delay = delays.get(self.report_date, 1.5)
 
@@ -89,15 +126,19 @@ class DownloadReportPlay(Play[DownloadOutput]):
 
 @play(
     name="demo_extract_summary",
-    description="Fans in and extracts revenue summaries across all downloaded reports",
+    description="Fans in monthly downloads and compares against quarterly budget target",
 )
 class ExtractSummaryPlay(Play[SummaryOutput]):
-    # Injected as list[DownloadOutput] because DownloadReportPlay was mapped
+    # Multi-parent dependencies:
+    # 1. Fanned-in mapped download outputs
     downloads: list[DownloadOutput] = requires(DownloadReportPlay)
+    # 2. Parallel scalar budget target output
+    budget: BudgetOutput = requires(FetchBudgetTargetPlay)
 
     async def execute(self) -> SummaryOutput:
         self.ui.commentary(
-            f"Fanning in: extracting revenue stats across {len(self.downloads)} downloaded reports..."
+            f"Fanning in: extracting revenue stats across {len(self.downloads)} downloaded reports "
+            f"and comparing to {self.budget.fiscal_quarter} target (${self.budget.target_revenue:,.2f})..."
         )
         monthly_revenues = {
             "2026-06": 110000.00,
@@ -118,12 +159,21 @@ class ExtractSummaryPlay(Play[SummaryOutput]):
                 )
             )
 
+        variance = total_revenue - self.budget.target_revenue
+        target_met = variance >= 0.0
+        status_tag = "EXCEEDED" if target_met else "MISSED"
         breakdown = " | ".join(s.status_summary for s in summaries)
         self.ui.goal(
-            message=f"Extracted {len(summaries)} reports",
-            detail=f"Breakdown: {breakdown} (Total: ${total_revenue:,.2f})",
+            message=f"Summary extracted ({status_tag} target by ${abs(variance):,.2f})",
+            detail=f"Breakdown: {breakdown} (Actual: ${total_revenue:,.2f} vs Target: ${self.budget.target_revenue:,.2f})",
         )
-        return SummaryOutput(total_revenue=total_revenue, summaries=summaries)
+        return SummaryOutput(
+            total_revenue=total_revenue,
+            target_revenue=self.budget.target_revenue,
+            variance=variance,
+            target_met=target_met,
+            summaries=summaries,
+        )
 
 
 @play(
@@ -137,22 +187,29 @@ class SendAlertPlay(Play[AlertOutput]):
         self,
         channel: Annotated[str, Parameter(help="Target alert channel")] = "#finance",
     ) -> AlertOutput:
+        status_text = (
+            "Target Achieved 🎯" if self.summary.target_met else "Target Missed ⚠️"
+        )
         self.ui.header(
             "Quarterly Report Alert",
-            subtitle=f"Channel: {channel} | Total Reports: {len(self.summary.summaries)}",
+            subtitle=f"Channel: {channel} | Status: {status_text}",
         )
         self.ui.commentary(
-            f"📢 [{channel}] Q3 Consolidated Revenue: ${self.summary.total_revenue:,.2f} across "
-            f"{len(self.summary.summaries)} months."
+            f"📢 [{channel}] Q3 Consolidated Revenue: ${self.summary.total_revenue:,.2f} "
+            f"(Target: ${self.summary.target_revenue:,.2f}, Variance: {self.summary.variance:+,.2f}) "
+            f"across {len(self.summary.summaries)} months."
         )
         self.ui.goal(
-            message="Alert sent successfully!",
-            detail=f"Channel: {channel} | Revenue: ${self.summary.total_revenue:,.2f}",
+            message=f"Alert sent successfully! ({status_text})",
+            detail=f"Channel: {channel} | Revenue: ${self.summary.total_revenue:,.2f} | Variance: {self.summary.variance:+,.2f}",
         )
         return AlertOutput(
             alert_sent=True,
             channel=channel,
             total_revenue=self.summary.total_revenue,
+            target_revenue=self.summary.target_revenue,
+            variance=self.summary.variance,
+            target_met=self.summary.target_met,
         )
 
 

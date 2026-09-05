@@ -18,43 +18,60 @@ def test_demo_report_dag_blueprint_extraction():
     blueprint: PlayBlueprint = dag.extract_blueprint()
 
     assert blueprint.name == "SendAlertPlay"
-    assert len(blueprint.nodes) == 4
+    assert len(blueprint.nodes) == 5
 
-    node0: BlueprintNode = blueprint.nodes[0]
-    assert node0.playbook_name == "SelectReportDatesPlay"
-    assert node0.depends_on == []
+    node_map: dict[str, BlueprintNode] = {n.playbook_name: n for n in blueprint.nodes}
+    assert set(node_map.keys()) == {
+        "SelectReportDatesPlay",
+        "DownloadReportPlay",
+        "FetchBudgetTargetPlay",
+        "ExtractSummaryPlay",
+        "SendAlertPlay",
+    }
 
-    node1: BlueprintNode = blueprint.nodes[1]
-    assert node1.playbook_name == "DownloadReportPlay"
-    assert node1.is_mapped is True
-    assert "report_date" in node1.mapped_bindings
-    assert node1.mapped_bindings["report_date"].source_node_id == node0.node_id
-    assert node1.mapped_bindings["report_date"].source_field == "report_dates"
-    assert "dates" in node1.param_bindings
-    assert node1.param_bindings["dates"].source_node_id == node0.node_id
-    assert node1.depends_on == [node0.node_id]
+    dates_node = node_map["SelectReportDatesPlay"]
+    assert dates_node.depends_on == []
 
-    node2: BlueprintNode = blueprint.nodes[2]
-    assert node2.playbook_name == "ExtractSummaryPlay"
-    assert "downloads" in node2.param_bindings
-    assert node2.param_bindings["downloads"].source_node_id == node1.node_id
-    assert node2.depends_on == [node1.node_id]
+    budget_node = node_map["FetchBudgetTargetPlay"]
+    assert budget_node.depends_on == []
 
-    node3: BlueprintNode = blueprint.nodes[3]
-    assert node3.playbook_name == "SendAlertPlay"
-    assert "summary" in node3.param_bindings
-    assert node3.param_bindings["summary"].source_node_id == node2.node_id
-    assert node3.depends_on == [node2.node_id]
+    download_node = node_map["DownloadReportPlay"]
+    assert download_node.is_mapped is True
+    assert "report_date" in download_node.mapped_bindings
+    assert (
+        download_node.mapped_bindings["report_date"].source_node_id
+        == dates_node.node_id
+    )
+    assert download_node.mapped_bindings["report_date"].source_field == "report_dates"
+    assert "dates" in download_node.param_bindings
+    assert download_node.param_bindings["dates"].source_node_id == dates_node.node_id
+    assert download_node.depends_on == [dates_node.node_id]
+
+    summary_node = node_map["ExtractSummaryPlay"]
+    assert "downloads" in summary_node.param_bindings
+    assert (
+        summary_node.param_bindings["downloads"].source_node_id == download_node.node_id
+    )
+    assert "budget" in summary_node.param_bindings
+    assert summary_node.param_bindings["budget"].source_node_id == budget_node.node_id
+    assert set(summary_node.depends_on) == {download_node.node_id, budget_node.node_id}
+
+    alert_node = node_map["SendAlertPlay"]
+    assert "summary" in alert_node.param_bindings
+    assert alert_node.param_bindings["summary"].source_node_id == summary_node.node_id
+    assert alert_node.depends_on == [summary_node.node_id]
 
 
 def test_demo_report_dag_local_practice_run():
     # Test execution via Prefect runner (ephemeral)
-    result: AlertOutput = asyncio.run(
-        SendAlertPlay.run_play(report_month="2026-09", channel="#testing")
-    )
+    result: AlertOutput = asyncio.run(SendAlertPlay.run_play(channel="#testing"))
     assert isinstance(result, AlertOutput)
     assert result.alert_sent is True
     assert result.channel == "#testing"
+    assert result.total_revenue == 353000.50
+    assert result.target_revenue == 350000.00
+    assert result.variance == 3000.50
+    assert result.target_met is True
 
 
 def test_demo_report_dag_prefect_compilation():

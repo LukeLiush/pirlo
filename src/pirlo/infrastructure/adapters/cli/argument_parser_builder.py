@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import inspect
+import logging
 from collections.abc import Callable
 from pathlib import Path
 from typing import Annotated, Any, get_args, get_origin, get_type_hints
@@ -9,6 +10,8 @@ from typing import Annotated, Any, get_args, get_origin, get_type_hints
 from pirlo.core.models.parameters import LinkParameter, Parameter
 from pirlo.core.ports.orchestrator import TaskOrchestrator
 from pirlo.core.ports.play import Play
+
+logger = logging.getLogger(__name__)
 
 TargetSignatureSource = type[Play] | type[TaskOrchestrator] | Callable[..., Any]
 
@@ -156,9 +159,36 @@ class ArgumentParserBuilder:
         prog_name: str,
         epilog_text: str | None = None,
     ) -> argparse.ArgumentParser:
+        description = self._description or ""
+        if self._target_cls is not None:
+            from pirlo.core.ports.play import Play
+
+            if isinstance(self._target_cls, type) and issubclass(
+                self._target_cls, Play
+            ):
+                from pirlo.core.services.blueprint_extractor import (
+                    BlueprintExtractor,
+                )
+                from pirlo.infrastructure.adapters.visualization.renderer_factory import (
+                    BlueprintRendererFactory,
+                )
+
+                try:
+                    blueprint = BlueprintExtractor.extract_from_play(self._target_cls)
+                    renderer = BlueprintRendererFactory.get_renderer()
+                    dag_text = renderer.render(blueprint)
+                    if dag_text:
+                        description = (
+                            f"{description}\n{dag_text}"
+                            if description
+                            else dag_text.strip()
+                        )
+                except Exception as err:  # noqa: BLE001
+                    logger.debug("Could not render DAG in help: %s", err)
+
         parser = argparse.ArgumentParser(
             prog=prog_name,
-            description=self._description,
+            description=description,
             epilog=epilog_text,
             formatter_class=argparse.RawDescriptionHelpFormatter,
         )
