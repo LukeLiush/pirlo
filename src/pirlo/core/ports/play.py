@@ -114,15 +114,10 @@ class Play[OutputT](ABC):
         )
 
     @classmethod
-    def cli(
-        cls,
-        play_name: str | None = None,
-        playbook_name: str | None = None,
-    ) -> Any:
+    def cli(cls, play_name: str | None = None) -> Any:
         """Parse CLI parameters and execute the play."""
         from pirlo.infrastructure.adapters.cli.cli_play_runner import (
             CliPlayRunner,
         )
 
-        resolved_name = play_name or playbook_name
-        return CliPlayRunner.run(cls, play_name=resolved_name)
+        return CliPlayRunner.run(cls, play_name=play_name)
