@@ -9,7 +9,7 @@ Like a soccer match, runs are executed on a **Pitch** following a pre-defined ta
 ## 1. Football Concept Dictionary
 
 * **Pitch**: The runtime environment executing the automation.
-* **Playbook**: A session or scenario representing browser steps (e.g. `AutopassSession`).
+* **Play**: An atomic tactical unit representing a single automation step (e.g. `AutopassPlay`).
 * **LLM Link**: A connection configuration representing an LLM model, credential, and base URL. Decoupled from playbooks, links allow credentials to be reused.
   * **Playmaker**: The active decision brain (Agent) navigating the page.
   * **Analyst**: The DOM summary and selector healer (Replay) analyzing the layout.

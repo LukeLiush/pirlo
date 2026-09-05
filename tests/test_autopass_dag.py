@@ -5,7 +5,7 @@ import asyncio
 from unittest.mock import AsyncMock, patch
 
 from pirlo.core.models.link import LlmLink
-from pirlo.playbooks.autopass.main import AutopassSession
+from pirlo.playbooks.autopass.main import AutopassPlay
 from pirlo.playbooks.autopass.models import AutopassRunOutput, TaskDecompositionOutput
 
 
@@ -37,7 +37,7 @@ def test_autopass_dag_execution():
         mock_link = LlmLink(
             name="test_link", provider="ollama", model="qwen2.5:latest", api_key="dummy"
         )
-        session = AutopassSession()
+        session = AutopassPlay()
         output: AutopassRunOutput = asyncio.run(
             session.run_play(
                 task="Buy keyboard", profile="default", playmaker=mock_link

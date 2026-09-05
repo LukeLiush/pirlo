@@ -20,14 +20,14 @@ from pirlo.playbooks.autopass.subplaybooks import (
     QuickProgressListener,
 )
 
-__all__ = ["AutopassSession", "QuickProgressListener"]
+__all__ = ["AutopassPlay", "QuickProgressListener"]
 
 
 @play(
     name="autopass",
     description="Run self-healing decomposed browser automation workflows.",
 )
-class AutopassSession(Play[AutopassRunOutput]):
+class AutopassPlay(Play[AutopassRunOutput]):
     """Top-level Autopass orchestration Play executing decomposed subtasks."""
 
     async def execute(
@@ -102,4 +102,4 @@ class AutopassSession(Play[AutopassRunOutput]):
 
 
 if __name__ == "__main__":
-    AutopassSession.cli()
+    AutopassPlay.cli()

@@ -26,7 +26,7 @@ def test_scan_existing_playbooks_dir():
     assert "Dummy test session" in dummy_spec.description
 
     autopass_spec = specs["autopass"]
-    assert autopass_spec.class_name == "AutopassSession"
+    assert autopass_spec.class_name == "AutopassPlay"
     assert "self-healing" in autopass_spec.description
 
 

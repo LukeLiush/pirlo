@@ -17,7 +17,7 @@ def test_cli_orchestrator_playbook_routing():
 
     with (
         patch.object(sys, "argv", test_args),
-        patch("pirlo.playbooks.autopass.main.AutopassSession.cli") as mock_session_cli,
+        patch("pirlo.playbooks.autopass.main.AutopassPlay.cli") as mock_session_cli,
     ):
         try:
             main()
