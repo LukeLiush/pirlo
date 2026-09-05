@@ -43,10 +43,12 @@ class CliPlayRunner:
         cls,
         play_cls: type[Play[Any]],
         play_name: str | None = None,
+        playbook_name: str | None = None,
     ) -> RunResult[Any]:
         """Parse CLI parameters using the POSIX '--' delimiter and execute the play."""
         resolved_play_name: str = (
             play_name
+            or playbook_name
             or getattr(play_cls, "play_name", None)
             or getattr(play_cls, "playbook_name", None)
             or play_cls.__name__.lower().replace("session", "").replace("play", "")

@@ -24,4 +24,4 @@ def test_cli_orchestrator_playbook_routing():
         except SystemExit:
             pass
 
-        mock_session_cli.assert_called_once_with(playbook_name="autopass")
+        mock_session_cli.assert_called_once_with(play_name="autopass")

@@ -159,7 +159,7 @@ def main() -> None:
             module = importlib.import_module(target_spec.module_path)
             session_cls = getattr(module, target_spec.class_name)
 
-            session_cls.cli(playbook_name=target_playbook)
+            session_cls.cli(play_name=target_playbook)
 
         except Exception as e:  # noqa: BLE001
             sys.stderr.write(
