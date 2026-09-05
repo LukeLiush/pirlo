@@ -14,7 +14,7 @@ from pirlo.core.models.browser_config import BrowserConfig
 from pirlo.core.models.link import LlmLink
 from pirlo.core.models.parameters import LinkParameter, Parameter
 from pirlo.core.ports.browser_agent_factory import BrowserAgentFactory
-from pirlo.core.ports.play import Play
+from pirlo.core.ports.play import Play, requires
 from pirlo.core.repository.workflow_repository import WorkflowRepository
 from pirlo.core.services.workflow_runner import WorkflowRunner
 from pirlo.infrastructure.adapters.browser.browser_agent_factory import (
@@ -85,18 +85,20 @@ def find_free_port() -> int:
 class DecomposeTaskPlay(Play[TaskDecompositionOutput]):
     async def execute(
         self,
-        task_prompt: Annotated[str, Parameter(help="Task prompt to decompose")] = "",
+        task: Annotated[str, Parameter(help="Task prompt to decompose")] = "",
+        task_prompt: Annotated[str, Parameter(help="Task prompt alias")] = "",
         playmaker: Annotated[
             LlmLink | None, LinkParameter(help="Playmaker LLM link")
         ] = None,
     ) -> TaskDecompositionOutput:
-        if not task_prompt:
+        effective_prompt = task or task_prompt
+        if not effective_prompt:
             return TaskDecompositionOutput(task_prompts=[], total_subtasks=0)
 
         if playmaker is not None:
             decomposer = PydanticAiDecomposer(link=playmaker)
             try:
-                plan: Any = await decomposer.decompose(task_prompt)
+                plan: Any = await decomposer.decompose(effective_prompt)
                 subtasks = plan.subtasks if hasattr(plan, "subtasks") else plan
                 prompts = [
                     getattr(s, "task_prompt", str(s))
@@ -107,12 +109,12 @@ class DecomposeTaskPlay(Play[TaskDecompositionOutput]):
                 logger.warning(
                     f"LLM task decomposition failed, falling back to direct prompt: {err}"
                 )
-                prompts = [task_prompt]
+                prompts = [effective_prompt]
         else:
-            prompts = [task_prompt]
+            prompts = [effective_prompt]
 
         if not prompts:
-            prompts = [task_prompt]
+            prompts = [effective_prompt]
 
         return TaskDecompositionOutput(
             task_prompts=prompts, total_subtasks=len(prompts)
@@ -124,6 +126,8 @@ class DecomposeTaskPlay(Play[TaskDecompositionOutput]):
     description="Executes browser automation for ONE single subtask prompt",
 )
 class ExecuteSubtaskPlay(Play[SubtaskExecutionOutput]):
+    subtask_prompt: str = requires(DecomposeTaskPlay, each="task_prompts")
+
     async def execute(
         self,
         subtask_prompt: Annotated[
@@ -140,7 +144,8 @@ class ExecuteSubtaskPlay(Play[SubtaskExecutionOutput]):
             bool, Parameter(help="Enable vision for the Agent")
         ] = False,
     ) -> SubtaskExecutionOutput:
-        if not subtask_prompt:
+        prompt = subtask_prompt or getattr(self, "subtask_prompt", "")
+        if not prompt:
             return SubtaskExecutionOutput(
                 subtask_prompt="",
                 result_message="Empty subtask prompt provided.",
@@ -199,19 +204,19 @@ class ExecuteSubtaskPlay(Play[SubtaskExecutionOutput]):
             async with browser_manager.session() as session:
                 msg = await run_autopass_use_case.run(
                     browser_manager=session,
-                    task_prompt=subtask_prompt,
+                    task_prompt=prompt,
                     listener=QuietProgressListener(),
                     run_name="subtask_execution",
                     run_id="subtask_run",
                 )
                 return SubtaskExecutionOutput(
-                    subtask_prompt=subtask_prompt,
+                    subtask_prompt=prompt,
                     result_message=str(msg),
                     success=True,
                 )
         except Exception as err:  # noqa: BLE001
             return SubtaskExecutionOutput(
-                subtask_prompt=subtask_prompt,
+                subtask_prompt=prompt,
                 result_message=f"Subtask execution failed: {err}",
                 success=False,
             )

@@ -5,8 +5,30 @@ import asyncio
 from unittest.mock import AsyncMock, patch
 
 from pirlo.core.models.link import LlmLink
+from pirlo.core.services.blueprint_extractor import BlueprintExtractor
 from pirlo.playbooks.autopass.main import AutopassPlay
-from pirlo.playbooks.autopass.models import AutopassRunOutput, TaskDecompositionOutput
+from pirlo.playbooks.autopass.models import (
+    AutopassRunOutput,
+    TaskDecompositionOutput,
+)
+
+
+def test_autopass_blueprint_extraction():
+    """Verify the declarative DAG structure extracted via BlueprintExtractor."""
+    blueprint = BlueprintExtractor.extract_from_play(AutopassPlay)
+    assert len(blueprint.nodes) == 3
+    node_names = [n.playbook_name for n in blueprint.nodes]
+    assert node_names == ["DecomposeTaskPlay", "ExecuteSubtaskPlay", "AutopassPlay"]
+
+    # ExecuteSubtaskPlay is mapped over DecomposeTaskPlay's task_prompts
+    exec_node = blueprint.nodes[1]
+    assert exec_node.is_mapped is True
+    assert "subtask_prompt" in exec_node.mapped_bindings
+    assert exec_node.mapped_bindings["subtask_prompt"].source_field == "task_prompts"
+
+    # AutopassPlay fans in subtask_results
+    autopass_node = blueprint.nodes[2]
+    assert "subtask_results" in autopass_node.param_bindings
 
 
 def test_autopass_dag_execution():
