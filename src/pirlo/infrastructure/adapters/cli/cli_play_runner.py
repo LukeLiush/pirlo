@@ -127,7 +127,3 @@ class CliPlayRunner:
                 return _play()  # type: ignore[return-value]
             else:
                 return loop.run_until_complete(_play())
-
-
-# Backward-compatibility alias
-CliPlaybookRunner = CliPlayRunner
