@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from contextlib import AbstractContextManager
+from pathlib import Path
 from typing import Any
 
 
@@ -44,3 +45,17 @@ class PlayUI(ABC):
     @abstractmethod
     def yellow_card(self, message: Any, detail: str | None = None) -> None:
         """Draw warning panel/message (Yellow Card!)."""
+
+    @abstractmethod
+    def summary_card(
+        self,
+        run_id: str,
+        playbook_name: str,
+        status: str,
+        duration: float,
+        result_data: Any,
+        dashboard_url: str | None = None,
+        log_file_path: Path | None = None,
+        parameter_file_path: Path | None = None,
+    ) -> None:
+        """Draw final execution summary card."""

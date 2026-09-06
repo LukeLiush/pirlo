@@ -7,6 +7,7 @@ import contextlib
 import json
 import os
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -117,6 +118,8 @@ class CliPlayRunner:
         with open(prepared_run.parameter_file_path, "w", encoding="utf-8") as f:
             json.dump(masked_params, f, indent=2, default=str)
 
+        start_perf = time.perf_counter()
+
         async def _play() -> RunResult[Any]:
             with (
                 workflow_logging_context(prepared_run.run_id),
@@ -131,22 +134,49 @@ class CliPlayRunner:
                     play_cls,
                     user_kwargs=prepared_run.parameters,
                 )
-                raw_result: PlayOutput | None = await runner_instance.run(blueprint)
-
-                if isinstance(raw_result, RunResult):
-                    final_run_result: RunResult[Any] = raw_result
-                else:
-                    final_run_result = RunResult(
-                        run_id=prepared_run.run_id,
-                        status=RunStatus.COMPLETED,
-                        data=raw_result,
+                try:
+                    raw_result: PlayOutput | None = await runner_instance.run(blueprint)
+                    elapsed = time.perf_counter() - start_perf
+                    dashboard_url = runner_instance.get_dashboard_url(
+                        prepared_run.run_id
                     )
 
-                play_instance.ui.goal(
-                    message=f"Run '{prepared_run.run_id}' completed!",
-                    detail=f"Result:\n{final_run_result.data}",
-                )
-                return final_run_result
+                    if isinstance(raw_result, RunResult):
+                        final_run_result: RunResult[Any] = raw_result
+                    else:
+                        final_run_result = RunResult(
+                            run_id=prepared_run.run_id,
+                            status=RunStatus.COMPLETED,
+                            data=raw_result,
+                        )
+
+                    play_instance.ui.summary_card(
+                        run_id=prepared_run.run_id,
+                        playbook_name=resolved_play_name,
+                        status="SUCCESS",
+                        duration=elapsed,
+                        result_data=final_run_result.data,
+                        dashboard_url=dashboard_url,
+                        log_file_path=prepared_run.log_file_path,
+                        parameter_file_path=prepared_run.parameter_file_path,
+                    )
+                    return final_run_result
+                except Exception as exc:
+                    elapsed = time.perf_counter() - start_perf
+                    dashboard_url = runner_instance.get_dashboard_url(
+                        prepared_run.run_id
+                    )
+                    play_instance.ui.summary_card(
+                        run_id=prepared_run.run_id,
+                        playbook_name=resolved_play_name,
+                        status="FAILED",
+                        duration=elapsed,
+                        result_data=f"{type(exc).__name__}: {exc}",
+                        dashboard_url=dashboard_url,
+                        log_file_path=prepared_run.log_file_path,
+                        parameter_file_path=prepared_run.parameter_file_path,
+                    )
+                    raise
 
         try:
             loop: asyncio.AbstractEventLoop = asyncio.get_running_loop()

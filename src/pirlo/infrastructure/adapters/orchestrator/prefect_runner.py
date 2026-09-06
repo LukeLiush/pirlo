@@ -59,3 +59,15 @@ class PrefectRunner(PlayRunner):
 
         with temporary_settings(override_settings):
             return await workflow(**kwargs)
+
+    def get_dashboard_url(self, run_id: str) -> str | None:
+        """Constructs Prefect dashboard URL if pirlo connect or a remote Prefect server is active."""
+        active_api_url: str | None = self.server_url
+        if active_api_url is None and self.mode in ("auto", "server"):
+            active_api_url = discover_prefect_server_url()
+
+        if not active_api_url:
+            return None
+
+        web_url = active_api_url.removesuffix("/api").rstrip("/")
+        return f"{web_url}/flow-runs?name={run_id}"

@@ -3,10 +3,13 @@ from __future__ import annotations
 
 import asyncio
 import getpass
+import os
 from contextlib import AbstractContextManager
 from datetime import UTC
+from pathlib import Path
 from typing import Any
 
+from rich import box
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
@@ -152,3 +155,83 @@ class TerminalPlayUI(PlayUI):
         if det_str:
             text += f"\n[dim]{det_str}[/dim]"
         self._console.print(Panel(text, border_style="yellow", expand=False))
+
+    def summary_card(
+        self,
+        run_id: str,
+        playbook_name: str,
+        status: str,
+        duration: float,
+        result_data: Any,
+        dashboard_url: str | None = None,
+        log_file_path: Path | None = None,
+        parameter_file_path: Path | None = None,
+    ) -> None:
+        status_style = "bold green" if status == "SUCCESS" else "bold red"
+        status_line = (
+            f"[{status_style}]{status}[/{status_style}] (completed in {duration:.2f}s)"
+        )
+
+        lines: list[str] = [
+            f" [bold]Run ID:[/bold]     {run_id}",
+            f" [bold]Playbook:[/bold]   {playbook_name}",
+            f" [bold]Status:[/bold]     {status_line}",
+        ]
+
+        # Result representation
+        res_repr = repr(result_data)
+        if len(res_repr) > 160:
+            res_repr = res_repr[:157] + "..."
+        lines.extend(
+            [
+                f" [bold]Result:[/bold]     {res_repr}",
+            ]
+        )
+
+        # If a live server dashboard is active (pirlo connect or remote server)
+        if dashboard_url:
+            lines.extend(
+                [
+                    "",
+                    f" [bold cyan]Dashboard:[/bold cyan]  {dashboard_url}",
+                ]
+            )
+
+        # Local files & CLI inspect (only when local files exist on this machine)
+        if log_file_path and parameter_file_path and log_file_path.exists():
+            try:
+                home = Path.home()
+                display_log = f"~/{log_file_path.relative_to(home)}"
+                display_params = f"~/{parameter_file_path.relative_to(home)}"
+            except ValueError:
+                display_log = str(log_file_path)
+                display_params = str(parameter_file_path)
+
+            lines.extend(
+                [
+                    "",
+                    f" [bold]Log File:[/bold]   {display_log}",
+                    f" [bold]Params:[/bold]     {display_params}",
+                ]
+            )
+
+            is_deployed = bool(
+                os.environ.get("PIRLO_DEPLOYED")
+                or os.environ.get("KUBERNETES_SERVICE_HOST")
+            )
+            if not is_deployed:
+                lines.extend(
+                    [
+                        "",
+                        f" [dim]Inspect:[/dim]    [cyan]pirlo run show {run_id}[/cyan]",
+                    ]
+                )
+
+        self._console.print(
+            Panel(
+                "\n".join(lines),
+                title="[bold white]Execution Summary[/bold white]",
+                border_style="green" if status == "SUCCESS" else "red",
+                box=box.ROUNDED,
+            )
+        )

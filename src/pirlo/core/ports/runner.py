@@ -18,3 +18,8 @@ class PlayRunner(ABC):
     ) -> PlayOutput | None:
         """Executes the workflow and returns the output of the terminal Play node."""
         raise NotImplementedError
+
+    @abstractmethod
+    def get_dashboard_url(self, run_id: str) -> str | None:
+        """Returns the orchestrator-specific web UI URL for inspecting this run, or None if local/ephemeral."""
+        raise NotImplementedError

@@ -60,3 +60,22 @@ async def test_prefect_runner_via_factory():
 
     assert isinstance(result, StepTwoOutput)
     assert result.message == "Received tok_123"
+
+
+def test_prefect_runner_get_dashboard_url_ephemeral():
+    compiler = PrefectCompiler()
+    runner = PrefectRunner(compiler=compiler, mode="ephemeral")
+    assert runner.get_dashboard_url("test_run_123") is None
+
+
+def test_prefect_runner_get_dashboard_url_server():
+    compiler = PrefectCompiler()
+    runner = PrefectRunner(
+        compiler=compiler,
+        mode="server",
+        server_url="http://prefect.internal:4200/api",
+    )
+    assert (
+        runner.get_dashboard_url("test_run_123")
+        == "http://prefect.internal:4200/flow-runs?name=test_run_123"
+    )
