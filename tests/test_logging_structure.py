@@ -70,8 +70,12 @@ async def test_async_concurrency_context_isolation():
     )
 
     pid = os.getpid()
-    assert all(tag == f"[shared_run/subtask#1001 (pid {pid})]" for tag in results["task1"])
-    assert all(tag == f"[shared_run/subtask#1002 (pid {pid})]" for tag in results["task2"])
+    assert all(
+        tag == f"[shared_run/subtask#1001 (pid {pid})]" for tag in results["task1"]
+    )
+    assert all(
+        tag == f"[shared_run/subtask#1002 (pid {pid})]" for tag in results["task2"]
+    )
 
 
 def test_pirlo_log_formatter_and_filter():
@@ -83,45 +87,46 @@ def test_pirlo_log_formatter_and_filter():
         "%(asctime)s %(prefix)s %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
     )
 
-    with workflow_logging_context("3a4f8c9b"):
-        with play_logging_context("autopass_execute_subtask#1235"):
-            record = logger.makeRecord(
-                name="test_pirlo_logger",
-                level=logging.INFO,
-                fn="test.py",
-                lno=10,
-                msg="Querying \x1b[32mgemini\x1b[0m",
-                args=(),
-                exc_info=None,
-            )
-            assert log_filter.filter(record)
-            output = formatter.format(record)
+    with (
+        workflow_logging_context("3a4f8c9b"),
+        play_logging_context("autopass_execute_subtask#1235"),
+    ):
+        record = logger.makeRecord(
+            name="test_pirlo_logger",
+            level=logging.INFO,
+            fn="test.py",
+            lno=10,
+            msg="Querying \x1b[32mgemini\x1b[0m",
+            args=(),
+            exc_info=None,
+        )
+        assert log_filter.filter(record)
+        output = formatter.format(record)
 
-            pid = os.getpid()
-            assert f"[3a4f8c9b/autopass_execute_subtask#1235 (pid {pid})]" in output
-            assert "Querying gemini" in output
-            assert "\x1b[32m" not in output  # ANSI codes must be stripped
+        pid = os.getpid()
+        assert f"[3a4f8c9b/autopass_execute_subtask#1235 (pid {pid})]" in output
+        assert "Querying gemini" in output
+        assert "\x1b[32m" not in output  # ANSI codes must be stripped
 
 
 def test_capture_run_logs_integration():
     with tempfile.TemporaryDirectory() as tmpdir:
         run_dir = Path(tmpdir)
-        with workflow_logging_context("3a4f8c9b"):
-            with capture_run_logs(run_dir):
-                logger = logging.getLogger("pirlo.test")
-                logger.info("Workflow starting (run-id 3a4f8c9b):")
+        with workflow_logging_context("3a4f8c9b"), capture_run_logs(run_dir):
+            logger = logging.getLogger("pirlo.test")
+            logger.info("Workflow starting (run-id 3a4f8c9b):")
 
-                with play_logging_context("autopass_decompose#1234"):
-                    logger.info("Task is starting.")
-                    logger.info("Decomposed into 3 subtasks")
-                    logger.info("Task finished successfully.")
+            with play_logging_context("autopass_decompose#1234"):
+                logger.info("Task is starting.")
+                logger.info("Decomposed into 3 subtasks")
+                logger.info("Task finished successfully.")
 
-                with play_logging_context("autopass_execute_subtask#1235"):
-                    logger.info("Task is starting.")
-                    logger.info("Querying gemini")
-                    print("Raw stdout print from worker")
+            with play_logging_context("autopass_execute_subtask#1235"):
+                logger.info("Task is starting.")
+                logger.info("Querying gemini")
+                print("Raw stdout print from worker")
 
-                logger.info("Done!")
+            logger.info("Done!")
 
         log_file = run_dir / "run.log"
         assert log_file.exists()
@@ -130,8 +135,23 @@ def test_capture_run_logs_integration():
 
         pid = os.getpid()
         assert any("Workflow starting (run-id 3a4f8c9b):" in line for line in lines)
-        assert any(f"[3a4f8c9b/autopass_decompose#1234 (pid {pid})] Task is starting." in line for line in lines)
-        assert any(f"[3a4f8c9b/autopass_decompose#1234 (pid {pid})] Decomposed into 3 subtasks" in line for line in lines)
-        assert any(f"[3a4f8c9b/autopass_execute_subtask#1235 (pid {pid})] Querying gemini" in line for line in lines)
-        assert any(f"[3a4f8c9b/autopass_execute_subtask#1235 (pid {pid})] Raw stdout print from worker" in line for line in lines)
+        assert any(
+            f"[3a4f8c9b/autopass_decompose#1234 (pid {pid})] Task is starting." in line
+            for line in lines
+        )
+        assert any(
+            f"[3a4f8c9b/autopass_decompose#1234 (pid {pid})] Decomposed into 3 subtasks"
+            in line
+            for line in lines
+        )
+        assert any(
+            f"[3a4f8c9b/autopass_execute_subtask#1235 (pid {pid})] Querying gemini"
+            in line
+            for line in lines
+        )
+        assert any(
+            f"[3a4f8c9b/autopass_execute_subtask#1235 (pid {pid})] Raw stdout print from worker"
+            in line
+            for line in lines
+        )
         assert any(f"[3a4f8c9b (pid {pid})] Done!" in line for line in lines)

@@ -4,7 +4,7 @@ import sys
 import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -89,8 +89,10 @@ class StdioTee:
             if not prefix:
                 prefix, _ = resolve_log_prefix()
 
-            now = datetime.now()
-            now_str = now.strftime("%Y-%m-%d %H:%M:%S") + f".{now.microsecond // 1000:03d}"
+            now = datetime.now(UTC).astimezone()
+            now_str = (
+                now.strftime("%Y-%m-%d %H:%M:%S") + f".{now.microsecond // 1000:03d}"
+            )
             formatted_prefix = f"{prefix} " if prefix else ""
             if self.log_file:
                 self.log_file.write(f"{now_str} {formatted_prefix}{line_content}\n")

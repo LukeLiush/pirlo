@@ -112,9 +112,7 @@ class TerminalPlayUI(PlayUI):
 
     async def prompt_password(self, prompt_message: str) -> str:
         loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(
-            None, getpass.getpass, f"{prompt_message}: "
-        )
+        return await loop.run_in_executor(None, getpass.getpass, f"{prompt_message}: ")
 
     def goal(self, message: str, detail: str | None = None) -> None:
         from rich.markup import escape

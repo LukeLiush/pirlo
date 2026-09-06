@@ -47,7 +47,9 @@ def play_logging_context(
 ) -> Iterator[None]:
     """Sets active play_id context (e.g. 'autopass_execute_subtask#1235')."""
     effective_run_id = run_id if run_id is not None else _current_run_id.get()
-    token_run = _current_run_id.set(str(effective_run_id) if effective_run_id is not None else None)
+    token_run = _current_run_id.set(
+        str(effective_run_id) if effective_run_id is not None else None
+    )
     token_play = _current_play_id.set(play_id)
     try:
         yield
@@ -76,11 +78,10 @@ def resolve_log_prefix() -> tuple[str, int]:
         from prefect.context import FlowRunContext, TaskRunContext, get_run_context
 
         ctx = get_run_context()
-        if not run_id:
-            if isinstance(ctx, (FlowRunContext, TaskRunContext)):
-                flow_run = getattr(ctx, "flow_run", None)
-                if flow_run and flow_run.name:
-                    run_id = flow_run.name
+        if not run_id and isinstance(ctx, (FlowRunContext, TaskRunContext)):
+            flow_run = getattr(ctx, "flow_run", None)
+            if flow_run and flow_run.name:
+                run_id = flow_run.name
 
         if not play_id and isinstance(ctx, TaskRunContext) and ctx.task_run:
             play_id = ctx.task_run.name or ctx.task_run.task_key

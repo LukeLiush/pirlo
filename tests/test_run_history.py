@@ -46,7 +46,8 @@ class TestRunHistoryAndMVC(unittest.TestCase):
         run_id1 = factory1.generate_run_id()
         run_id2 = factory2.generate_run_id()
         self.assertNotEqual(run_id1, run_id2)
-        self.assertTrue(run_id1.startswith(run_name1))
+        self.assertEqual(len(run_id1), 8)
+        self.assertEqual(len(run_id2), 8)
 
     def test_sqlite_repository_save_and_retrieve(self):
         run = Run(

@@ -11,8 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from pirlo.core.config import get_log_level, get_workspace_path
-from pirlo.core.services.masking import mask_sensitive_data
-from pirlo.infrastructure.services.log_streamer import capture_run_logs
+from pirlo.core.logging_context import workflow_logging_context
 from pirlo.core.models.blueprint import PlayBlueprint, PlayOutput
 from pirlo.core.models.play_invocation import PlayInvocation
 from pirlo.core.models.run import PreparedRun, RunStatus
@@ -20,6 +19,7 @@ from pirlo.core.models.run_result import RunResult
 from pirlo.core.ports.play import Play
 from pirlo.core.ports.runner import PlayRunner
 from pirlo.core.services.blueprint_extractor import BlueprintExtractor
+from pirlo.core.services.masking import mask_sensitive_data
 from pirlo.infrastructure.adapters.cli.argument_parser_builder import (
     ArgumentParserBuilder,
 )
@@ -27,6 +27,7 @@ from pirlo.infrastructure.adapters.cli.terminal_play_ui import TerminalPlayUI
 from pirlo.infrastructure.adapters.runner_factory import (
     PlayRunnerFactory,
 )
+from pirlo.infrastructure.services.log_streamer import capture_run_logs
 from pirlo.infrastructure.services.parameter_resolution import ParameterResolver
 from pirlo.infrastructure.services.run_preparer import RunPreparer
 
@@ -111,18 +112,21 @@ class CliPlayRunner:
         show_logs: bool = any(arg in sys.argv for arg in ("-l", "--log"))
         active_log_level = get_log_level()
 
-        async def _play() -> RunResult[Any]:
-            with capture_run_logs(
-                prepared_run.run_dir,
-                console_stream=show_logs,
-                console_level=active_log_level,
-                file_level=active_log_level,
-            ):
-                prepared_run.run_dir.mkdir(parents=True, exist_ok=True)
-                masked_params = mask_sensitive_data(prepared_run.parameters)
-                with open(prepared_run.parameter_file_path, "w", encoding="utf-8") as f:
-                    json.dump(masked_params, f, indent=2, default=str)
+        prepared_run.run_dir.mkdir(parents=True, exist_ok=True)
+        masked_params = mask_sensitive_data(prepared_run.parameters)
+        with open(prepared_run.parameter_file_path, "w", encoding="utf-8") as f:
+            json.dump(masked_params, f, indent=2, default=str)
 
+        async def _play() -> RunResult[Any]:
+            with (
+                workflow_logging_context(prepared_run.run_id),
+                capture_run_logs(
+                    prepared_run.run_dir,
+                    console_stream=show_logs,
+                    console_level=active_log_level,
+                    file_level=active_log_level,
+                ),
+            ):
                 blueprint: PlayBlueprint = BlueprintExtractor.extract_from_play(
                     play_cls,
                     user_kwargs=prepared_run.parameters,

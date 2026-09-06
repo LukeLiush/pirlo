@@ -187,9 +187,7 @@ class SendAlertPlay(Play[AlertOutput]):
         self,
         channel: Annotated[str, Parameter(help="Target alert channel")] = "#finance",
     ) -> AlertOutput:
-        status_text = (
-            "Target Achieved" if self.summary.target_met else "Target Missed"
-        )
+        status_text = "Target Achieved" if self.summary.target_met else "Target Missed"
         self.ui.header(
             "Quarterly Report Alert",
             subtitle=f"Channel: {channel} | Status: {status_text}",

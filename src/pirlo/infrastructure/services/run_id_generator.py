@@ -1,6 +1,5 @@
 import json
 import uuid
-from datetime import UTC, datetime
 from typing import Any
 
 FUN_WORDS = [
@@ -17,6 +16,9 @@ FUN_WORDS = [
     "box-to-box",
     "counter-attack",
 ]
+
+
+from pirlo.core.logging_context import generate_short_run_id
 
 
 class IdentityFactory:
@@ -40,6 +42,5 @@ class IdentityFactory:
         return f"{word}-{short_id}"
 
     def generate_run_id(self) -> str:
-        """Generates a unique execution Run ID for a run by appending a UTC timestamp with microsecond resolution."""
-        timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S_%f")
-        return f"{self.generate_run_name()}-{timestamp}"
+        """Generates an 8-character hex UUID for unique execution identity."""
+        return generate_short_run_id(8)

@@ -5,8 +5,6 @@ import logging
 import time
 from typing import Any, cast
 
-from pirlo.core.services.masking import mask_sensitive_data
-
 from prefect import flow, task
 from prefect.futures import PrefectFuture
 
@@ -26,6 +24,7 @@ from pirlo.core.models.run_result import RunResult
 from pirlo.core.ports.compiler import BlueprintCompiler
 from pirlo.core.ports.play import Play
 from pirlo.core.services.idempotency import compute_play_identity
+from pirlo.core.services.masking import mask_sensitive_data
 from pirlo.infrastructure.adapters.cli.terminal_play_ui import TerminalPlayUI
 from pirlo.infrastructure.adapters.orchestrator.prefect_model import (
     PrefectWorkflow,
@@ -43,12 +42,13 @@ class PrefectCompiler(BlueprintCompiler[PrefectWorkflow]):
     def compile(
         self,
         blueprint: PlayBlueprint,
+        run_id: str | None = None,
     ) -> PrefectWorkflow:
         """Dynamically constructs a master PrefectWorkflow from the PlayBlueprint."""
         if not blueprint.nodes:
             raise BlueprintError(f"Cannot compile empty blueprint '{blueprint.name}'.")
 
-        active_run_id = get_current_run_id() or generate_short_run_id()
+        active_run_id = run_id or get_current_run_id() or generate_short_run_id()
 
         @flow(
             name=blueprint.name,
@@ -146,7 +146,9 @@ class PrefectCompiler(BlueprintCompiler[PrefectWorkflow]):
                         # Filter exec_kwargs to only accepted parameters if no **kwargs
                         if not has_var_keyword:
                             exec_kwargs = {
-                                k: v for k, v in exec_kwargs.items() if k in sig.parameters
+                                k: v
+                                for k, v in exec_kwargs.items()
+                                if k in sig.parameters
                             }
 
                         # Executes execute() for Play
@@ -155,7 +157,8 @@ class PrefectCompiler(BlueprintCompiler[PrefectWorkflow]):
                             elapsed = time.perf_counter() - start_perf
                             output_data = (
                                 play_result.data
-                                if isinstance(play_result, RunResult) and play_result.data
+                                if isinstance(play_result, RunResult)
+                                and play_result.data
                                 else cast(PlayOutput, play_result)
                             )
                             output_repr = repr(output_data)
@@ -170,12 +173,10 @@ class PrefectCompiler(BlueprintCompiler[PrefectWorkflow]):
                             return output_data
                         except Exception as exc:
                             elapsed = time.perf_counter() - start_perf
-                            logger.error(
-                                "Play FAILED | duration=%.3fs | error=%s: %s",
+                            logger.exception(
+                                "Play FAILED | duration=%.3fs | error=%s",
                                 elapsed,
                                 type(exc).__name__,
-                                exc,
-                                exc_info=True,
                             )
                             raise
 

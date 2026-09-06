@@ -1,7 +1,6 @@
 # tests/test_play_observability.py
 from __future__ import annotations
 
-import io
 import logging
 from pathlib import Path
 from typing import Annotated
@@ -128,7 +127,9 @@ def test_get_log_level_resolution(monkeypatch: pytest.MonkeyPatch):
     assert get_log_level() == logging.ERROR
 
 
-def test_capture_run_logs_quiet_by_default(tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+def test_capture_run_logs_quiet_by_default(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
     run_dir = tmp_path / "quiet_test"
     with capture_run_logs(run_dir, console_stream=False):
         logger = logging.getLogger("pirlo.test")
@@ -139,10 +140,14 @@ def test_capture_run_logs_quiet_by_default(tmp_path: Path, capsys: pytest.Captur
     assert "Hidden from console but captured to file" not in captured.out
     # Ensure file contains the record
     assert (run_dir / "run.log").exists()
-    assert "Hidden from console but captured to file" in (run_dir / "run.log").read_text(encoding="utf-8")
+    assert "Hidden from console but captured to file" in (
+        run_dir / "run.log"
+    ).read_text(encoding="utf-8")
 
 
-def test_capture_run_logs_console_streaming(tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+def test_capture_run_logs_console_streaming(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+):
     run_dir = tmp_path / "console_test"
     with capture_run_logs(run_dir, console_stream=True):
         logger = logging.getLogger("pirlo.test")
@@ -151,7 +156,9 @@ def test_capture_run_logs_console_streaming(tmp_path: Path, capsys: pytest.Captu
     captured = capsys.readouterr()
     assert "Structured console log event" in captured.out
     assert (run_dir / "run.log").exists()
-    assert "Structured console log event" in (run_dir / "run.log").read_text(encoding="utf-8")
+    assert "Structured console log event" in (run_dir / "run.log").read_text(
+        encoding="utf-8"
+    )
 
 
 @play(name="obs_failing_play", description="Failing play for testing")
@@ -173,9 +180,8 @@ async def test_prefect_compiler_failure_lifecycle_logging(tmp_path: Path):
     runner = PrefectRunner(compiler=compiler, mode="ephemeral")
 
     run_dir = tmp_path / "runs" / "test_fail_run"
-    with pytest.raises(Exception):
-        with capture_run_logs(run_dir):
-            await runner.run(blueprint)
+    with pytest.raises(ValueError), capture_run_logs(run_dir):
+        await runner.run(blueprint)
 
     log_path = run_dir / "run.log"
     assert log_path.exists()
@@ -185,3 +191,42 @@ async def test_prefect_compiler_failure_lifecycle_logging(tmp_path: Path):
     assert "Play START | inputs=" in content
     assert "Play FAILED | duration=" in content
     assert "ValueError: Simulated computation failure" in content
+
+
+def test_identity_factory_generates_8_char_run_id():
+    from pirlo.infrastructure.services.run_id_generator import IdentityFactory
+
+    factory = IdentityFactory("test_play", {"foo": "bar"})
+    run_id = factory.generate_run_id()
+    assert len(run_id) == 8
+    assert int(run_id, 16) >= 0
+
+
+@pytest.mark.anyio
+async def test_run_id_consistency_across_disk_and_logs(tmp_path: Path):
+    from pirlo.core.logging_context import workflow_logging_context
+    from pirlo.infrastructure.adapters.orchestrator.prefect_runner import PrefectRunner
+    from pirlo.infrastructure.services.run_id_generator import IdentityFactory
+
+    factory = IdentityFactory("sample", {"user": "alice"})
+    run_id = factory.generate_run_id()
+    assert len(run_id) == 8
+
+    run_dir = tmp_path / "runs" / run_id
+    compiler = PrefectCompiler()
+    runner = PrefectRunner(compiler=compiler, mode="ephemeral")
+    blueprint = BlueprintExtractor.extract_from_play(
+        SampleObservabilityPlay,
+        user_kwargs={"user": "alice"},
+    )
+
+    with workflow_logging_context(run_id), capture_run_logs(run_dir):
+        await runner.run(blueprint)
+
+    log_path = run_dir / "run.log"
+    assert log_path.exists()
+    content = log_path.read_text(encoding="utf-8")
+
+    # Verify that the log lines carry the exact same 8-char run_id
+    assert f"[{run_id}/" in content
+    assert f"Workflow starting (run-id {run_id}):" in content
