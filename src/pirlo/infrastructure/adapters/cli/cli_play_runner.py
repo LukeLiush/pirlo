@@ -3,11 +3,16 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import contextlib
+import json
+import os
 import sys
 from pathlib import Path
 from typing import Any
 
-from pirlo.core.config import get_workspace_path
+from pirlo.core.config import get_log_level, get_workspace_path
+from pirlo.core.services.masking import mask_sensitive_data
+from pirlo.infrastructure.services.log_streamer import capture_run_logs
 from pirlo.core.models.blueprint import PlayBlueprint, PlayOutput
 from pirlo.core.models.play_invocation import PlayInvocation
 from pirlo.core.models.run import PreparedRun, RunStatus
@@ -96,27 +101,48 @@ class CliPlayRunner:
         )
         runner_instance: PlayRunner = PlayRunnerFactory.get_runner(runner_name)
 
+        # Silence Prefect's default console logger so it never pollutes the terminal
+        os.environ["PREFECT_LOGGING_HANDLERS_CONSOLE_LEVEL"] = "ERROR"
+        with contextlib.suppress(Exception):
+            from prefect.logging.configuration import setup_logging
+
+            setup_logging(incremental=False)
+
+        show_logs: bool = any(arg in sys.argv for arg in ("-l", "--log"))
+        active_log_level = get_log_level()
+
         async def _play() -> RunResult[Any]:
-            blueprint: PlayBlueprint = BlueprintExtractor.extract_from_play(
-                play_cls,
-                user_kwargs=prepared_run.parameters,
-            )
-            raw_result: PlayOutput | None = await runner_instance.run(blueprint)
+            with capture_run_logs(
+                prepared_run.run_dir,
+                console_stream=show_logs,
+                console_level=active_log_level,
+                file_level=active_log_level,
+            ):
+                prepared_run.run_dir.mkdir(parents=True, exist_ok=True)
+                masked_params = mask_sensitive_data(prepared_run.parameters)
+                with open(prepared_run.parameter_file_path, "w", encoding="utf-8") as f:
+                    json.dump(masked_params, f, indent=2, default=str)
 
-            if isinstance(raw_result, RunResult):
-                final_run_result: RunResult[Any] = raw_result
-            else:
-                final_run_result = RunResult(
-                    run_id=prepared_run.run_id,
-                    status=RunStatus.COMPLETED,
-                    data=raw_result,
+                blueprint: PlayBlueprint = BlueprintExtractor.extract_from_play(
+                    play_cls,
+                    user_kwargs=prepared_run.parameters,
                 )
+                raw_result: PlayOutput | None = await runner_instance.run(blueprint)
 
-            play_instance.ui.goal(
-                message=f"Run '{prepared_run.run_id}' completed!",
-                detail=f"Result:\n{final_run_result.data}",
-            )
-            return final_run_result
+                if isinstance(raw_result, RunResult):
+                    final_run_result: RunResult[Any] = raw_result
+                else:
+                    final_run_result = RunResult(
+                        run_id=prepared_run.run_id,
+                        status=RunStatus.COMPLETED,
+                        data=raw_result,
+                    )
+
+                play_instance.ui.goal(
+                    message=f"Run '{prepared_run.run_id}' completed!",
+                    detail=f"Result:\n{final_run_result.data}",
+                )
+                return final_run_result
 
         try:
             loop: asyncio.AbstractEventLoop = asyncio.get_running_loop()

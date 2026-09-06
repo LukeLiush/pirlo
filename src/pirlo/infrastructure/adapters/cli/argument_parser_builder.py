@@ -217,6 +217,12 @@ class ArgumentParserBuilder:
             for param in self._parameters:
                 self._add_argument(parser, param, added_flags)
 
+        parser.add_argument(
+            "-l",
+            "--log",
+            action="store_true",
+            help="Stream structured telemetry and logs directly to terminal stdout",
+        )
         return parser
 
     @staticmethod

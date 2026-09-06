@@ -2,7 +2,10 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+import logging
 from typing import TYPE_CHECKING, Any, cast
+
+logger = logging.getLogger(__name__)
 
 from pirlo.core.models.blueprint import ParameterValue, ProxyRef, ScalarValue
 from pirlo.core.ports.play_ui import PlayUI
@@ -85,6 +88,12 @@ class Play[OutputT](ABC):
     def play_id(self) -> str | None:
         """Deterministic content-addressed idempotency ID for this execution instance."""
         return self._play_id
+
+    @property
+    def logger(self) -> logging.Logger:
+        """Structured logger pre-bound to this play's identity hierarchy."""
+        play_name = getattr(self, "play_name", None) or self.__class__.__name__
+        return logging.getLogger(f"pirlo.play.{play_name}")
 
     @abstractmethod
     async def execute(self, *args: Any, **kwargs: Any) -> OutputT:

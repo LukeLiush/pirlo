@@ -6,10 +6,12 @@ class Parameter:
         help: str | None = None,
         env_name: str | list[str] | None = None,
         short: str | None = None,
+        sensitive: bool = False,
     ) -> None:
         self.help: str | None = help
         self.env_name: str | list[str] | None = env_name
         self.short: str | None = short
+        self.sensitive: bool = sensitive
 
 
 class LinkParameter(Parameter):

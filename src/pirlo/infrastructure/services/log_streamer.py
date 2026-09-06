@@ -129,39 +129,72 @@ class StdioTee:
 
 @contextmanager
 def capture_run_logs(
-    run_dir: Path, get_prefix_fn: Callable[[], str] | None = None
+    run_dir: Path,
+    get_prefix_fn: Callable[[], str] | None = None,
+    console_stream: bool = False,
+    console_level: int = logging.INFO,
+    file_level: int = logging.INFO,
+    log_level: int | None = None,
 ) -> Iterator[Path]:
-    """Context manager capturing all stdout/stderr and logging module calls into run_dir/run.log without duplicating terminal output."""
+    """Context manager capturing all stdout/stderr and logging module calls into run_dir/run.log.
+
+    - file_handler always captures at file_level into run.log.
+    - console_handler is attached only if console_stream is True (-l / --log passed).
+    """
+    effective_file_level = log_level if log_level is not None else file_level
+    effective_console_level = log_level if log_level is not None else console_level
+
     run_dir.mkdir(parents=True, exist_ok=True)
     log_path = run_dir / "run.log"
+
+    root_logger = logging.getLogger()
+    orig_level = root_logger.level
+    min_required_level = min(
+        effective_file_level,
+        effective_console_level if console_stream else effective_file_level,
+    )
+    if orig_level > min_required_level or orig_level == logging.NOTSET:
+        root_logger.setLevel(min_required_level)
+
+    formatter = PirloLogFormatter(
+        "%(asctime)s %(prefix)s %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
+    )
 
     with open(log_path, "a", encoding="utf-8") as log_file:
         old_stdout = sys.stdout
         old_stderr = sys.stderr
 
-        # 1. Tee raw print() calls to terminal + run.log
+        # 1. Tee raw print() / self.ui calls to terminal + run.log
         tee_stdout = StdioTee(old_stdout, log_file, get_prefix_fn=get_prefix_fn)
         tee_stderr = StdioTee(old_stderr, log_file, get_prefix_fn=get_prefix_fn)
 
         sys.stdout = tee_stdout
         sys.stderr = tee_stderr
 
-        # 2. Attach FileHandler directly to root_logger with PirloLogFormatter and PirloLogFilter
+        # 2. File handler always writes all logs to run.log
         file_handler = logging.FileHandler(log_path, encoding="utf-8")
-        formatter = PirloLogFormatter(
-            "%(asctime)s %(prefix)s %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
-        )
+        file_handler.setLevel(effective_file_level)
         file_handler.setFormatter(formatter)
         file_handler.addFilter(PirloLogFilter())
-
-        root_logger = logging.getLogger()
-        root_logger.setLevel(logging.INFO)
         root_logger.addHandler(file_handler)
+
+        # 3. Console handler attached ONLY when -l / --log is requested
+        console_handler: logging.StreamHandler[Any] | None = None
+        if console_stream:
+            console_handler = logging.StreamHandler(old_stdout)
+            console_handler.setLevel(effective_console_level)
+            console_handler.setFormatter(formatter)
+            console_handler.addFilter(PirloLogFilter())
+            root_logger.addHandler(console_handler)
 
         try:
             yield log_path
         finally:
             root_logger.removeHandler(file_handler)
             file_handler.close()
+            if console_handler is not None:
+                root_logger.removeHandler(console_handler)
+                console_handler.close()
+            root_logger.setLevel(orig_level)
             sys.stdout = old_stdout
             sys.stderr = old_stderr

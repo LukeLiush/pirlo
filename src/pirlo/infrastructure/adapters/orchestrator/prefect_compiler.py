@@ -2,7 +2,10 @@
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any, cast
+
+from pirlo.core.services.masking import mask_sensitive_data
 
 from prefect import flow, task
 from prefect.futures import PrefectFuture
@@ -106,7 +109,9 @@ class PrefectCompiler(BlueprintCompiler[PrefectWorkflow]):
                     active_play_name = getattr(target_cls, "play_name", node_name)
                     identity = compute_play_identity(active_play_name, kwargs)
                     with play_logging_context(identity.short_id, run_id=active_run_id):
-                        logger.info("Task is starting.")
+                        masked_inputs = mask_sensitive_data(dict(kwargs))
+                        logger.info("Play START | inputs=%s", masked_inputs)
+                        start_perf = time.perf_counter()
                         try:
                             instance: Any = target_cls(
                                 ui=TerminalPlayUI(play_name=identity.short_id),
@@ -145,14 +150,34 @@ class PrefectCompiler(BlueprintCompiler[PrefectWorkflow]):
                             }
 
                         # Executes execute() for Play
-                        play_result: Any = await instance.execute(**exec_kwargs)
-                        logger.info("Task finished successfully.")
+                        try:
+                            play_result: Any = await instance.execute(**exec_kwargs)
+                            elapsed = time.perf_counter() - start_perf
+                            output_data = (
+                                play_result.data
+                                if isinstance(play_result, RunResult) and play_result.data
+                                else cast(PlayOutput, play_result)
+                            )
+                            output_repr = repr(output_data)
+                            if len(output_repr) > 200:
+                                output_repr = output_repr[:197] + "..."
 
-                        return (
-                            play_result.data
-                            if isinstance(play_result, RunResult) and play_result.data
-                            else cast(PlayOutput, play_result)
-                        )
+                            logger.info(
+                                "Play SUCCESS | duration=%.3fs | output=%s",
+                                elapsed,
+                                output_repr,
+                            )
+                            return output_data
+                        except Exception as exc:
+                            elapsed = time.perf_counter() - start_perf
+                            logger.error(
+                                "Play FAILED | duration=%.3fs | error=%s: %s",
+                                elapsed,
+                                type(exc).__name__,
+                                exc,
+                                exc_info=True,
+                            )
+                            raise
 
                 parent_futures: list[PrefectFuture[PlayOutput]] = [
                     futures[parent_id] for parent_id in blueprint_node.depends_on

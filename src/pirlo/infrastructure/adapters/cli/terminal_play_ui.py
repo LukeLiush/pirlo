@@ -101,30 +101,30 @@ class TerminalPlayUI(PlayUI):
 
     def commentary(self, message: str, detail: str | None = None) -> None:
         badge = self._format_badge()
-        text = f"{badge} 🎙️ [{self._color}]{message}[/{self._color}]"
+        text = f"{badge} [{self._color}]{message}[/{self._color}]"
         if detail:
             text += f"\n  [dim]{detail}[/dim]"
         self._console.print(text)
 
     async def var_check(self, message: str) -> None:
         loop = asyncio.get_running_loop()
-        await loop.run_in_executor(None, input, f"🔍 [VAR CHECK] {message}: ")
+        await loop.run_in_executor(None, input, f"[VAR CHECK] {message}: ")
 
     async def prompt_password(self, prompt_message: str) -> str:
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(
-            None, getpass.getpass, f"🔑 {prompt_message}: "
+            None, getpass.getpass, f"{prompt_message}: "
         )
 
     def goal(self, message: str, detail: str | None = None) -> None:
         from rich.markup import escape
 
         panel_title = (
-            f"⚽ [bold {self._color}]{escape(f'[{self._play_name}]')}[/bold {self._color}]"
+            f"[bold {self._color}]{escape(f'[{self._play_name}]')}[/bold {self._color}]"
             if self._play_name
             else None
         )
-        text = f"[bold green]⚽ GOAL! {message}[/bold green]"
+        text = f"[bold green]GOAL! {message}[/bold green]"
         if detail:
             text += f"\n[{self._color}]{detail}[/{self._color}]"
         self._console.print(
@@ -137,7 +137,7 @@ class TerminalPlayUI(PlayUI):
         )
 
     def red_card(self, message: str, detail: str | None = None) -> None:
-        text = f"🟥 [bold red]RED CARD! {message}[/bold red]"
+        text = f"[bold red]RED CARD! {message}[/bold red]"
         if detail:
             text += f"\n[dim]{detail}[/dim]"
         self._console.print(Panel(text, border_style="red", expand=False))
@@ -150,7 +150,7 @@ class TerminalPlayUI(PlayUI):
             msg_str = str(message)
             det_str = detail
 
-        text = f"🟨 [bold yellow]YELLOW CARD: {msg_str}[/bold yellow]"
+        text = f"[bold yellow]YELLOW CARD: {msg_str}[/bold yellow]"
         if det_str:
             text += f"\n[dim]{det_str}[/dim]"
         self._console.print(Panel(text, border_style="yellow", expand=False))

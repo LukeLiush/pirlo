@@ -188,14 +188,14 @@ class SendAlertPlay(Play[AlertOutput]):
         channel: Annotated[str, Parameter(help="Target alert channel")] = "#finance",
     ) -> AlertOutput:
         status_text = (
-            "Target Achieved 🎯" if self.summary.target_met else "Target Missed ⚠️"
+            "Target Achieved" if self.summary.target_met else "Target Missed"
         )
         self.ui.header(
             "Quarterly Report Alert",
             subtitle=f"Channel: {channel} | Status: {status_text}",
         )
         self.ui.commentary(
-            f"📢 [{channel}] Q3 Consolidated Revenue: ${self.summary.total_revenue:,.2f} "
+            f"[{channel}] Q3 Consolidated Revenue: ${self.summary.total_revenue:,.2f} "
             f"(Target: ${self.summary.target_revenue:,.2f}, Variance: {self.summary.variance:+,.2f}) "
             f"across {len(self.summary.summaries)} months."
         )

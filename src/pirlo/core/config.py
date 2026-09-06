@@ -21,3 +21,13 @@ DEFAULT_WORK_POOL: str = "pirlo-pool"
 
 SERVE_MANIFEST_FILENAME: str = "serve.json"
 ACTIVE_SESSION_FILENAME: str = "session.json"
+
+DEFAULT_LOG_LEVEL: str = "INFO"
+
+
+def get_log_level() -> int:
+    """Resolves Pirlo log level from PIRLO_LOG_LEVEL env var or defaults to INFO."""
+    import logging
+
+    level_str = os.environ.get("PIRLO_LOG_LEVEL", DEFAULT_LOG_LEVEL).upper()
+    return getattr(logging, level_str, logging.INFO)
