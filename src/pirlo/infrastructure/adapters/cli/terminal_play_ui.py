@@ -33,12 +33,15 @@ class TerminalPlayUI(PlayUI):
     def __init__(
         self,
         play_name: str | None = None,
+        run_id: str | None = None,
         console: Console | None = None,
     ) -> None:
         self._play_name: str | None = play_name
+        self._run_id: str | None = run_id
         self._console = console or Console()
-        if play_name:
-            idx = abs(hash(play_name)) % len(self.COLOR_PALETTE)
+        color_seed = play_name or run_id
+        if color_seed:
+            idx = abs(hash(color_seed)) % len(self.COLOR_PALETTE)
             self._color: str = self.COLOR_PALETTE[idx]
         else:
             self._color = "cyan"
@@ -51,6 +54,22 @@ class TerminalPlayUI(PlayUI):
     def play_name(self) -> str | None:
         return self._play_name
 
+    @property
+    def run_id(self) -> str | None:
+        return self._run_id
+
+    def _get_display_tag(self) -> str | None:
+        from pirlo.core.logging_context import get_current_run_id
+
+        run_id = self._run_id or get_current_run_id()
+        if run_id and self._play_name:
+            return f"{run_id}/{self._play_name}"
+        if self._play_name:
+            return self._play_name
+        if run_id:
+            return run_id
+        return None
+
     def _timestamp(self) -> str:
         from datetime import datetime
 
@@ -60,17 +79,19 @@ class TerminalPlayUI(PlayUI):
         from rich.markup import escape
 
         ts = f"[dim]{self._timestamp()}[/dim]"
-        if self._play_name:
-            badge = escape(f"[{self._play_name}]")
+        tag = self._get_display_tag()
+        if tag:
+            badge = escape(f"[{tag}]")
             return f"{ts} [bold {self._color}]{badge}[/bold {self._color}]"
         return ts
 
     def header(self, title: str, subtitle: str | None = None) -> None:
         from rich.markup import escape
 
+        tag = self._get_display_tag()
         panel_title = (
-            f"[bold {self._color}]{escape(f'[{self._play_name}]')}[/bold {self._color}]"
-            if self._play_name
+            f"[bold {self._color}]{escape(f'[{tag}]')}[/bold {self._color}]"
+            if tag
             else None
         )
         text = f"[bold green]{title}[/bold green]"
@@ -83,7 +104,8 @@ class TerminalPlayUI(PlayUI):
     def status(self, message: str) -> AbstractContextManager[Any]:
         from rich.markup import escape
 
-        badge = f"{escape(f'[{self._play_name}]')} " if self._play_name else ""
+        tag = self._get_display_tag()
+        badge = f"{escape(f'[{tag}]')} " if tag else ""
         return self._console.status(
             f"[bold {self._color}]{badge}{message}[/bold {self._color}]",
             spinner="dots",
@@ -120,9 +142,10 @@ class TerminalPlayUI(PlayUI):
     def goal(self, message: str, detail: str | None = None) -> None:
         from rich.markup import escape
 
+        tag = self._get_display_tag()
         panel_title = (
-            f"[bold {self._color}]{escape(f'[{self._play_name}]')}[/bold {self._color}]"
-            if self._play_name
+            f"[bold {self._color}]{escape(f'[{tag}]')}[/bold {self._color}]"
+            if tag
             else None
         )
         text = f"[bold green]GOAL! {message}[/bold green]"
@@ -138,12 +161,24 @@ class TerminalPlayUI(PlayUI):
         )
 
     def red_card(self, message: str, detail: str | None = None) -> None:
+        from rich.markup import escape
+
+        tag = self._get_display_tag()
+        panel_title = f"[bold red]{escape(f'[{tag}]')}[/bold red]" if tag else None
         text = f"[bold red]RED CARD! {message}[/bold red]"
         if detail:
             text += f"\n[dim]{detail}[/dim]"
-        self._console.print(Panel(text, border_style="red", expand=False))
+        self._console.print(
+            Panel(text, title=panel_title, border_style="red", expand=False)
+        )
 
     def yellow_card(self, message: Any, detail: str | None = None) -> None:
+        from rich.markup import escape
+
+        tag = self._get_display_tag()
+        panel_title = (
+            f"[bold yellow]{escape(f'[{tag}]')}[/bold yellow]" if tag else None
+        )
         if hasattr(message, "message"):
             msg_str = message.message
             det_str = getattr(message, "detail", detail)
@@ -154,7 +189,9 @@ class TerminalPlayUI(PlayUI):
         text = f"[bold yellow]YELLOW CARD: {msg_str}[/bold yellow]"
         if det_str:
             text += f"\n[dim]{det_str}[/dim]"
-        self._console.print(Panel(text, border_style="yellow", expand=False))
+        self._console.print(
+            Panel(text, title=panel_title, border_style="yellow", expand=False)
+        )
 
     def summary_card(
         self,

@@ -114,13 +114,19 @@ class PrefectCompiler(BlueprintCompiler[PrefectWorkflow]):
                         start_perf = time.perf_counter()
                         try:
                             instance: Any = target_cls(
-                                ui=TerminalPlayUI(play_name=identity.short_id),
+                                ui=TerminalPlayUI(
+                                    play_name=identity.short_id,
+                                    run_id=active_run_id,
+                                ),
                                 play_id=identity.full_id,
                             )
                         except TypeError:
                             try:
                                 instance = target_cls(
-                                    ui=TerminalPlayUI(play_name=identity.short_id)
+                                    ui=TerminalPlayUI(
+                                        play_name=identity.short_id,
+                                        run_id=active_run_id,
+                                    )
                                 )
                             except TypeError:
                                 instance = target_cls()

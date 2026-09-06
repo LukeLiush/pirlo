@@ -103,6 +103,40 @@ def test_terminal_play_ui_console():
     assert "Match update in progress" in output
 
 
+def test_terminal_play_ui_run_id_prefix():
+    console = Console(record=True)
+    ui = TerminalPlayUI(
+        play_name="demo_download_report#58f51a",
+        run_id="49a3e670",
+        console=console,
+    )
+    ui.commentary("Downloading report...")
+    ui.goal("Download finished", detail="/tmp/reports/monthly_2026_08.pdf")
+    ui.header("Step Header")
+    ui.red_card("Step Error")
+    ui.yellow_card("Step Warning")
+
+    output = console.export_text()
+    assert "[49a3e670/demo_download_report#58f51a]" in output
+    assert "GOAL! Download finished" in output
+    assert "/tmp/reports/monthly_2026_08.pdf" in output
+
+
+def test_terminal_play_ui_discovers_run_id_from_context():
+    from pirlo.core.logging_context import workflow_logging_context
+
+    console = Console(record=True)
+    with workflow_logging_context("49a3e670"):
+        ui = TerminalPlayUI(
+            play_name="demo_download_report#58f51a",
+            console=console,
+        )
+        ui.goal("Download finished")
+
+    output = console.export_text()
+    assert "[49a3e670/demo_download_report#58f51a]" in output
+
+
 def test_summary_card_local_mode(tmp_path):
     log_file = tmp_path / "run.log"
     param_file = tmp_path / "params.json"
