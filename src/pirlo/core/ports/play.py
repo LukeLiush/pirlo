@@ -116,6 +116,7 @@ class Play[OutputT](ABC):
     async def run_play(
         cls,
         runner: str = "prefect",
+        force: bool = False,
         **kwargs: ParameterValue,
     ) -> OutputT:
         """Executes the Play and all upstream dependencies via the specified runner."""
@@ -130,7 +131,7 @@ class Play[OutputT](ABC):
             cls, user_kwargs=kwargs
         )
         play_runner: PlayRunner = PlayRunnerFactory.get_runner(runner)
-        raw_result: PlayOutput | None = await play_runner.run(blueprint)
+        raw_result: PlayOutput | None = await play_runner.run(blueprint, force=force)
         return cast(OutputT, raw_result)
 
     def extract_blueprint(

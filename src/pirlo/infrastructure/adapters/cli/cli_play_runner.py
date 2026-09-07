@@ -111,6 +111,7 @@ class CliPlayRunner:
             setup_logging(incremental=False)
 
         show_logs: bool = any(arg in sys.argv for arg in ("-l", "--log"))
+        force: bool = any(arg in sys.argv for arg in ("-f", "--force", "--no-cache"))
         active_log_level = get_log_level()
 
         prepared_run.run_dir.mkdir(parents=True, exist_ok=True)
@@ -135,7 +136,9 @@ class CliPlayRunner:
                     user_kwargs=prepared_run.parameters,
                 )
                 try:
-                    raw_result: PlayOutput | None = await runner_instance.run(blueprint)
+                    raw_result: PlayOutput | None = await runner_instance.run(
+                        blueprint, force=force
+                    )
                     elapsed = time.perf_counter() - start_perf
                     dashboard_url = runner_instance.get_dashboard_url(
                         prepared_run.run_id

@@ -31,7 +31,7 @@ class DummyPlay(Play[DummyOutput]):
     ) -> DummyOutput:
         # 1. Header (Banner)
         self.ui.header(
-            "Dummy Session CLI",
+            f"Dummy Session CLI '{self.play_id}'",
             subtitle="Mock testing console integrations",
         )
 

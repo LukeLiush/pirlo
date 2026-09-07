@@ -58,6 +58,7 @@ class PrefectCompiler(BlueprintCompiler[PrefectWorkflow]):
         async def prefect_master_flow(
             **workflow_kwargs: object,
         ) -> PlayOutput | None:
+            force: bool = bool(workflow_kwargs.get("force", False))
             with workflow_logging_context(active_run_id):
                 logger.info("Workflow starting (run-id %s):", active_run_id)
 
@@ -100,6 +101,7 @@ class PrefectCompiler(BlueprintCompiler[PrefectWorkflow]):
 
                 @task(
                     name=f"Task: {play_name}",
+                    persist_result=True,
                 )
                 async def execute_play_task(
                     target_cls: type[Any] = play_cls,
@@ -107,7 +109,10 @@ class PrefectCompiler(BlueprintCompiler[PrefectWorkflow]):
                     **kwargs: object,
                 ) -> PlayOutput:
                     active_play_name = getattr(target_cls, "play_name", node_name)
-                    identity = compute_play_identity(active_play_name, kwargs)
+                    play_version = getattr(target_cls, "play_version", "1.0")
+                    identity = compute_play_identity(
+                        active_play_name, kwargs, version=play_version
+                    )
                     with play_logging_context(identity.short_id, run_id=active_run_id):
                         masked_inputs = mask_sensitive_data(dict(kwargs))
                         logger.info("Play START | inputs=%s", masked_inputs)
@@ -217,8 +222,22 @@ class PrefectCompiler(BlueprintCompiler[PrefectWorkflow]):
                         else:
                             unmapped_kwargs[k] = unmapped(v)
 
+                    play_version: str = getattr(play_cls, "play_version", "1.0")
+
+                    def _mapped_cache_key_fn(
+                        ctx: Any,
+                        params: dict[str, Any],
+                        p_name: str = play_name,
+                        p_ver: str = play_version,
+                    ) -> str:
+                        return compute_play_identity(
+                            p_name, params, version=p_ver
+                        ).full_id
+
                     configured_task = execute_play_task.with_options(
                         name=f"Task: {play_name}",
+                        cache_key_fn=None if force else _mapped_cache_key_fn,
+                        persist_result=True,
                     )
                     mapped_future: Any = configured_task.map(  # type: ignore[call-overload]
                         wait_for=parent_futures,
@@ -227,10 +246,24 @@ class PrefectCompiler(BlueprintCompiler[PrefectWorkflow]):
                     )
                     futures[blueprint_node.node_id] = mapped_future
                 else:
-                    identity = compute_play_identity(play_name, resolved_kwargs)
+                    play_version = getattr(play_cls, "play_version", "1.0")
+                    identity = compute_play_identity(
+                        play_name, resolved_kwargs, version=play_version
+                    )
+                    cache_key = identity.full_id
+
+                    def _task_cache_key_fn(
+                        ctx: Any,
+                        params: dict[str, Any],
+                        key: str = cache_key,
+                    ) -> str:
+                        return key
+
                     configured_task = execute_play_task.with_options(
                         name=f"Task: {play_name}",
                         task_run_name=identity.short_id,
+                        cache_key_fn=None if force else _task_cache_key_fn,
+                        persist_result=True,
                     )
                     prefect_future: PrefectFuture[PlayOutput] = configured_task.submit(  # type: ignore[call-overload]
                         wait_for=parent_futures, **resolved_kwargs

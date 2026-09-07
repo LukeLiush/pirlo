@@ -223,6 +223,15 @@ class ArgumentParserBuilder:
             action="store_true",
             help="Stream structured telemetry and logs directly to terminal stdout",
         )
+        parser.add_argument(
+            "-f",
+            "--force",
+            "--no-cache",
+            dest="force",
+            action="store_true",
+            default=False,
+            help="Bypass cached results and force complete re-execution",
+        )
         return parser
 
     @staticmethod

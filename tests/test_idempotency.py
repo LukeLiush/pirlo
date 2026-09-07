@@ -24,8 +24,19 @@ def test_play_identity_key_order_invariance():
     assert id1.digest == id2.digest
     assert id1.full_id == id2.full_id
     assert id1.short_id == id2.short_id
-    assert id1.full_id.startswith("my_play-")
-    assert id1.short_id == f"my_play#{id1.digest[:6]}"
+    assert id1.full_id.startswith("my_play-v1.0-")
+    assert id1.short_id == f"my_play#v1.0:{id1.digest[:6]}"
+
+
+def test_play_identity_version_sensitivity():
+    id1 = compute_play_identity("my_play", {"a": 1}, version="1.0")
+    id2 = compute_play_identity("my_play", {"a": 1}, version="1.1")
+
+    assert id1.digest != id2.digest
+    assert id1.full_id != id2.full_id
+    assert id1.short_id != id2.short_id
+    assert id1.full_id.startswith("my_play-v1.0-")
+    assert id2.full_id.startswith("my_play-v1.1-")
 
 
 def test_play_identity_with_pydantic_models():
@@ -59,5 +70,5 @@ class IdTestPlay(Play[IdTestOutput]):
 
 def test_play_id_attached_during_run():
     result: IdTestOutput = asyncio.run(IdTestPlay.run_play(param="test_123"))
-    assert result.captured_id.startswith("demo_id_play-")
+    assert result.captured_id.startswith("demo_id_play-v1.0-")
     assert len(result.captured_id) > 20
