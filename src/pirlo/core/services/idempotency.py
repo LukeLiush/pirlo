@@ -37,7 +37,7 @@ def compute_play_identity(
     version: str = "1.0",
 ) -> PlayIdentity:
     """Computes a deterministic, content-addressed PlayIdentity from inputs and version."""
-    jsonable = to_jsonable_python(kwargs)
+    jsonable = to_jsonable_python(kwargs, fallback=lambda _: None)
     canonical_json = json.dumps(
         jsonable,
         sort_keys=True,

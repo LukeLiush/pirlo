@@ -72,3 +72,27 @@ def test_play_id_attached_during_run():
     result: IdTestOutput = asyncio.run(IdTestPlay.run_play(param="test_123"))
     assert result.captured_id.startswith("demo_id_play-v1.0-")
     assert len(result.captured_id) > 20
+
+
+def test_play_identity_with_unserializable_objects():
+    # Classes (ABCMeta/type), callables (functions/lambdas), etc.
+    class UnserializableCustomClass:
+        pass
+
+    kwargs1 = {
+        "cls_type": UnserializableCustomClass,
+        "callback": lambda x: x,
+        "valid_key": "valid_value",
+    }
+    kwargs2 = {
+        "valid_key": "valid_value",
+        "cls_type": UnserializableCustomClass,
+        "callback": lambda x: x,
+    }
+
+    # Should not raise PydanticSerializationError
+    id1 = compute_play_identity("unserializable_play", kwargs1)
+    id2 = compute_play_identity("unserializable_play", kwargs2)
+
+    assert id1.digest == id2.digest
+    assert id1.full_id == id2.full_id

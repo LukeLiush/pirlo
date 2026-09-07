@@ -99,101 +99,117 @@ class PrefectCompiler(BlueprintCompiler[PrefectWorkflow]):
                     play_cls, "play_name", blueprint_node.playbook_name
                 )
 
-                @task(
-                    name=f"Task: {play_name}",
-                    persist_result=True,
-                )
-                async def execute_play_task(
-                    target_cls: type[Any] = play_cls,
-                    node_name: str = blueprint_node.playbook_name,
-                    **kwargs: object,
-                ) -> PlayOutput:
-                    active_play_name = getattr(target_cls, "play_name", node_name)
-                    play_version = getattr(target_cls, "play_version", "1.0")
-                    identity = compute_play_identity(
-                        active_play_name, kwargs, version=play_version
-                    )
-                    with play_logging_context(identity.short_id, run_id=active_run_id):
-                        masked_inputs = mask_sensitive_data(dict(kwargs))
-                        logger.info("Play START | inputs=%s", masked_inputs)
-                        start_perf = time.perf_counter()
-                        try:
-                            instance: Any = target_cls(
-                                ui=TerminalPlayUI(
-                                    play_name=identity.short_id,
-                                    run_id=active_run_id,
-                                ),
-                                play_id=identity.full_id,
-                            )
-                        except TypeError:
+                def _build_task_fn(
+                    target_cls: type[Any],
+                    node_name: str,
+                    task_play_name: str,
+                ) -> Any:
+                    async def _inner_task_fn(
+                        **kwargs: object,
+                    ) -> PlayOutput:
+                        active_play_name = getattr(target_cls, "play_name", node_name)
+                        play_version = getattr(target_cls, "play_version", "1.0")
+                        identity = compute_play_identity(
+                            active_play_name, kwargs, version=play_version
+                        )
+                        with play_logging_context(
+                            identity.short_id, run_id=active_run_id
+                        ):
+                            masked_inputs = mask_sensitive_data(dict(kwargs))
+                            logger.info("Play START | inputs=%s", masked_inputs)
+                            start_perf = time.perf_counter()
                             try:
-                                instance = target_cls(
+                                instance: Any = target_cls(
                                     ui=TerminalPlayUI(
                                         play_name=identity.short_id,
                                         run_id=active_run_id,
-                                    )
+                                    ),
+                                    play_id=identity.full_id,
                                 )
                             except TypeError:
-                                instance = target_cls()
+                                try:
+                                    instance = target_cls(
+                                        ui=TerminalPlayUI(
+                                            play_name=identity.short_id,
+                                            run_id=active_run_id,
+                                        )
+                                    )
+                                except TypeError:
+                                    instance = target_cls()
 
-                        exec_kwargs = dict(kwargs)
-                        import inspect
+                            exec_kwargs = dict(kwargs)
+                            import inspect
 
-                        sig = inspect.signature(instance.execute)
-                        has_var_keyword = any(
-                            p.kind == inspect.Parameter.VAR_KEYWORD
-                            for p in sig.parameters.values()
-                        )
-
-                        # Injects resolved upstream requirements into instance.__dict__
-                        if hasattr(target_cls, "get_upstream_requirements"):
-                            reqs = target_cls.get_upstream_requirements()
-                            for field_name in reqs:
-                                if field_name in kwargs:
-                                    setattr(instance, field_name, kwargs[field_name])
-                                    if field_name not in sig.parameters:
-                                        exec_kwargs.pop(field_name, None)
-
-                        # Filter exec_kwargs to only accepted parameters if no **kwargs
-                        if not has_var_keyword:
-                            exec_kwargs = {
-                                k: v
-                                for k, v in exec_kwargs.items()
-                                if k in sig.parameters
-                            }
-
-                        # Executes execute() for Play
-                        try:
-                            play_result: Any = await instance.execute(**exec_kwargs)
-                            elapsed = time.perf_counter() - start_perf
-                            output_data = (
-                                play_result.data
-                                if isinstance(play_result, RunResult)
-                                and play_result.data
-                                else cast(PlayOutput, play_result)
+                            sig = inspect.signature(instance.execute)
+                            has_var_keyword = any(
+                                p.kind == inspect.Parameter.VAR_KEYWORD
+                                for p in sig.parameters.values()
                             )
-                            output_repr = repr(output_data)
-                            if len(output_repr) > 200:
-                                output_repr = output_repr[:197] + "..."
 
-                            logger.info(
-                                "Play SUCCESS | duration=%.3fs | output=%s",
-                                elapsed,
-                                output_repr,
-                            )
-                            return output_data
-                        except Exception as exc:
-                            elapsed = time.perf_counter() - start_perf
-                            logger.exception(
-                                "Play FAILED | duration=%.3fs | error=%s",
-                                elapsed,
-                                type(exc).__name__,
-                            )
-                            raise
+                            # Injects resolved upstream requirements into instance.__dict__
+                            if hasattr(target_cls, "get_upstream_requirements"):
+                                reqs = target_cls.get_upstream_requirements()
+                                for field_name in reqs:
+                                    if field_name in kwargs:
+                                        setattr(
+                                            instance, field_name, kwargs[field_name]
+                                        )
+                                        if field_name not in sig.parameters:
+                                            exec_kwargs.pop(field_name, None)
+
+                            # Filter exec_kwargs to only accepted parameters if no **kwargs
+                            if not has_var_keyword:
+                                exec_kwargs = {
+                                    k: v
+                                    for k, v in exec_kwargs.items()
+                                    if k in sig.parameters
+                                }
+
+                            # Executes execute() for Play
+                            try:
+                                play_result: Any = await instance.execute(**exec_kwargs)
+                                elapsed = time.perf_counter() - start_perf
+                                output_data = (
+                                    play_result.data
+                                    if isinstance(play_result, RunResult)
+                                    and play_result.data
+                                    else cast(PlayOutput, play_result)
+                                )
+                                output_repr = repr(output_data)
+                                if len(output_repr) > 200:
+                                    output_repr = output_repr[:197] + "..."
+
+                                logger.info(
+                                    "Play SUCCESS | duration=%.3fs | output=%s",
+                                    elapsed,
+                                    output_repr,
+                                )
+                                return output_data
+                            except Exception as exc:
+                                elapsed = time.perf_counter() - start_perf
+                                logger.exception(
+                                    "Play FAILED | duration=%.3fs | error=%s",
+                                    elapsed,
+                                    type(exc).__name__,
+                                )
+                                raise
+
+                    _inner_task_fn.__name__ = f"execute_{task_play_name}"
+                    _inner_task_fn.__qualname__ = f"execute_{task_play_name}"
+                    return task(
+                        name=f"Task: {task_play_name}",
+                        persist_result=True,
+                    )(_inner_task_fn)
+
+                execute_play_task = _build_task_fn(
+                    play_cls, blueprint_node.playbook_name, play_name
+                )
 
                 parent_futures: list[PrefectFuture[PlayOutput]] = [
                     futures[parent_id] for parent_id in blueprint_node.depends_on
                 ]
+
+                from prefect.cache_policies import NO_CACHE
 
                 if blueprint_node.is_mapped:
                     mapped_kwargs: dict[str, object] = {}
@@ -236,6 +252,7 @@ class PrefectCompiler(BlueprintCompiler[PrefectWorkflow]):
 
                     configured_task = execute_play_task.with_options(
                         name=f"Task: {play_name}",
+                        cache_policy=NO_CACHE if force else None,
                         cache_key_fn=None if force else _mapped_cache_key_fn,
                         persist_result=True,
                     )
@@ -262,6 +279,7 @@ class PrefectCompiler(BlueprintCompiler[PrefectWorkflow]):
                     configured_task = execute_play_task.with_options(
                         name=f"Task: {play_name}",
                         task_run_name=identity.short_id,
+                        cache_policy=NO_CACHE if force else None,
                         cache_key_fn=None if force else _task_cache_key_fn,
                         persist_result=True,
                     )
