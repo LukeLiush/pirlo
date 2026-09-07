@@ -11,7 +11,9 @@ from typing import Any
 
 from rich import box
 from rich.console import Console
+from rich.json import JSON
 from rich.panel import Panel
+from rich.pretty import Pretty
 from rich.table import Table
 
 from pirlo.core.ports.play_ui import PlayUI
@@ -215,15 +217,16 @@ class TerminalPlayUI(PlayUI):
             f" [bold]Status:[/bold]     {status_line}",
         ]
 
-        # Result representation
-        res_repr = repr(result_data)
-        if len(res_repr) > 160:
-            res_repr = res_repr[:157] + "..."
-        lines.extend(
-            [
-                f" [bold]Result:[/bold]     {res_repr}",
-            ]
-        )
+        # Result / error representation
+        if status != "SUCCESS":
+            err_repr = repr(result_data)
+            if len(err_repr) > 160:
+                err_repr = err_repr[:157] + "..."
+            lines.extend(
+                [
+                    f" [bold]Error:[/bold]      {err_repr}",
+                ]
+            )
 
         # If a live server dashboard is active (pirlo connect or remote server)
         if dashboard_url:
@@ -272,3 +275,27 @@ class TerminalPlayUI(PlayUI):
                 box=box.ROUNDED,
             )
         )
+
+        # 2. Dump the complete, untruncated result payload below the card
+        if status == "SUCCESS" and result_data is not None:
+            if hasattr(result_data, "model_dump_json"):
+                payload_json = JSON(result_data.model_dump_json(indent=2))
+                payload_json.text.no_wrap = False
+                payload_renderable: Any = payload_json
+            elif isinstance(result_data, (dict, list)):
+                import json
+
+                payload_json = JSON(json.dumps(result_data, default=str, indent=2))
+                payload_json.text.no_wrap = False
+                payload_renderable = payload_json
+            else:
+                payload_renderable = Pretty(result_data)
+
+            self._console.print(
+                Panel(
+                    payload_renderable,
+                    title="[bold cyan]Output Payload[/bold cyan]",
+                    border_style="cyan",
+                    box=box.ROUNDED,
+                )
+            )

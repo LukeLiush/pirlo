@@ -205,3 +205,34 @@ def test_summary_card_deployed_suppresses_cli_hint(tmp_path, monkeypatch):
     output = console.export_text()
     assert "Execution Summary" in output
     assert "pirlo run show" not in output
+
+
+def test_summary_card_dumps_complete_output_payload():
+    from pirlo.core.models.blueprint import PlayOutput
+
+    class SampleOutput(PlayOutput):
+        long_prompt: str
+        count: int
+
+    console = Console(record=True)
+    ui = TerminalPlayUI(console=console)
+    very_long_prompt = "Perform 3 separate subtasks: " + (
+        "what is the capital of UK? " * 10
+    )
+    data = SampleOutput(long_prompt=very_long_prompt, count=42)
+
+    ui.summary_card(
+        run_id="8efd6618",
+        playbook_name="sample_play",
+        status="SUCCESS",
+        duration=1.23,
+        result_data=data,
+    )
+
+    output = console.export_text()
+    assert "Execution Summary" in output
+    assert "Output Payload" in output
+    # Ensure the full content is rendered without any '...' truncation
+    assert "what is the capital of UK?" in output
+    assert '"count": 42' in output
+    assert "..." not in output
