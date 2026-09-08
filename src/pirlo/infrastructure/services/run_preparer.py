@@ -29,34 +29,22 @@ class RunPreparer:
     def prepare(
         self,
         playbook_name: str,
-        playbook_invocation: PlayInvocation,
+        playbook_invocation: PlayInvocation | None = None,
         toml_config: dict[str, Any] | None = None,
     ) -> PreparedRun:
-        parameters: dict[str, Any] = self._resolve_parameters(
-            playbook_name, playbook_invocation, toml_config
+        parameters: list[dict[str, Any]] = discover_parameters(self._playbook_cls)
+        resolved_params: dict[str, Any] = self._parameter_resolver.resolve_all(
+            parameters
         )
-        run_name: str
-        run_id: str
-        run_name, run_id = self._establish_identity(playbook_name, parameters)
+        run_name, run_id = self._establish_identity(playbook_name, resolved_params)
 
         return PreparedRun(
             playbook_name=playbook_name,
             run_name=run_name,
             run_id=run_id,
             workspace=self._pirlo_workspace,
-            parameters=parameters,
+            parameters=resolved_params,
         )
-
-    # --- parameter resolution --------------------------------------------
-
-    def _resolve_parameters(
-        self,
-        playbook_name: str,
-        playbook_invocation: PlayInvocation,
-        toml_config: dict[str, Any] | None,
-    ) -> dict[str, Any]:
-        parameters: list[dict[str, Any]] = discover_parameters(self._playbook_cls)
-        return self._parameter_resolver.resolve_all(parameters)
 
     # --- identity ---------------------------------------------------------
 

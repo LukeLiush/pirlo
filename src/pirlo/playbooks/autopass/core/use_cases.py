@@ -6,7 +6,6 @@ from pirlo.core.models.execution_context import ExecutionContext
 from pirlo.core.services import WorkflowRunner
 from pirlo.playbooks.autopass.core.ports import (
     BrowserManager,
-    CdpChecker,
     ProgressListener,
 )
 
@@ -27,11 +26,9 @@ class RunAutopassUseCase:
         self,
         workflow_runner: WorkflowRunner,
         browser_manager: BrowserManager | None = None,
-        cdp_checker: CdpChecker | None = None,
     ):
         self.workflow_runner = workflow_runner
         self._browser_manager = browser_manager
-        self.cdp_checker = cdp_checker
 
     async def run(
         self,

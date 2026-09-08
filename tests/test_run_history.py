@@ -5,18 +5,12 @@ import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from pirlo.infrastructure.adapters.storage.json_file_parameter_storage import (
-    JsonFileParameterStorage,
-)
 from pirlo.infrastructure.services.run_id_generator import IdentityFactory
 
 
 class TestRunHistoryAndMVC(unittest.TestCase):
     def setUp(self) -> None:
         self.test_dir: Path = Path(tempfile.mkdtemp())
-        self.parameter_storage: JsonFileParameterStorage = JsonFileParameterStorage(
-            self.test_dir
-        )
 
     def tearDown(self) -> None:
         shutil.rmtree(self.test_dir)
@@ -37,18 +31,6 @@ class TestRunHistoryAndMVC(unittest.TestCase):
         self.assertNotEqual(run_id1, run_id2)
         self.assertEqual(len(run_id1), 8)
         self.assertEqual(len(run_id2), 8)
-
-    def test_json_file_parameter_storage(self) -> None:
-        params: dict[str, object] = {"url": "https://example.com", "headless": True}
-        loc: str = "login/logs/test_run_params.json"
-
-        self.parameter_storage.save_parameters(loc, params)
-
-        abs_path: Path = self.test_dir / loc
-        self.assertTrue(abs_path.exists())
-
-        loaded: dict[str, object] = self.parameter_storage.load_parameters(loc)
-        self.assertEqual(loaded, params)
 
     def test_playwright_adapter_step_callback(self) -> None:
         from pirlo.core.models.actions import (

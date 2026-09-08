@@ -1495,18 +1495,6 @@ wheels = [
 ]
 
 [[package]]
-name = "grandalf"
-version = "0.8"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "pyparsing" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/95/0e/4ac934b416857969f9135dec17ac80660634327e003a870835dd1f382659/grandalf-0.8.tar.gz", hash = "sha256:2813f7aab87f0d20f334a3162ccfbcbf085977134a17a5b516940a93a77ea974", size = 38128, upload-time = "2023-01-26T07:37:06.668Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/61/30/44c7eb0a952478dbb5f2f67df806686d6a7e4b19f6204e091c4f49dc7c69/grandalf-0.8-py3-none-any.whl", hash = "sha256:793ca254442f4a79252ea9ff1ab998e852c1e071b863593e5383afee906b4185", size = 41802, upload-time = "2023-01-10T15:16:19.753Z" },
-]
-
-[[package]]
 name = "graphviz"
 version = "0.21"
 source = { registry = "https://pypi.org/simple" }
@@ -2773,15 +2761,6 @@ wheels = [
 ]
 
 [[package]]
-name = "networkx"
-version = "3.6.1"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/6a/51/63fe664f3908c97be9d2e4f1158eb633317598cfa6e1fc14af5383f17512/networkx-3.6.1.tar.gz", hash = "sha256:26b7c357accc0c8cde558ad486283728b65b6a95d85ee1cd66bafab4c8168509", size = 2517025, upload-time = "2025-12-08T17:02:39.908Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/9e/c9/b2622292ea83fbb4ec318f5b9ab867d0a28ab43c5717bb85b0a5f6b3b0a4/networkx-3.6.1-py3-none-any.whl", hash = "sha256:d47fbf302e7d9cbbb9e2555a0d267983d2aa476bac30e90dfbe5669bd57f3762", size = 2068504, upload-time = "2025-12-08T17:02:38.159Z" },
-]
-
-[[package]]
 name = "nexus-rpc"
 version = "1.2.0"
 source = { registry = "https://pypi.org/simple" }
@@ -3192,15 +3171,12 @@ dependencies = [
     { name = "cloakbrowser" },
     { name = "duckduckgo-search" },
     { name = "ftfy" },
-    { name = "grandalf" },
     { name = "html2text" },
     { name = "httpx" },
     { name = "langchain-core" },
     { name = "langchain-openai" },
     { name = "litellm" },
-    { name = "networkx" },
     { name = "ollama" },
-    { name = "openai" },
     { name = "paramiko" },
     { name = "playwright" },
     { name = "prefect" },
@@ -3224,15 +3200,12 @@ requires-dist = [
     { name = "cloakbrowser", specifier = ">=0.5.5" },
     { name = "duckduckgo-search", specifier = ">=7.5.0" },
     { name = "ftfy", specifier = ">=6.3.1" },
-    { name = "grandalf", specifier = ">=0.8" },
     { name = "html2text", specifier = ">=2024.2.26" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "langchain-core", specifier = ">=1.5.1" },
     { name = "langchain-openai", specifier = ">=1.1.9" },
     { name = "litellm", specifier = ">=1.40.0" },
-    { name = "networkx", specifier = ">=3.6.1" },
     { name = "ollama", specifier = ">=0.4.0" },
-    { name = "openai", specifier = ">=2.16.0" },
     { name = "paramiko", specifier = ">=3.4.0" },
     { name = "playwright", specifier = ">=1.61.0" },
     { name = "prefect", specifier = ">=3.0.0" },

@@ -15,14 +15,6 @@ class BrowserManager(ABC):
         """Spawns an isolated page on enter, closes on exit."""
 
 
-class CdpChecker(ABC):
-    """Port for checking CDP endpoint availability."""
-
-    @abstractmethod
-    async def wait_until_ready(self, timeout: float = 30.0) -> None:
-        """Block until the CDP endpoint becomes responsive, or timeout expires."""
-
-
 class ProgressListener(ABC):
     """Port for presenting status updates and notifications to the user."""
 
