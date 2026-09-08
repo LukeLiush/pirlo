@@ -242,12 +242,18 @@ class TestPrefectRunRepository(unittest.IsolatedAsyncioTestCase):
             ]
 
             self.assertEqual(len(lines), 1)
-            self.assertIn("12:00:00 [INFO] Hello from prefect", lines[0])
+            self.assertIn(
+                "12:00:00 [INFO] [a1b2c3d4/step1#v1.0:998877] Hello from prefect",
+                lines[0],
+            )
 
             # Verify local log file was saved
             log_file: Path = run_obj.get_play_log_path(self.workspace, play_id)
             self.assertTrue(log_file.exists())
-            self.assertIn("Hello from prefect", log_file.read_text())
+            self.assertIn(
+                "12:00:00 [INFO] [a1b2c3d4/step1#v1.0:998877] Hello from prefect",
+                log_file.read_text(),
+            )
 
             # Verify cursor was saved
             cursor_file: Path = log_file.with_suffix(".cursor")

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import uuid
 from collections.abc import AsyncIterator
 from datetime import datetime
@@ -311,11 +312,45 @@ class PrefectRunRepository(RunRepository):
         last_saved_ts: datetime | None = None
         seen_ids_at_last_ts: set[str] = set()
 
+        prefix: str = (
+            f"[{run.run_id}/{target_play.play_id}]"
+            if target_play
+            else f"[{run.run_id}]"
+        )
+
+        def _format_log_entry(raw_msg: str, ts: datetime, lvl: int) -> list[str]:
+            lvl_name: str = logging.getLevelName(lvl)
+            lines: list[str] = raw_msg.splitlines() or [""]
+            res: list[str] = []
+            for line in lines:
+                clean_msg: str = line
+                clean_msg = re.sub(r"^\d{2}:\d{2}:\d{2}\s+", "", clean_msg)
+                clean_msg = re.sub(
+                    r"^\[[\w\-#.:/]+(?:\s+\(pid\s+\d+\))?\]\s+", "", clean_msg
+                )
+                res.append(
+                    f"{ts.strftime('%H:%M:%S')} [{lvl_name}] {prefix} {clean_msg}"
+                )
+            return res
+
         if local_log_file and local_log_file.exists():
             with open(local_log_file, "r", encoding="utf-8") as f:  # noqa: ASYNC230
                 cached_lines: list[str] = [line.rstrip() for line in f]
 
             for line in cached_lines[-tail_lines:]:
+                if prefix not in line:
+                    match_legacy: re.Match[str] | None = re.match(
+                        r"^(\d{2}:\d{2}:\d{2}\s+\[\w+\])\s*(.*)$", line
+                    )
+                    if match_legacy:
+                        header: str = match_legacy.group(1)
+                        msg_part: str = match_legacy.group(2)
+                        clean: str = re.sub(r"^\d{2}:\d{2}:\d{2}\s+", "", msg_part)
+                        clean = re.sub(
+                            r"^\[[\w\-#.:/]+(?:\s+\(pid\s+\d+\))?\]\s+", "", clean
+                        )
+                        yield f"{header} {prefix} {clean}"
+                        continue
                 yield line
 
             if (
@@ -387,10 +422,11 @@ class PrefectRunRepository(RunRepository):
 
                 log: Log
                 for log in logs:
-                    lvl_name: str = logging.getLevelName(log.level)
-                    line_formatted: str = f"{log.timestamp.strftime('%H:%M:%S')} [{lvl_name}] {log.message}"
-                    yield line_formatted
-                    _append_to_cache(line_formatted, log.timestamp)
+                    for line_formatted in _format_log_entry(
+                        log.message, log.timestamp, log.level
+                    ):
+                        yield line_formatted
+                        _append_to_cache(line_formatted, log.timestamp)
                     if last_saved_ts != log.timestamp:
                         last_saved_ts = log.timestamp
                         seen_ids_at_last_ts = {str(log.id)}
@@ -424,10 +460,11 @@ class PrefectRunRepository(RunRepository):
                     )
                     for log in more_logs:
                         if str(log.id) not in seen_ids_at_last_ts:
-                            lvl_name = logging.getLevelName(log.level)
-                            line_formatted = f"{log.timestamp.strftime('%H:%M:%S')} [{lvl_name}] {log.message}"
-                            yield line_formatted
-                            _append_to_cache(line_formatted, log.timestamp)
+                            for line_formatted in _format_log_entry(
+                                log.message, log.timestamp, log.level
+                            ):
+                                yield line_formatted
+                                _append_to_cache(line_formatted, log.timestamp)
                             if last_saved_ts != log.timestamp:
                                 last_saved_ts = log.timestamp
                                 seen_ids_at_last_ts = {str(log.id)}

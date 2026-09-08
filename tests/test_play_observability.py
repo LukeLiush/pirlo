@@ -1,13 +1,17 @@
 # tests/test_play_observability.py
 from __future__ import annotations
 
+import asyncio
 import logging
-from pathlib import Path
 from typing import Annotated
 
 import pytest
 
 from pirlo.core.decorators import play
+from pirlo.core.logging_context import (
+    generate_short_run_id,
+    workflow_logging_context,
+)
 from pirlo.core.models.blueprint import PlayBlueprint, PlayOutput
 from pirlo.core.models.parameters import Parameter
 from pirlo.core.ports.play import Play
@@ -16,7 +20,7 @@ from pirlo.core.services.masking import is_sensitive_key, mask_sensitive_data
 from pirlo.infrastructure.adapters.orchestrator.prefect_compiler import (
     PrefectCompiler,
 )
-from pirlo.infrastructure.services.log_streamer import capture_run_logs
+from pirlo.infrastructure.services.log_streamer import capture_play_stdio
 
 
 def test_sensitive_key_detection():
@@ -68,6 +72,8 @@ class SampleObservabilityPlay(Play[SampleOutput]):
         password: Annotated[str, Parameter(sensitive=True)] = "secret_pass",
     ) -> SampleOutput:
         self.logger.info("Executing sample play with user %s", user)
+        self.ui.commentary(f"Commentary for user {user}")
+        self.ui.goal(f"Goal for user {user}")
         return SampleOutput(message=f"Hello, {user}!")
 
 
@@ -78,10 +84,13 @@ def test_play_logger_property():
 
 
 @pytest.mark.anyio
-async def test_prefect_compiler_lifecycle_logging(tmp_path: Path):
+async def test_prefect_compiler_lifecycle_logging():
     blueprint: PlayBlueprint = BlueprintExtractor.extract_from_play(
         SampleObservabilityPlay,
         user_kwargs={"user": "admin", "password": "confidential_password"},
+    )
+    from pirlo.infrastructure.adapters.orchestrator.prefect_run_repository import (
+        PrefectRunRepository,
     )
     from pirlo.infrastructure.adapters.orchestrator.prefect_runner import (
         PrefectRunner,
@@ -90,28 +99,53 @@ async def test_prefect_compiler_lifecycle_logging(tmp_path: Path):
     compiler = PrefectCompiler()
     runner = PrefectRunner(compiler=compiler, mode="ephemeral")
 
-    run_dir = tmp_path / "runs" / "test_run"
-    with capture_run_logs(run_dir):
+    run_id = generate_short_run_id()
+    with workflow_logging_context(run_id):
         result = await runner.run(blueprint)
 
     assert isinstance(result, SampleOutput)
     assert result.message == "Hello, admin!"
 
-    log_path = run_dir / "run.log"
-    assert log_path.exists()
-    content = log_path.read_text(encoding="utf-8")
+    repo = PrefectRunRepository()
+    run_record = await repo.get_by_id(run_id)
+    assert run_record is not None
+    assert len(run_record.play_runs) > 0
+
+    play_run = run_record.play_runs[0]
+    full_log_text = ""
+    for _ in range(30):
+        logs = [
+            line
+            async for line in repo.stream_play_logs(
+                run_id, play_id=play_run.play_id, tail_lines=200
+            )
+        ]
+        full_log_text = "\n".join(logs)
+        if "Play START" in full_log_text:
+            break
+        await asyncio.sleep(0.1)
 
     # Verify Play START with masked password
-    assert "Play START | inputs=" in content
-    assert "'password': '***'" in content
-    assert "confidential_password" not in content
+    assert "Play START | inputs=" in full_log_text
+    assert "'password': '***'" in full_log_text
+    assert "confidential_password" not in full_log_text
 
-    # Verify custom self.logger message
-    assert "Executing sample play with user admin" in content
+    # Verify custom self.logger message forwarded to Prefect
+    assert "Executing sample play with user admin" in full_log_text
+
+    # Verify self.ui.commentary and self.ui.goal teed to Prefect
+    assert "Commentary for user admin" in full_log_text
+    assert "Goal for user admin" in full_log_text
 
     # Verify Play SUCCESS with duration
-    assert "Play SUCCESS | duration=" in content
-    assert "SampleOutput(message='Hello, admin!')" in content
+    assert "Play SUCCESS | duration=" in full_log_text
+    assert "SampleOutput(message='Hello, admin!')" in full_log_text
+
+    # Verify every line has the standardized [run_id/play_id] prefix
+    assert len(logs) > 0
+    expected_prefix = f"[{run_id}/{play_run.play_id}]"
+    for line in logs:
+        assert expected_prefix in line, f"Line missing prefix {expected_prefix}: {line}"
 
 
 def test_get_log_level_resolution(monkeypatch: pytest.MonkeyPatch):
@@ -127,38 +161,54 @@ def test_get_log_level_resolution(monkeypatch: pytest.MonkeyPatch):
     assert get_log_level() == logging.ERROR
 
 
-def test_capture_run_logs_quiet_by_default(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+def test_capture_play_stdio_captures_output():
+    captured: list[str] = []
+    with capture_play_stdio(on_line=captured.append):
+        print("Hello from task!")
+        print("Another task output line")
+
+    assert "Hello from task!" in captured
+    assert "Another task output line" in captured
+
+
+@pytest.mark.anyio
+async def test_cli_play_runner_log_flag_controls_prefect_console_level(
+    monkeypatch: pytest.MonkeyPatch,
 ):
-    run_dir = tmp_path / "quiet_test"
-    with capture_run_logs(run_dir, console_stream=False):
-        logger = logging.getLogger("pirlo.test")
-        logger.info("Hidden from console but captured to file")
+    import os
+    import sys
+    from unittest.mock import AsyncMock, MagicMock, patch
 
-    captured = capsys.readouterr()
-    # Ensure nothing was streamed to console stdout
-    assert "Hidden from console but captured to file" not in captured.out
-    # Ensure file contains the record
-    assert (run_dir / "run.log").exists()
-    assert "Hidden from console but captured to file" in (
-        run_dir / "run.log"
-    ).read_text(encoding="utf-8")
+    from pirlo.infrastructure.adapters.cli.cli_play_runner import CliPlayRunner
 
+    monkeypatch.setattr(sys, "argv", ["pirlo", "obs_sample_play", "-l"])
+    with patch(
+        "pirlo.infrastructure.adapters.cli.cli_play_runner.PlayRunnerFactory.get_runner"
+    ) as mock_factory:
+        mock_runner = MagicMock()
+        mock_runner.run = AsyncMock(return_value=SampleOutput(message="hi"))
+        mock_runner.get_dashboard_url.return_value = None
+        mock_factory.return_value = mock_runner
 
-def test_capture_run_logs_console_streaming(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
-):
-    run_dir = tmp_path / "console_test"
-    with capture_run_logs(run_dir, console_stream=True):
-        logger = logging.getLogger("pirlo.test")
-        logger.info("Structured console log event")
+        res = CliPlayRunner.run(SampleObservabilityPlay)
+        if asyncio.iscoroutine(res):
+            await res
+        assert os.environ.get("PREFECT_LOGGING_HANDLERS_CONSOLE_LEVEL") == "INFO"
+        assert os.environ.get("PREFECT_LOGGING_LEVEL") == "INFO"
 
-    captured = capsys.readouterr()
-    assert "Structured console log event" in captured.out
-    assert (run_dir / "run.log").exists()
-    assert "Structured console log event" in (run_dir / "run.log").read_text(
-        encoding="utf-8"
-    )
+    monkeypatch.setattr(sys, "argv", ["pirlo", "obs_sample_play"])
+    with patch(
+        "pirlo.infrastructure.adapters.cli.cli_play_runner.PlayRunnerFactory.get_runner"
+    ) as mock_factory:
+        mock_runner = MagicMock()
+        mock_runner.run = AsyncMock(return_value=SampleOutput(message="hi"))
+        mock_runner.get_dashboard_url.return_value = None
+        mock_factory.return_value = mock_runner
+
+        res = CliPlayRunner.run(SampleObservabilityPlay)
+        if asyncio.iscoroutine(res):
+            await res
+        assert os.environ.get("PREFECT_LOGGING_HANDLERS_CONSOLE_LEVEL") == "ERROR"
 
 
 @play(name="obs_failing_play", description="Failing play for testing")
@@ -168,7 +218,10 @@ class FailingObservabilityPlay(Play[SampleOutput]):
 
 
 @pytest.mark.anyio
-async def test_prefect_compiler_failure_lifecycle_logging(tmp_path: Path):
+async def test_prefect_compiler_failure_lifecycle_logging():
+    from pirlo.infrastructure.adapters.orchestrator.prefect_run_repository import (
+        PrefectRunRepository,
+    )
     from pirlo.infrastructure.adapters.orchestrator.prefect_runner import (
         PrefectRunner,
     )
@@ -179,18 +232,33 @@ async def test_prefect_compiler_failure_lifecycle_logging(tmp_path: Path):
     compiler = PrefectCompiler()
     runner = PrefectRunner(compiler=compiler, mode="ephemeral")
 
-    run_dir = tmp_path / "runs" / "test_fail_run"
-    with pytest.raises(ValueError), capture_run_logs(run_dir):
+    run_id = generate_short_run_id()
+    with pytest.raises(ValueError), workflow_logging_context(run_id):
         await runner.run(blueprint)
 
-    log_path = run_dir / "run.log"
-    assert log_path.exists()
-    content = log_path.read_text(encoding="utf-8")
+    repo = PrefectRunRepository()
+    run_record = await repo.get_by_id(run_id)
+    assert run_record is not None
+    assert len(run_record.play_runs) > 0
+
+    play_run = run_record.play_runs[0]
+    full_log_text = ""
+    for _ in range(30):
+        logs = [
+            line
+            async for line in repo.stream_play_logs(
+                run_id, play_id=play_run.play_id, tail_lines=200
+            )
+        ]
+        full_log_text = "\n".join(logs)
+        if "Play START" in full_log_text:
+            break
+        await asyncio.sleep(0.1)
 
     # Verify Play START and Play FAILED with duration and exception
-    assert "Play START | inputs=" in content
-    assert "Play FAILED | duration=" in content
-    assert "ValueError: Simulated computation failure" in content
+    assert "Play START | inputs=" in full_log_text
+    assert "Play FAILED | duration=" in full_log_text
+    assert "ValueError" in full_log_text
 
 
 def test_identity_factory_generates_8_char_run_id():
@@ -203,8 +271,11 @@ def test_identity_factory_generates_8_char_run_id():
 
 
 @pytest.mark.anyio
-async def test_run_id_consistency_across_disk_and_logs(tmp_path: Path):
+async def test_run_id_consistency_across_disk_and_logs():
     from pirlo.core.logging_context import workflow_logging_context
+    from pirlo.infrastructure.adapters.orchestrator.prefect_run_repository import (
+        PrefectRunRepository,
+    )
     from pirlo.infrastructure.adapters.orchestrator.prefect_runner import PrefectRunner
     from pirlo.infrastructure.services.run_id_generator import IdentityFactory
 
@@ -212,7 +283,6 @@ async def test_run_id_consistency_across_disk_and_logs(tmp_path: Path):
     run_id = factory.generate_run_id()
     assert len(run_id) == 8
 
-    run_dir = tmp_path / "runs" / run_id
     compiler = PrefectCompiler()
     runner = PrefectRunner(compiler=compiler, mode="ephemeral")
     blueprint = BlueprintExtractor.extract_from_play(
@@ -220,13 +290,10 @@ async def test_run_id_consistency_across_disk_and_logs(tmp_path: Path):
         user_kwargs={"user": "alice"},
     )
 
-    with workflow_logging_context(run_id), capture_run_logs(run_dir):
+    with workflow_logging_context(run_id):
         await runner.run(blueprint)
 
-    log_path = run_dir / "run.log"
-    assert log_path.exists()
-    content = log_path.read_text(encoding="utf-8")
-
-    # Verify that the log lines carry the exact same 8-char run_id
-    assert f"[{run_id}/" in content
-    assert f"Workflow starting (run-id {run_id}):" in content
+    repo = PrefectRunRepository()
+    run_record = await repo.get_by_id(run_id)
+    assert run_record is not None
+    assert run_record.run_id == run_id

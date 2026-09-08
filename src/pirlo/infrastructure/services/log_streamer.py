@@ -1,11 +1,12 @@
+from __future__ import annotations
+
+import contextlib
 import logging
 import re
 import sys
 import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from datetime import UTC, datetime
-from pathlib import Path
 from typing import Any
 
 import ftfy
@@ -50,65 +51,155 @@ class PirloLogFormatter(logging.Formatter):
 AnsiStrippingFormatter = PirloLogFormatter
 
 
+import contextvars
+
+_current_stdio_handler: contextvars.ContextVar[Callable[[str], None] | None] = (
+    contextvars.ContextVar("_current_stdio_handler", default=None)
+)
+_current_stdio_passthrough: contextvars.ContextVar[bool] = contextvars.ContextVar(
+    "_current_stdio_passthrough", default=True
+)
+_current_stdio_buffer: contextvars.ContextVar[str] = contextvars.ContextVar(
+    "_current_stdio_buffer", default=""
+)
+_current_stdio_in_callback: contextvars.ContextVar[bool] = contextvars.ContextVar(
+    "_current_stdio_in_callback", default=False
+)
+_current_stdio_last_status: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "_current_stdio_last_status", default=None
+)
+
+_active_capture_count: int = 0
+_original_global_stdout: Any = None
+
+
+class PirloConsoleFormatter(logging.Formatter):
+    """Formats console log records with consistent [run_id/play_id] prefix matching pirlo run log."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        from pirlo.core.logging_context import get_current_run_id
+
+        asctime: str = self.formatTime(record, "%H:%M:%S")
+        levelname: str = record.levelname
+        flow_run_name: str | None = (
+            getattr(record, "flow_run_name", None) or get_current_run_id()
+        )
+        task_run_name: str | None = getattr(record, "task_run_name", None)
+
+        if flow_run_name and task_run_name:
+            prefix: str = f"[{flow_run_name}/{task_run_name}]"
+        elif flow_run_name:
+            prefix = f"[{flow_run_name}]"
+        elif task_run_name:
+            prefix = f"[{task_run_name}]"
+        else:
+            prefix = ""
+
+        msg: str = record.getMessage()
+        clean_msg: str = msg
+        clean_msg = re.sub(r"^\d{2}:\d{2}:\d{2}\s+", "", clean_msg)
+        clean_msg = re.sub(r"^\[[\w\-#.:/]+(?:\s+\(pid\s+\d+\))?\]\s+", "", clean_msg)
+
+        if prefix:
+            return f"{asctime} [{levelname}] {prefix} {clean_msg}"
+        return f"{asctime} [{levelname}] {clean_msg}"
+
+
 class StdioTee:
-    """Tees stdout/stderr output: sends raw ANSI to terminal, writes formatted text to log_file."""
+    """Tees stdout/stderr stream: forwards raw output to terminal while streaming clean lines to a callback."""
 
     def __init__(
         self,
         original_stream: Any,
-        log_file: Any,
-        get_prefix_fn: Callable[[], str] | None = None,
+        on_line: Callable[[str], None] | None = None,
     ) -> None:
         self.original_stream: Any = original_stream
-        self.log_file: Any = log_file
-        self.get_prefix_fn: Callable[[], str] | None = get_prefix_fn
+        self.on_line: Callable[[str], None] | None = on_line
         self._buffer: str = ""
-        self._at_line_start: bool = True
+        self._in_callback: bool = False
         self._last_logged_status: str | None = None
 
+    def _is_passthrough(self) -> bool:
+        if self.on_line is not None:
+            return True
+        return _current_stdio_passthrough.get()
+
+    def _get_buffer(self) -> str:
+        if self.on_line is not None:
+            return self._buffer
+        return _current_stdio_buffer.get()
+
+    def _set_buffer(self, val: str) -> None:
+        if self.on_line is not None:
+            self._buffer = val
+        else:
+            _current_stdio_buffer.set(val)
+
+    def _is_in_callback(self) -> bool:
+        if self.on_line is not None:
+            return self._in_callback
+        return _current_stdio_in_callback.get()
+
+    def _set_in_callback(self, val: bool) -> None:
+        if self.on_line is not None:
+            self._in_callback = val
+        else:
+            _current_stdio_in_callback.set(val)
+
+    def _get_last_status(self) -> str | None:
+        if self.on_line is not None:
+            return self._last_logged_status
+        return _current_stdio_last_status.get()
+
+    def _set_last_status(self, val: str | None) -> None:
+        if self.on_line is not None:
+            self._last_logged_status = val
+        else:
+            _current_stdio_last_status.set(val)
+
     def _process_line(self, raw_data: str) -> None:
-        plain_text = Text.from_ansi(raw_data).plain.replace("\r", "")
-        clean_data = ftfy.fix_text(plain_text)
-        lines = clean_data.splitlines()
+        cb: Callable[[str], None] | None = self.on_line or _current_stdio_handler.get()
+        if cb is None:
+            return
+
+        plain_text: str = Text.from_ansi(raw_data).plain.replace("\r", "")
+        clean_data: str = ftfy.fix_text(plain_text)
+        lines: list[str] = clean_data.splitlines()
 
         for raw_line in lines:
-            line_content = re.sub(r"^[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]\s*", "", raw_line).strip()
-            if not line_content:
+            line_content: str = re.sub(r"^[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]\s*", "", raw_line).strip()
+            if not line_content or line_content == self._get_last_status():
                 continue
+            self._set_last_status(line_content)
 
-            if line_content == self._last_logged_status:
-                continue
-            self._last_logged_status = line_content
-
-            prefix = ""
-            if self.get_prefix_fn:
-                try:
-                    prefix = self.get_prefix_fn() or ""
-                except Exception:  # noqa: BLE001
-                    prefix = ""
-            if not prefix:
-                prefix, _ = resolve_log_prefix()
-
-            now = datetime.now(UTC).astimezone()
-            now_str = (
-                now.strftime("%Y-%m-%d %H:%M:%S") + f".{now.microsecond // 1000:03d}"
+            clean_msg: str = line_content
+            clean_msg = re.sub(r"^\d{2}:\d{2}:\d{2}\s+", "", clean_msg)
+            clean_msg = re.sub(
+                r"^\[[\w\-#.:/]+(?:\s+\(pid\s+\d+\))?\]\s+", "", clean_msg
             )
-            formatted_prefix = f"{prefix} " if prefix else ""
-            if self.log_file:
-                self.log_file.write(f"{now_str} {formatted_prefix}{line_content}\n")
-                self.log_file.flush()
+
+            if not self._is_in_callback():
+                self._set_in_callback(True)
+                try:
+                    with contextlib.suppress(Exception):
+                        cb(clean_msg)
+                finally:
+                    self._set_in_callback(False)
 
     def write(self, data: str) -> int:
-        written = self.original_stream.write(data)
-        if not data:
-            return written if isinstance(written, int) else 0
-
-        self._buffer += data
-        if "\n" not in self._buffer:
+        written: Any = 0
+        if self._is_passthrough():
+            written = self.original_stream.write(data)
+        if not data or self._is_in_callback():
             return written if isinstance(written, int) else len(data)
 
-        lines = self._buffer.split("\n")
-        self._buffer = lines.pop()
+        buf: str = self._get_buffer() + data
+        if "\n" not in buf:
+            self._set_buffer(buf)
+            return written if isinstance(written, int) else len(data)
+
+        lines: list[str] = buf.split("\n")
+        self._set_buffer(lines.pop())
 
         for line in lines:
             self._process_line(line)
@@ -116,11 +207,10 @@ class StdioTee:
 
     def flush(self) -> None:
         self.original_stream.flush()
-        if self._buffer:
-            self._process_line(self._buffer)
-            self._buffer = ""
-        if self.log_file:
-            self.log_file.flush()
+        buf: str = self._get_buffer()
+        if buf:
+            self._process_line(buf)
+            self._set_buffer("")
 
     def isatty(self) -> bool:
         return getattr(self.original_stream, "isatty", lambda: False)()
@@ -130,73 +220,32 @@ class StdioTee:
 
 
 @contextmanager
-def capture_run_logs(
-    run_dir: Path,
-    get_prefix_fn: Callable[[], str] | None = None,
-    console_stream: bool = False,
-    console_level: int = logging.INFO,
-    file_level: int = logging.INFO,
-    log_level: int | None = None,
-) -> Iterator[Path]:
-    """Context manager capturing all stdout/stderr and logging module calls into run_dir/run.log.
+def capture_play_stdio(
+    on_line: Callable[[str], None],
+    passthrough: bool = True,
+) -> Iterator[None]:
+    """Context manager that tees sys.stdout to an on_line callback.
 
-    - file_handler always captures at file_level into run.log.
-    - console_handler is attached only if console_stream is True (-l / --log passed).
+    Interactive terminal output is preserved untouched while clean lines
+    (ANSI and progress spinners removed) are forwarded to on_line.
+    Uses ContextVar so concurrent asyncio tasks never leak output across tasks.
     """
-    effective_file_level = log_level if log_level is not None else file_level
-    effective_console_level = log_level if log_level is not None else console_level
-
-    run_dir.mkdir(parents=True, exist_ok=True)
-    log_path = run_dir / "run.log"
-
-    root_logger = logging.getLogger()
-    orig_level = root_logger.level
-    min_required_level = min(
-        effective_file_level,
-        effective_console_level if console_stream else effective_file_level,
+    global _active_capture_count, _original_global_stdout
+    token_handler: contextvars.Token[Callable[[str], None] | None] = (
+        _current_stdio_handler.set(on_line)
     )
-    if orig_level > min_required_level or orig_level == logging.NOTSET:
-        root_logger.setLevel(min_required_level)
-
-    formatter = PirloLogFormatter(
-        "%(asctime)s %(prefix)s %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
-    )
-
-    with open(log_path, "a", encoding="utf-8") as log_file:
-        old_stdout = sys.stdout
-        old_stderr = sys.stderr
-
-        # 1. Tee raw print() / self.ui calls to terminal + run.log
-        tee_stdout = StdioTee(old_stdout, log_file, get_prefix_fn=get_prefix_fn)
-        tee_stderr = StdioTee(old_stderr, log_file, get_prefix_fn=get_prefix_fn)
-
-        sys.stdout = tee_stdout
-        sys.stderr = tee_stderr
-
-        # 2. File handler always writes all logs to run.log
-        file_handler = logging.FileHandler(log_path, encoding="utf-8")
-        file_handler.setLevel(effective_file_level)
-        file_handler.setFormatter(formatter)
-        file_handler.addFilter(PirloLogFilter())
-        root_logger.addHandler(file_handler)
-
-        # 3. Console handler attached ONLY when -l / --log is requested
-        console_handler: logging.StreamHandler[Any] | None = None
-        if console_stream:
-            console_handler = logging.StreamHandler(old_stdout)
-            console_handler.setLevel(effective_console_level)
-            console_handler.setFormatter(formatter)
-            console_handler.addFilter(PirloLogFilter())
-            root_logger.addHandler(console_handler)
-
-        try:
-            yield log_path
-        finally:
-            root_logger.removeHandler(file_handler)
-            file_handler.close()
-            if console_handler is not None:
-                root_logger.removeHandler(console_handler)
-                console_handler.close()
-            root_logger.setLevel(orig_level)
-            sys.stdout = old_stdout
-            sys.stderr = old_stderr
+    token_pt: contextvars.Token[bool] = _current_stdio_passthrough.set(passthrough)
+    if _active_capture_count == 0:
+        _original_global_stdout = sys.stdout
+        sys.stdout = StdioTee(_original_global_stdout)
+    _active_capture_count += 1
+    try:
+        yield
+    finally:
+        sys.stdout.flush()
+        _current_stdio_handler.reset(token_handler)
+        _current_stdio_passthrough.reset(token_pt)
+        _active_capture_count -= 1
+        if _active_capture_count == 0 and _original_global_stdout is not None:
+            sys.stdout = _original_global_stdout
+            _original_global_stdout = None

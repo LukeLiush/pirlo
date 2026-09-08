@@ -1,8 +1,6 @@
 import asyncio
 import logging
 import os
-import tempfile
-from pathlib import Path
 
 import pytest
 
@@ -17,7 +15,8 @@ from pirlo.core.logging_context import (
 from pirlo.infrastructure.services.log_streamer import (
     PirloLogFilter,
     PirloLogFormatter,
-    capture_run_logs,
+    StdioTee,
+    capture_play_stdio,
 )
 
 
@@ -109,49 +108,35 @@ def test_pirlo_log_formatter_and_filter():
         assert "\x1b[32m" not in output  # ANSI codes must be stripped
 
 
-def test_capture_run_logs_integration():
-    with tempfile.TemporaryDirectory() as tmpdir:
-        run_dir = Path(tmpdir)
-        with workflow_logging_context("3a4f8c9b"), capture_run_logs(run_dir):
-            logger = logging.getLogger("pirlo.test")
-            logger.info("Workflow starting (run-id 3a4f8c9b):")
+def test_stdio_tee_and_capture_play_stdio():
+    import io
 
-            with play_logging_context("autopass_decompose#1234"):
-                logger.info("Task is starting.")
-                logger.info("Decomposed into 3 subtasks")
-                logger.info("Task finished successfully.")
+    fake_stream = io.StringIO()
+    tee_lines: list[str] = []
+    tee = StdioTee(fake_stream, on_line=tee_lines.append)
+    tee.write("Hello from StdioTee\n")
+    tee.flush()
+    assert fake_stream.getvalue() == "Hello from StdioTee\n"
+    assert tee_lines == ["Hello from StdioTee"]
 
-            with play_logging_context("autopass_execute_subtask#1235"):
-                logger.info("Task is starting.")
-                logger.info("Querying gemini")
-                print("Raw stdout print from worker")
+    received_lines: list[str] = []
 
-            logger.info("Done!")
+    def on_line(line: str) -> None:
+        received_lines.append(line)
+        # Test re-entrancy / recursion guard: printing inside on_line shouldn't recurse
+        print("recursive print inside on_line")
 
-        log_file = run_dir / "run.log"
-        assert log_file.exists()
-        log_content = log_file.read_text(encoding="utf-8")
-        lines = log_content.strip().splitlines()
+    with capture_play_stdio(on_line=on_line):
+        print("\x1b[32m[bold green]Goal achieved![/bold green]\x1b[0m")
+        print("⠋ Loading something in background...")
+        print("Standard line 1\nStandard line 2")
 
-        pid = os.getpid()
-        assert any("Workflow starting (run-id 3a4f8c9b):" in line for line in lines)
-        assert any(
-            f"[3a4f8c9b/autopass_decompose#1234 (pid {pid})] Task is starting." in line
-            for line in lines
-        )
-        assert any(
-            f"[3a4f8c9b/autopass_decompose#1234 (pid {pid})] Decomposed into 3 subtasks"
-            in line
-            for line in lines
-        )
-        assert any(
-            f"[3a4f8c9b/autopass_execute_subtask#1235 (pid {pid})] Querying gemini"
-            in line
-            for line in lines
-        )
-        assert any(
-            f"[3a4f8c9b/autopass_execute_subtask#1235 (pid {pid})] Raw stdout print from worker"
-            in line
-            for line in lines
-        )
-        assert any(f"[3a4f8c9b (pid {pid})] Done!" in line for line in lines)
+    # ANSI codes stripped
+    assert any("Goal achieved!" in line for line in received_lines)
+    assert not any("\x1b[32m" in line for line in received_lines)
+    # Spinner stripped
+    assert any("Loading something in background..." in line for line in received_lines)
+    assert not any("⠋" in line for line in received_lines)
+    # Multiline split
+    assert "Standard line 1" in received_lines
+    assert "Standard line 2" in received_lines

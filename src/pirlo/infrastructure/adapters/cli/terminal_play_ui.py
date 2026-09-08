@@ -237,23 +237,29 @@ class TerminalPlayUI(PlayUI):
                 ]
             )
 
-        # Local files & CLI inspect (only when local files exist on this machine)
-        if log_file_path and parameter_file_path and log_file_path.exists():
+        # Local files & CLI inspect
+        if parameter_file_path and parameter_file_path.exists():
             try:
                 home = Path.home()
-                display_log = f"~/{log_file_path.relative_to(home)}"
                 display_params = f"~/{parameter_file_path.relative_to(home)}"
             except ValueError:
-                display_log = str(log_file_path)
                 display_params = str(parameter_file_path)
 
             lines.extend(
                 [
                     "",
-                    f" [bold]Log File:[/bold]   {display_log}",
                     f" [bold]Params:[/bold]     {display_params}",
                 ]
             )
+
+            if log_file_path and log_file_path.exists():
+                try:
+                    home = Path.home()
+                    display_log = f"~/{log_file_path.relative_to(home)}"
+                except ValueError:
+                    display_log = str(log_file_path)
+
+                lines.append(f" [bold]Log File:[/bold]   {display_log}")
 
             is_deployed = bool(
                 os.environ.get("PIRLO_DEPLOYED")

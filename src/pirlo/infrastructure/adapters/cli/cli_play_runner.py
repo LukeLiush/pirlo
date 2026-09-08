@@ -5,6 +5,7 @@ import argparse
 import asyncio
 import contextlib
 import json
+import logging
 import os
 import sys
 import time
@@ -28,7 +29,6 @@ from pirlo.infrastructure.adapters.cli.terminal_play_ui import TerminalPlayUI
 from pirlo.infrastructure.adapters.runner_factory import (
     PlayRunnerFactory,
 )
-from pirlo.infrastructure.services.log_streamer import capture_run_logs
 from pirlo.infrastructure.services.parameter_resolution import ParameterResolver
 from pirlo.infrastructure.services.run_preparer import RunPreparer
 
@@ -103,34 +103,45 @@ class CliPlayRunner:
         )
         runner_instance: PlayRunner = PlayRunnerFactory.get_runner(runner_name)
 
-        # Silence Prefect's default console logger so it never pollutes the terminal
-        os.environ["PREFECT_LOGGING_HANDLERS_CONSOLE_LEVEL"] = "ERROR"
+        show_logs: bool = any(arg in sys.argv for arg in ("-l", "--log"))
+        log_level_name: str = logging.getLevelName(get_log_level())
+        if show_logs:
+            os.environ["PREFECT_LOGGING_HANDLERS_CONSOLE_LEVEL"] = log_level_name
+            os.environ["PREFECT_LOGGING_LEVEL"] = log_level_name
+        else:
+            os.environ["PREFECT_LOGGING_HANDLERS_CONSOLE_LEVEL"] = "ERROR"
+
         with contextlib.suppress(Exception):
             from prefect.logging.configuration import setup_logging
 
             setup_logging(incremental=False)
 
-        show_logs: bool = any(arg in sys.argv for arg in ("-l", "--log"))
+        if show_logs:
+            with contextlib.suppress(Exception):
+                from prefect.logging.handlers import PrefectConsoleHandler
+
+                from pirlo.infrastructure.services.log_streamer import (
+                    PirloConsoleFormatter,
+                )
+
+                root_logger: logging.Logger = logging.getLogger()
+                for handler in root_logger.handlers:
+                    if isinstance(handler, PrefectConsoleHandler):
+                        handler.setFormatter(PirloConsoleFormatter())
+                        handler.stream = sys.stdout
+                        handler.console.file = sys.stdout
+
         force: bool = any(arg in sys.argv for arg in ("-f", "--force", "--no-cache"))
-        active_log_level = get_log_level()
 
         prepared_run.run_dir.mkdir(parents=True, exist_ok=True)
         masked_params = mask_sensitive_data(prepared_run.parameters)
         with open(prepared_run.parameter_file_path, "w", encoding="utf-8") as f:
             json.dump(masked_params, f, indent=2, default=str)
 
-        start_perf = time.perf_counter()
+        start_perf: float = time.perf_counter()
 
         async def _play() -> RunResult[Any]:
-            with (
-                workflow_logging_context(prepared_run.run_id),
-                capture_run_logs(
-                    prepared_run.run_dir,
-                    console_stream=show_logs,
-                    console_level=active_log_level,
-                    file_level=active_log_level,
-                ),
-            ):
+            with workflow_logging_context(prepared_run.run_id):
                 blueprint: PlayBlueprint = BlueprintExtractor.extract_from_play(
                     play_cls,
                     user_kwargs=prepared_run.parameters,
@@ -139,8 +150,8 @@ class CliPlayRunner:
                     raw_result: PlayOutput | None = await runner_instance.run(
                         blueprint, force=force, **prepared_run.parameters
                     )
-                    elapsed = time.perf_counter() - start_perf
-                    dashboard_url = runner_instance.get_dashboard_url(
+                    elapsed: float = time.perf_counter() - start_perf
+                    dashboard_url: str | None = runner_instance.get_dashboard_url(
                         prepared_run.run_id
                     )
 
@@ -160,7 +171,6 @@ class CliPlayRunner:
                         duration=elapsed,
                         result_data=final_run_result.data,
                         dashboard_url=dashboard_url,
-                        log_file_path=prepared_run.log_file_path,
                         parameter_file_path=prepared_run.parameter_file_path,
                     )
                     return final_run_result
@@ -176,7 +186,6 @@ class CliPlayRunner:
                         duration=elapsed,
                         result_data=f"{type(exc).__name__}: {exc}",
                         dashboard_url=dashboard_url,
-                        log_file_path=prepared_run.log_file_path,
                         parameter_file_path=prepared_run.parameter_file_path,
                     )
                     raise

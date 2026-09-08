@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import sys
 import time
 from typing import Any, cast
 
@@ -29,8 +30,22 @@ from pirlo.infrastructure.adapters.cli.terminal_play_ui import TerminalPlayUI
 from pirlo.infrastructure.adapters.orchestrator.prefect_model import (
     PrefectWorkflow,
 )
+from pirlo.infrastructure.services.log_streamer import capture_play_stdio
 
 logger = logging.getLogger(__name__)
+
+
+class _PrefectTaskLogForwardHandler(logging.Handler):
+    """Forwards standard logging.LogRecord objects to a Prefect task runner logger."""
+
+    def __init__(
+        self, target_logger: logging.Logger | logging.LoggerAdapter[Any]
+    ) -> None:
+        super().__init__()
+        self.target_logger: logging.Logger | logging.LoggerAdapter[Any] = target_logger
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.target_logger.log(record.levelno, record.getMessage())
 
 
 class PrefectCompiler(BlueprintCompiler[PrefectWorkflow]):
@@ -118,71 +133,104 @@ class PrefectCompiler(BlueprintCompiler[PrefectWorkflow]):
                         with play_logging_context(
                             identity.short_id, run_id=active_run_id
                         ):
-                            masked_inputs = mask_sensitive_data(dict(kwargs))
-                            logger.info("Play START | inputs=%s", masked_inputs)
-                            start_perf = time.perf_counter()
                             try:
-                                instance: Any = target_cls(
-                                    ui=TerminalPlayUI(
-                                        play_name=identity.short_id,
-                                        run_id=active_run_id,
-                                    ),
-                                    play_id=identity.full_id,
-                                )
-                            except TypeError:
+                                from prefect.logging import get_run_logger
+
+                                task_logger: (
+                                    logging.Logger | logging.LoggerAdapter[Any]
+                                ) = get_run_logger()
+                            except Exception:  # noqa: BLE001
+                                task_logger = logger
+
+                            # Forward custom self.logger calls directly into task_logger
+                            play_custom_logger: logging.Logger = logging.getLogger(
+                                f"pirlo.play.{active_play_name}"
+                            )
+                            orig_play_level: int = play_custom_logger.level
+                            play_custom_logger.setLevel(logging.DEBUG)
+                            forward_handler: logging.Handler = (
+                                _PrefectTaskLogForwardHandler(task_logger)
+                            )
+                            play_custom_logger.addHandler(forward_handler)
+
+                            masked_inputs: dict[str, Any] = mask_sensitive_data(
+                                dict(kwargs)
+                            )
+                            task_logger.info("Play START | inputs=%s", masked_inputs)
+                            start_perf: float = time.perf_counter()
+                            try:
                                 try:
-                                    instance = target_cls(
+                                    instance: Any = target_cls(
                                         ui=TerminalPlayUI(
                                             play_name=identity.short_id,
                                             run_id=active_run_id,
-                                        )
+                                        ),
+                                        play_id=identity.full_id,
                                     )
                                 except TypeError:
-                                    instance = target_cls()
-
-                            exec_kwargs = dict(kwargs)
-                            import inspect
-
-                            sig = inspect.signature(instance.execute)
-                            has_var_keyword = any(
-                                p.kind == inspect.Parameter.VAR_KEYWORD
-                                for p in sig.parameters.values()
-                            )
-
-                            # Injects resolved upstream requirements into instance.__dict__
-                            if hasattr(target_cls, "get_upstream_requirements"):
-                                reqs = target_cls.get_upstream_requirements()
-                                for field_name in reqs:
-                                    if field_name in kwargs:
-                                        setattr(
-                                            instance, field_name, kwargs[field_name]
+                                    try:
+                                        instance = target_cls(
+                                            ui=TerminalPlayUI(
+                                                play_name=identity.short_id,
+                                                run_id=active_run_id,
+                                            )
                                         )
-                                        if field_name not in sig.parameters:
-                                            exec_kwargs.pop(field_name, None)
+                                    except TypeError:
+                                        instance = target_cls()
 
-                            # Filter exec_kwargs to only accepted parameters if no **kwargs
-                            if not has_var_keyword:
-                                exec_kwargs = {
-                                    k: v
-                                    for k, v in exec_kwargs.items()
-                                    if k in sig.parameters
-                                }
+                                exec_kwargs: dict[str, object] = dict(kwargs)
+                                import inspect
 
-                            # Executes execute() for Play
-                            try:
-                                play_result: Any = await instance.execute(**exec_kwargs)
-                                elapsed = time.perf_counter() - start_perf
-                                output_data = (
+                                sig = inspect.signature(instance.execute)
+                                has_var_keyword: bool = any(
+                                    p.kind == inspect.Parameter.VAR_KEYWORD
+                                    for p in sig.parameters.values()
+                                )
+
+                                # Injects resolved upstream requirements into instance.__dict__
+                                if hasattr(target_cls, "get_upstream_requirements"):
+                                    reqs = target_cls.get_upstream_requirements()
+                                    for field_name in reqs:
+                                        if field_name in kwargs:
+                                            setattr(
+                                                instance,
+                                                field_name,
+                                                kwargs[field_name],
+                                            )
+                                            if field_name not in sig.parameters:
+                                                exec_kwargs.pop(field_name, None)
+
+                                # Filter exec_kwargs to only accepted parameters if no **kwargs
+                                if not has_var_keyword:
+                                    exec_kwargs = {
+                                        k: v
+                                        for k, v in exec_kwargs.items()
+                                        if k in sig.parameters
+                                    }
+
+                                # Executes execute() for Play with stdio captured to task_logger
+                                show_logs: bool = any(
+                                    arg in sys.argv for arg in ("-l", "--log")
+                                )
+                                with capture_play_stdio(
+                                    on_line=task_logger.info,
+                                    passthrough=not show_logs,
+                                ):
+                                    play_result: Any = await instance.execute(
+                                        **exec_kwargs
+                                    )
+                                elapsed: float = time.perf_counter() - start_perf
+                                output_data: PlayOutput = (
                                     play_result.data
                                     if isinstance(play_result, RunResult)
                                     and play_result.data
                                     else cast(PlayOutput, play_result)
                                 )
-                                output_repr = repr(output_data)
+                                output_repr: str = repr(output_data)
                                 if len(output_repr) > 200:
                                     output_repr = output_repr[:197] + "..."
 
-                                logger.info(
+                                task_logger.info(
                                     "Play SUCCESS | duration=%.3fs | output=%s",
                                     elapsed,
                                     output_repr,
@@ -190,12 +238,15 @@ class PrefectCompiler(BlueprintCompiler[PrefectWorkflow]):
                                 return output_data
                             except Exception as exc:
                                 elapsed = time.perf_counter() - start_perf
-                                logger.exception(
+                                task_logger.exception(
                                     "Play FAILED | duration=%.3fs | error=%s",
                                     elapsed,
                                     type(exc).__name__,
                                 )
                                 raise
+                            finally:
+                                play_custom_logger.removeHandler(forward_handler)
+                                play_custom_logger.setLevel(orig_play_level)
 
                     def _compute_task_run_name() -> str:
                         from prefect.context import TaskRunContext
