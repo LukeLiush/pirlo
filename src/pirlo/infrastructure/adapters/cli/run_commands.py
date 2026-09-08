@@ -1,260 +1,252 @@
+# src/pirlo/infrastructure/adapters/cli/run_commands.py
 import argparse
-import json
-import sqlite3
+import asyncio
+import inspect
 import sys
-from datetime import datetime
+from collections.abc import Coroutine
 from pathlib import Path
-
-from pirlo.core.models.run import RunStatus
-from pirlo.infrastructure.adapters.db.sqlite_run_history_repository import (
-    SqliteRunHistoryRepository,
-)
-
-
-def run_main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Manage execution run history.", prog="pirlo run"
-    )
-    subparsers = parser.add_subparsers(dest="subcommand")
-
-    # 1. list
-    list_parser = subparsers.add_parser(
-        "list", aliases=["ls"], help="List recent execution runs in descending order"
-    )
-    list_parser.add_argument(
-        "-n",
-        "--limit",
-        type=int,
-        default=10,
-        help="Max number of runs to display (default: 10)",
-    )
-    list_parser.add_argument(
-        "-s",
-        "--status",
-        type=str,
-        default=None,
-        help="Filter by status (e.g. completed, failed, started)",
-    )
-    list_parser.add_argument(
-        "-p",
-        "--playbook",
-        type=str,
-        default=None,
-        help="Filter by playbook name (e.g. autopass, login)",
-    )
-
-    # 2. show
-    show_parser = subparsers.add_parser(
-        "show", aliases=["inspect"], help="Show detailed inspection of a specific run"
-    )
-    show_parser.add_argument("run_id", help="Unique Run ID to inspect")
-
-    args = parser.parse_args(sys.argv[2:])
-
-    subcommand = args.subcommand
-    if not subcommand:
-        # Default to list subcommand if pirlo run is called with no args
-        run_list(limit=10, status=None, playbook=None)
-    elif subcommand in ("list", "ls"):
-        run_list(limit=args.limit, status=args.status, playbook=args.playbook)
-    elif subcommand in ("show", "inspect"):
-        run_show(args.run_id)
-
-
-def get_repository() -> tuple[SqliteRunHistoryRepository, Path]:
-    from pirlo.core.config import get_workspace_path
-
-    pirlo_workspace = get_workspace_path()
-    db_path = pirlo_workspace / "pirlo.db"
-    if not db_path.exists():
-        print(f"No execution database found at '{db_path}'. Run a playbook first.")
-        sys.exit(0)
-
-    conn = sqlite3.connect(str(db_path), check_same_thread=False)
-    repo = SqliteRunHistoryRepository(conn)
-    return repo, pirlo_workspace
-
-
-def format_duration(started_at: datetime | None, finished_at: datetime | None) -> str:
-    if not started_at:
-        return "N/A"
-    end = finished_at or datetime.now(started_at.tzinfo)
-    delta_sec = (end - started_at).total_seconds()
-    if delta_sec < 60:
-        return f"{delta_sec:.1f}s"
-    mins = int(delta_sec // 60)
-    secs = int(delta_sec % 60)
-    return f"{mins}m {secs}s"
-
+from typing import Any, cast
 
 from rich import box
 from rich.console import Console
+from rich.markup import escape
 from rich.table import Table
+
+from pirlo.core.config import get_workspace_path
+from pirlo.core.models.run import PlayRunDetail, Run, RunStatus
+from pirlo.infrastructure.adapters.orchestrator.prefect_run_repository import (
+    PrefectRunRepository,
+)
+
+
+def get_repository() -> tuple[Any, Path]:
+    """Returns the run repository and the active workspace path."""
+    pirlo_workspace: Path = get_workspace_path()
+    return PrefectRunRepository(), pirlo_workspace
 
 
 def format_status_markup(status: RunStatus) -> str:
-    val = status.value.lower()
-    text = status.value.upper()
+    val: str = status.value.lower()
+    text: str = status.value.upper()
     if val == "completed":
         return f"[bold green]{text}[/bold green]"
     elif val == "failed":
         return f"[bold red]{text}[/bold red]"
-    elif val == "started":
+    elif val in ("started", "running"):
         return f"[bold yellow]{text}[/bold yellow]"
     return f"[dim]{text}[/dim]"
 
 
-def run_list(
-    limit: int = 10, status: str | None = None, playbook: str | None = None
-) -> None:
-    repo, _ = get_repository()
-    runs = repo.list_runs(playbook=playbook, status=status, limit=limit)
+def run_main() -> None:
+    parser: argparse.ArgumentParser = argparse.ArgumentParser(
+        description="Manage execution run history.", prog="pirlo run"
+    )
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser] = (
+        parser.add_subparsers(dest="subcommand")
+    )
 
-    console = Console(width=None if sys.stdout.isatty() else 140)
+    # 1. list
+    list_parser: argparse.ArgumentParser = subparsers.add_parser(
+        "list", aliases=["ls"], help="List recent execution runs"
+    )
+    list_parser.add_argument(
+        "-n", "--limit", type=int, default=10, help="Max runs to display (default: 10)"
+    )
+    list_parser.add_argument(
+        "-s", "--status", type=str, default=None, help="Filter by status"
+    )
+    list_parser.add_argument(
+        "-p", "--playbook", type=str, default=None, help="Filter by playbook name"
+    )
+
+    # 2. show
+    show_parser: argparse.ArgumentParser = subparsers.add_parser(
+        "show", aliases=["inspect"], help="Inspect metadata and plays of a run"
+    )
+    show_parser.add_argument("run_id", help="8-character Run ID to inspect")
+
+    # 3. log
+    log_parser: argparse.ArgumentParser = subparsers.add_parser(
+        "log", aliases=["logs"], help="Stream execution logs for a play"
+    )
+    log_parser.add_argument("target", help="Run ID or <run_id>/<play_id>")
+    log_parser.add_argument(
+        "-n", "--tail", type=int, default=50, help="Lines to tail (default: 50)"
+    )
+    log_parser.add_argument(
+        "-f", "--follow", action="store_true", help="Follow live logs in real time"
+    )
+
+    args: argparse.Namespace = parser.parse_args(sys.argv[2:])
+    subcommand: str | None = args.subcommand
+
+    if not subcommand or subcommand in ("list", "ls"):
+        limit: int = getattr(args, "limit", 10)
+        status: str | None = getattr(args, "status", None)
+        playbook: str | None = getattr(args, "playbook", None)
+        run_list(limit=limit, status=status, playbook=playbook)
+    elif subcommand in ("show", "inspect"):
+        run_show(args.run_id)
+    elif subcommand in ("log", "logs"):
+        target: str = args.target
+        run_id: str
+        play_id: str | None
+        if "/" in target:
+            run_id, play_id = target.split("/", 1)
+        else:
+            run_id, play_id = target, None
+        run_log(run_id, play_id=play_id, tail_lines=args.tail, follow=args.follow)
+
+
+def run_list(
+    limit: int = 10,
+    status: str | None = None,
+    playbook: str | None = None,
+) -> None:
+    repo: Any
+    repo, _ = get_repository()
+    res: Any = repo.list_runs(playbook=playbook, status=status, limit=limit)
+    runs: list[Run] = (
+        asyncio.run(cast(Coroutine[Any, Any, list[Run]], res))
+        if inspect.isawaitable(res)
+        else res
+    )
+    console: Console = Console(width=None if sys.stdout.isatty() else 140)
 
     if not runs:
-        console.print("[yellow]No execution runs found matching criteria.[/yellow]")
+        console.print(
+            "[yellow]No execution runs found in Prefect orchestrator.[/yellow]"
+        )
         return
 
-    table = Table(
+    table: Table = Table(
         title="Recent Execution Runs (Newest First)",
         box=box.ROUNDED,
         header_style="bold cyan",
-        title_style="bold white",
     )
     table.add_column("Run ID", style="bold white", no_wrap=True)
     table.add_column("Playbook", style="cyan", no_wrap=True)
     table.add_column("Status", no_wrap=True)
     table.add_column("Started At", style="dim", no_wrap=True)
     table.add_column("Duration", style="magenta", no_wrap=True)
-    table.add_column("Task ID / Prompt", no_wrap=True)
+    table.add_column("Parameters", style="dim", no_wrap=True)
 
+    run: Run
     for run in runs:
-        started_str = (
+        started_str: str = (
             run.started_at.strftime("%Y-%m-%d %H:%M:%S") if run.started_at else "N/A"
         )
-        duration_str = format_duration(run.started_at, run.finished_at)
-        status_markup = format_status_markup(run.status)
-
-        run_name = run.run_name
-        if len(run_name) > 35:
-            run_name = run_name[:32] + "..."
+        duration_str: str = (
+            f"{run.duration:.1f}s" if run.duration is not None else "N/A"
+        )
+        domain_params: dict[str, Any] = {
+            k: v for k, v in run.parameters.items() if k not in ("force", "run_name")
+        }
+        param_summary: str = ", ".join(
+            f"{k}={v}" for k, v in list(domain_params.items())[:2]
+        )
+        if len(domain_params) > 2:
+            param_summary += "..."
 
         table.add_row(
             run.run_id,
             run.playbook,
-            status_markup,
+            format_status_markup(run.status),
             started_str,
             duration_str,
-            run_name,
+            param_summary or "---",
         )
 
     console.print(table)
 
 
 def run_show(run_id: str) -> None:
-    repo, pirlo_workspace = get_repository()
-    run = repo.get_by_id(run_id)
-
+    repo: Any
+    workspace: Path
+    repo, workspace = get_repository()
+    res: Any = repo.get_by_id(run_id)
+    run: Run | None = (
+        asyncio.run(cast(Coroutine[Any, Any, Run | None], res))
+        if inspect.isawaitable(res)
+        else res
+    )
     if not run:
-        print(f"Error: Run ID '{run_id}' not found in database.", file=sys.stderr)
+        print(f"Error: Run ID '{run_id}' not found in Prefect.", file=sys.stderr)
         sys.exit(1)
 
-    print("=" * 70)
-    print(f" Run Inspection: {run.run_id}")
-    print("=" * 70)
-    print(f"  • Playbook:         {run.playbook}")
-    print(f"  • RUN Name:          {run.run_name}")
-    print(f"  • Run Type:         {run.run_type.value}")
-    print(f"  • Status:           {run.status.value.upper()}")
-    print(f"  • Created At:       {run.created_at.strftime('%Y-%m-%d %H:%M:%S UTC')}")
+    run_dir: Path = run.get_run_dir(workspace)
+
+    console: Console = Console(width=None if sys.stdout.isatty() else 140)
+    console.print(f"[bold cyan]{'=' * 70}[/bold cyan]")
+    console.print(
+        f"[bold white] Run Inspection:[/bold white] [bold yellow]{run.run_id}[/bold yellow]"
+    )
+    console.print(f"[bold cyan]{'=' * 70}[/bold cyan]")
+    console.print(f"  • [bold]Playbook:[/bold]         {escape(run.playbook)}")
+    console.print(
+        f"  • [bold]Status:[/bold]           {format_status_markup(run.status)}"
+    )
     if run.started_at:
-        print(
-            f"  • Started At:       {run.started_at.strftime('%Y-%m-%d %H:%M:%S UTC')}"
+        console.print(
+            f"  • [bold]Started At:[/bold]       {run.started_at.strftime('%Y-%m-%d %H:%M:%S UTC')}"
         )
     if run.finished_at:
-        print(
-            f"  • Finished At:      {run.finished_at.strftime('%Y-%m-%d %H:%M:%S UTC')}"
+        console.print(
+            f"  • [bold]Finished At:[/bold]      {run.finished_at.strftime('%Y-%m-%d %H:%M:%S UTC')}"
         )
-    print(f"  • Duration:         {format_duration(run.started_at, run.finished_at)}")
+    dur: str = f"{run.duration:.1f}s" if run.duration is not None else "N/A"
+    console.print(f"  • [bold]Duration:[/bold]         {dur}")
+    if run.dashboard_url:
+        console.print(f"  • [bold]Prefect UI:[/bold]       {run.dashboard_url}")
+    console.print(f"  • [bold]Run Dir:[/bold]          file://{run_dir}")
 
-    # Parameter snapshot inspection
-    param_path = run.get_parameter_location(pirlo_workspace)
-    print(f"\nParameters Snapshot ({run.parameter_file_location}):")
-    if param_path.exists():
-        try:
-            with open(param_path, "r", encoding="utf-8") as f:
-                params = json.load(f)
-            for k, v in params.items():
-                print(f"  • {k:<18}: {v}")
-        except Exception as e:  # noqa: BLE001
-            print(f"  (Failed to parse params.json: {e})")
+    # 1. Parameters Snapshot
+    console.print("\n[bold green]Parameters Snapshot:[/bold green]")
+    domain_params: dict[str, Any] = {
+        k: v for k, v in run.parameters.items() if k not in ("force", "run_name")
+    }
+    if domain_params:
+        for k, v in domain_params.items():
+            console.print(f"  • [dim]{k:<18}[/dim]: {v}")
     else:
-        print("  (No parameter file snapshot found)")
+        console.print("  (None or empty)")
 
-    # Step execution history inspection
-    steps = repo.get_steps(run_id)
-    if steps:
-        print(f"\nStep Execution History ({len(steps)} steps):")
-        for s in steps:
-            st_symbol = "✓" if s["status"] == "completed" else "✗"
-            goal_str = f" - Goal: {s['goal']}" if s.get("goal") else ""
-            print(
-                f"  [{st_symbol}] Step #{s['step_number']}: {s['action_type']}{goal_str}"
-            )
+    # 2. Plays Breakdown (Minimal Format)
+    if run.play_runs:
+        console.print(
+            f"\n[bold blue]Plays in this Run ({len(run.play_runs)} plays):[/bold blue]"
+        )
+        i: int
+        p: PlayRunDetail
+        for i, p in enumerate(run.play_runs, start=1):
+            badge: str
+            if p.status == RunStatus.COMPLETED:
+                badge = "[bold green][✓][/bold green]"
+            elif p.status == RunStatus.FAILED:
+                badge = "[bold red][✗][/bold red]"
+            else:
+                badge = "[bold yellow][◌][/bold yellow]"
 
-    # Failure detail extraction
-    if run.status == RunStatus.FAILED:
-        print("\nError Details:")
-        failed_steps = [s for s in steps if s["status"] != "completed"]
-        if failed_steps:
-            last_failed = failed_steps[-1]
-            print(
-                f"  • Failed Step:      Step #{last_failed['step_number']} [{last_failed['action_type']}]"
-            )
-            if last_failed.get("goal"):
-                print(f"  • Failed Goal:      {last_failed['goal']}")
+            p_dur: str = f"({p.duration:.1f}s)" if p.duration is not None else ""
+            escaped_play_id: str = escape(p.play_id)
+            console.print(f"  {badge} {i}. {escaped_play_id:<36} {p_dur}")
 
-        log_path = run.get_log_location(pirlo_workspace)
-        if log_path.exists():
-            try:
-                with open(log_path, "r", encoding="utf-8") as f:
-                    log_text = f.read()
+    # 3. Error Details (if failed)
+    if run.status == RunStatus.FAILED and run.error_message:
+        console.print("\n[bold red]Error Details:[/bold red]")
+        console.print(f"  • {escape(run.error_message)}")
 
-                if "Traceback (most recent call last):" in log_text:
-                    tb_part = log_text.split("Traceback (most recent call last):")[
-                        -1
-                    ].strip()
-                    tb_formatted = "\n".join(
-                        f"    {line}" for line in tb_part.splitlines()[:25]
-                    )
-                    print(
-                        f"  • Exception Traceback:\n    Traceback (most recent call last):\n{tb_formatted}"
-                    )
-                else:
-                    log_lines = log_text.splitlines()
-                    error_lines = [
-                        line.strip()
-                        for line in log_lines
-                        if "ERROR" in line or "Exception" in line
-                    ]
-                    if error_lines:
-                        print("  • Log Error Summary:")
-                        for el in error_lines[-5:]:
-                            print(f"    {el}")
-            except Exception as e:  # noqa: BLE001
-                print(f"  (Failed to read log file: {e})")
-
-    # Artifact Discovery in run directory
-    playbook_runs_dir = pirlo_workspace / run.playbook / "runs"
-    run_dir = playbook_runs_dir / run.run_id
-
+    # 4. Artifacts Discovery in run directory
     artifacts: list[Path] = []
     if run_dir.exists():
-        artifacts.extend(run_dir.glob("*"))
+        artifacts.extend(
+            p
+            for p in run_dir.glob("*")
+            if p.is_file() and not p.name.endswith(".cursor")
+        )
 
-    # Fallback for historical runs prior to per-run workflow snapshotting
-    has_workflow_artifact = any(
+    playbook_runs_dir: Path = workspace / run.playbook / "runs"
+    has_workflow_artifact: bool = any(
         art.name.endswith(".json") and "workflow" in art.name for art in artifacts
     )
     if not has_workflow_artifact and playbook_runs_dir.exists():
@@ -262,7 +254,7 @@ def run_show(run_id: str) -> None:
         if run.run_name:
             candidate_names.add(run.run_name)
         if "-" in run.run_id:
-            parts = run.run_id.split("-")
+            parts: list[str] = run.run_id.split("-")
             if len(parts) >= 3 and "_" in parts[-1] and "_" in parts[-2]:
                 candidate_names.add("-".join(parts[:-2]))
             elif len(parts) >= 2 and "_" in parts[-1]:
@@ -272,18 +264,50 @@ def run_show(run_id: str) -> None:
             if any(name in json_file.name for name in candidate_names if name):
                 artifacts.append(json_file)
 
-    seen_paths = set()
-    unique_artifacts = []
+    seen_paths: set[Path] = set()
+    unique_artifacts: list[Path] = []
     for art in artifacts:
-        resolved = art.resolve()
+        resolved: Path = art.resolve()
         if resolved not in seen_paths:
             seen_paths.add(resolved)
             unique_artifacts.append(art)
 
-    print(f"\nArtifacts & Recorded Logs ({run_dir}):")
     if unique_artifacts:
+        console.print(f"\nArtifacts & Recorded Logs ({run_dir}):")
         for art in sorted(unique_artifacts, key=lambda p: p.name):
-            print(f"  • {art.name:<25}: file://{art.resolve()}")
+            console.print(f"  • {art.name:<25}: file://{art.resolve()}")
+
+    failed_play: PlayRunDetail | None = next(
+        (p for p in run.play_runs if p.status == RunStatus.FAILED), None
+    )
+    log_target: str
+    if failed_play:
+        log_target = f"{run.run_id}/{failed_play.play_id}"
+    elif run.play_runs:
+        log_target = f"{run.run_id}/{run.play_runs[0].play_id}"
     else:
-        print("  (No artifact files generated)")
-    print()
+        log_target = run.run_id
+
+    console.print(
+        f"\n[dim]💡 To stream logs for a play, run:[/dim] [bold cyan]pirlo run log {escape(log_target)}[/bold cyan]\n"
+    )
+
+
+def run_log(
+    run_id: str,
+    play_id: str | None = None,
+    tail_lines: int = 50,
+    follow: bool = False,
+) -> None:
+    repo: PrefectRunRepository = PrefectRunRepository()
+
+    async def _stream() -> None:
+        async for line in repo.stream_play_logs(
+            run_id, play_id=play_id, tail_lines=tail_lines, follow=follow
+        ):
+            print(line)
+
+    try:
+        asyncio.run(_stream())
+    except KeyboardInterrupt:
+        pass

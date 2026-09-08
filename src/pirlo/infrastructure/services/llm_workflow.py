@@ -14,7 +14,6 @@ from playwright.async_api import Page as PlaywrightPage
 from pirlo.core.models.browser_config import BrowserConfig
 from pirlo.core.models.execution_context import DEFAULT_CONTEXT, ExecutionContext
 from pirlo.core.models.workflow import Workflow, WorkflowMetadata
-from pirlo.core.repository.run_history_repository import RunHistoryRepository
 from pirlo.core.repository.workflow_repository import WorkflowRepository
 from pirlo.core.services.workflow_runner import WorkflowRunner
 from pirlo.infrastructure.adapters.browser.browser_agent_factory import (
@@ -33,19 +32,16 @@ class LlmWorkflowRunner(WorkflowRunner[PlaywrightPage]):
     agent_factory: BrowserAgentFactory
     repository: WorkflowRepository
     browser_config: BrowserConfig
-    run_history_repository: RunHistoryRepository | None
 
     def __init__(
         self,
         agent_factory: BrowserAgentFactory,
         repository: WorkflowRepository,
         browser_config: BrowserConfig,
-        run_history_repository: RunHistoryRepository | None = None,
     ) -> None:
         self.agent_factory = agent_factory
         self.repository = repository
         self.browser_config = browser_config
-        self.run_history_repository = run_history_repository
 
     def _build_metadata(
         self, agent: Agent, task_prompt: str, elapsed: float
@@ -114,23 +110,12 @@ class LlmWorkflowRunner(WorkflowRunner[PlaywrightPage]):
         )
         target_id: str = await self._target_id_for_page(page)
         await browser.start()
-        started_dt = datetime.now(UTC)
         try:
             evt = browser.event_bus.dispatch(SwitchTabEvent(target_id=target_id))
             await evt
             await evt.event_result(raise_if_any=True, raise_if_none=False)
 
             agent = self.agent_factory.create_agent(task_prompt, browser=browser)
-
-            if run_id and self.run_history_repository:
-                self.run_history_repository.save_step(
-                    run_id=run_id,
-                    step_number=1,
-                    action_type="llm_execution",
-                    status="running",
-                    goal=task_prompt,
-                    started_at=started_dt,
-                )
 
             logger.info("Agent run started...")
             start_time = time.time()
@@ -168,36 +153,7 @@ class LlmWorkflowRunner(WorkflowRunner[PlaywrightPage]):
                         e,
                     )
 
-            if run_id and self.run_history_repository:
-                for idx, action in enumerate(workflow.actions):
-                    step_num = (
-                        action.step_number
-                        if action.step_number is not None
-                        else (idx + 1)
-                    )
-                    self.run_history_repository.save_step(
-                        run_id=run_id,
-                        step_number=step_num,
-                        action_type=action.action_type,
-                        status=action.status.value
-                        if hasattr(action.status, "value")
-                        else str(action.status),
-                        goal=action.goal,
-                    )
-
             return history.final_result() or "Workflow finished."
-        except Exception:
-            if run_id and self.run_history_repository:
-                self.run_history_repository.save_step(
-                    run_id=run_id,
-                    step_number=1,
-                    action_type="llm_execution",
-                    status="failed",
-                    goal=task_prompt,
-                    started_at=started_dt,
-                    finished_at=datetime.now(UTC),
-                )
-            raise
         finally:
             await browser.stop()
 

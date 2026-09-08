@@ -1,48 +1,31 @@
 from abc import ABC, abstractmethod
-from datetime import datetime
-from typing import Any
+from collections.abc import AsyncIterator
 
 from pirlo.core.models.run import Run
 
 
-class RunHistoryRepository(ABC):
-    """Abstract port for persisting execution history."""
+class RunRepository(ABC):
+    """Abstract port for querying execution run history."""
 
     @abstractmethod
-    def save(self, run: Run) -> None:
-        """Saves a new run or updates an existing run."""
-
-    @abstractmethod
-    def get_by_id(self, run_id: str) -> Run | None:
-        """Retrieves a run by its unique run_id."""
-
-    @abstractmethod
-    def list_runs(
+    async def list_runs(
         self,
         playbook: str | None = None,
         status: str | None = None,
-        limit: int = 50,
-        offset: int = 0,
+        limit: int = 10,
     ) -> list[Run]:
-        """Lists runs with pagination, optionally filtered by playbook and status."""
+        """Lists recent runs in descending order."""
 
     @abstractmethod
-    def count_runs(self, playbook: str | None = None) -> int:
-        """Returns total runs count for pagination."""
+    async def get_by_id(self, run_id: str) -> Run | None:
+        """Retrieves a run and its executed plays by 8-character run_id."""
 
     @abstractmethod
-    def save_step(
+    def stream_play_logs(
         self,
         run_id: str,
-        step_number: int,
-        action_type: str,
-        status: str,
-        goal: str | None = None,
-        started_at: datetime | None = None,
-        finished_at: datetime | None = None,
-    ) -> None:
-        """Saves or updates a step execution record."""
-
-    @abstractmethod
-    def get_steps(self, run_id: str) -> list[dict[str, Any]]:
-        """Retrieves all step execution records for a run."""
+        play_id: str | None = None,
+        tail_lines: int = 50,
+        follow: bool = False,
+    ) -> AsyncIterator[str]:
+        """Streams logs for a specific play_id with local file bookkeeping and cursor resume."""

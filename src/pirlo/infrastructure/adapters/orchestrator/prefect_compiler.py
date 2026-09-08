@@ -5,7 +5,7 @@ import logging
 import time
 from typing import Any, cast
 
-from prefect import flow, task
+from prefect import flow, tags, task
 from prefect.futures import PrefectFuture
 
 from pirlo.core.logging_context import (
@@ -59,7 +59,10 @@ class PrefectCompiler(BlueprintCompiler[PrefectWorkflow]):
             **workflow_kwargs: object,
         ) -> PlayOutput | None:
             force: bool = bool(workflow_kwargs.get("force", False))
-            with workflow_logging_context(active_run_id):
+            with (
+                workflow_logging_context(active_run_id),
+                tags(f"pirlo_id:{active_run_id}"),
+            ):
                 logger.info("Workflow starting (run-id %s):", active_run_id)
 
             futures: dict[str, PrefectFuture[PlayOutput]] = {}
@@ -194,10 +197,25 @@ class PrefectCompiler(BlueprintCompiler[PrefectWorkflow]):
                                 )
                                 raise
 
+                    def _compute_task_run_name() -> str:
+                        from prefect.context import TaskRunContext
+
+                        ctx = TaskRunContext.get()
+                        params: dict[str, Any] = ctx.parameters if ctx else {}
+                        active_play_name: str = getattr(
+                            target_cls, "play_name", node_name
+                        )
+                        play_version: str = getattr(target_cls, "play_version", "1.0")
+                        identity = compute_play_identity(
+                            active_play_name, params, version=play_version
+                        )
+                        return identity.short_id
+
                     _inner_task_fn.__name__ = f"execute_{task_play_name}"
                     _inner_task_fn.__qualname__ = f"execute_{task_play_name}"
                     return task(
                         name=f"Task: {task_play_name}",
+                        task_run_name=_compute_task_run_name,
                         persist_result=True,
                     )(_inner_task_fn)
 

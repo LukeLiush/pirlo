@@ -9,7 +9,6 @@ from pirlo.core.models.actions import Action, DoneAction
 from pirlo.core.models.browser_config import BrowserConfig
 from pirlo.core.models.execution_context import DEFAULT_CONTEXT, ExecutionContext
 from pirlo.core.models.workflow import Workflow
-from pirlo.core.repository.run_history_repository import RunHistoryRepository
 from pirlo.core.repository.workflow_repository import WorkflowRepository
 from pirlo.core.services.workflow_runner import WorkflowRunner
 from pirlo.infrastructure.adapters.browser.playwright_adapter import PlaywrightAdapter
@@ -22,17 +21,14 @@ class PlaywrightReplayRunner(WorkflowRunner[PlaywrightPage]):
 
     repository: WorkflowRepository
     browser_config: BrowserConfig
-    run_history_repository: RunHistoryRepository | None
 
     def __init__(
         self,
         repository: WorkflowRepository,
         browser_config: BrowserConfig | None = None,
-        run_history_repository: RunHistoryRepository | None = None,
     ) -> None:
         self.repository = repository
         self.browser_config = browser_config or BrowserConfig()
-        self.run_history_repository = run_history_repository
 
     async def run(
         self,
@@ -65,16 +61,6 @@ class PlaywrightReplayRunner(WorkflowRunner[PlaywrightPage]):
                 )
 
         async def on_step_update(step_num: int, action: Action) -> None:
-            if run_id and self.run_history_repository:
-                self.run_history_repository.save_step(
-                    run_id=run_id,
-                    step_number=step_num,
-                    action_type=action.action_type,
-                    status=action.status.value,
-                    goal=action.goal,
-                    started_at=action.started_at,
-                    finished_at=action.finished_at,
-                )
             self.repository.save(workflow)
 
         if page is not None:

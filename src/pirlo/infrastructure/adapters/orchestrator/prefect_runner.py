@@ -49,6 +49,11 @@ class PrefectRunner(PlayRunner):
         if active_api_url is None and self.mode in ("auto", "server"):
             active_api_url = discover_prefect_server_url()
 
+        from prefect.settings import (
+            PREFECT_LOGGING_EXTRA_LOGGERS,
+            PREFECT_LOGGING_LOG_PRINTS,
+        )
+
         if self.mode == "ephemeral" or (self.mode == "auto" and active_api_url is None):
             override_settings: dict[Any, Any] = {
                 PREFECT_API_URL: None,
@@ -56,6 +61,9 @@ class PrefectRunner(PlayRunner):
             }
         else:
             override_settings = {PREFECT_API_URL: active_api_url}
+
+        override_settings[PREFECT_LOGGING_EXTRA_LOGGERS] = ["pirlo"]
+        override_settings[PREFECT_LOGGING_LOG_PRINTS] = True
 
         with temporary_settings(override_settings):
             return await workflow(**kwargs)
