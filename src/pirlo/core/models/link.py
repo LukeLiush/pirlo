@@ -61,11 +61,34 @@ class LlmLink:
             f"model='{self.model}', api_key='{self.masked_api_key}'{base_url_str}{source_str})"
         )
 
+    def __repr__(self) -> str:
+        return (
+            f"LlmLink(name={self.name!r}, provider={self.provider!r}, "
+            f"model={self.model!r}, api_key={self.masked_api_key!r}, "
+            f"base_url={self.base_url!r}, source={self.source!r}, "
+            f"is_default={self.is_default!r})"
+        )
+
     def to_dict(self) -> dict:
         data: dict[str, Any] = {
             "provider": self.provider,
             "model": self.model,
             "api_key": self.api_key,
+        }
+        if self.base_url:
+            data["base_url"] = self.base_url
+        if self.source:
+            data["source"] = self.source
+        if self.is_default:
+            data["is_default"] = self.is_default
+        return data
+
+    def to_safe_dict(self) -> dict[str, Any]:
+        """Returns a dict representation with sensitive fields masked."""
+        data: dict[str, Any] = {
+            "provider": self.provider,
+            "model": self.model,
+            "api_key": self.masked_api_key,
         }
         if self.base_url:
             data["base_url"] = self.base_url

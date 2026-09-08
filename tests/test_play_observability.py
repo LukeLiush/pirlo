@@ -52,6 +52,79 @@ def test_mask_sensitive_data():
     assert masked["custom_secret"] == "***"
 
 
+def test_mask_sensitive_data_with_dataclass():
+    from pirlo.core.models.link import LlmLink
+
+    link = LlmLink(
+        name="test",
+        provider="gemini",
+        model="gemini-2.5-flash",
+        api_key="AIzaFAKE_test_key_not_real_1234567890",
+    )
+    raw = {"playmaker": link, "use_vision": False}
+    masked = mask_sensitive_data(raw)
+
+    assert masked["use_vision"] is False
+    # The dataclass should be converted to a dict with api_key masked
+    assert isinstance(masked["playmaker"], dict)
+    assert masked["playmaker"]["api_key"] == "***"
+    assert "AIzaFAKE_test_key_not_real_1234567890" not in str(masked)
+
+
+def test_mask_sensitive_data_with_nested_list():
+    from pirlo.core.models.link import LlmLink
+
+    links = [
+        LlmLink(name="a", provider="gemini", model="m1", api_key="secret_key_1"),
+        LlmLink(name="b", provider="openai", model="m2", api_key="secret_key_2"),
+    ]
+    raw = {"models": links, "count": 2}
+    masked = mask_sensitive_data(raw)
+
+    assert masked["count"] == 2
+    assert len(masked["models"]) == 2
+    for item in masked["models"]:
+        assert isinstance(item, dict)
+        assert item["api_key"] == "***"
+    assert "secret_key_1" not in str(masked)
+    assert "secret_key_2" not in str(masked)
+
+
+def test_llmlink_repr_masks_api_key():
+    from pirlo.core.models.link import LlmLink
+
+    link = LlmLink(
+        name="test",
+        provider="gemini",
+        model="gemini-2.5-flash",
+        api_key="AIzaFAKE_test_key_not_real_1234567890",
+    )
+    r = repr(link)
+    assert "AIzaFAKE_test_key_not_real_1234567890" not in r
+    assert "AIza" in r  # first 4 chars visible
+    assert "7890" in r  # last 4 chars visible
+
+
+def test_llmlink_to_safe_dict_masks_api_key():
+    from pirlo.core.models.link import LlmLink
+
+    link = LlmLink(
+        name="test",
+        provider="gemini",
+        model="gemini-2.5-flash",
+        api_key="AIzaFAKE_test_key_not_real_1234567890",
+    )
+    safe = link.to_safe_dict()
+    raw = link.to_dict()
+
+    # to_safe_dict masks the key
+    assert safe["api_key"] != "AIzaFAKE_test_key_not_real_1234567890"
+    assert "****" in safe["api_key"]
+
+    # to_dict still returns the real key (needed for persistence)
+    assert raw["api_key"] == "AIzaFAKE_test_key_not_real_1234567890"
+
+
 def test_parameter_sensitive_flag():
     param = Parameter(help="Access token", sensitive=True)
     assert param.sensitive is True
