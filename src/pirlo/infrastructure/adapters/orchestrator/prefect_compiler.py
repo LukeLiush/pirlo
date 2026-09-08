@@ -147,7 +147,9 @@ class PrefectCompiler(BlueprintCompiler[PrefectWorkflow]):
                                 f"pirlo.play.{active_play_name}"
                             )
                             orig_play_level: int = play_custom_logger.level
+                            orig_propagate: bool = play_custom_logger.propagate
                             play_custom_logger.setLevel(logging.DEBUG)
+                            play_custom_logger.propagate = False
                             forward_handler: logging.Handler = (
                                 _PrefectTaskLogForwardHandler(task_logger)
                             )
@@ -247,6 +249,7 @@ class PrefectCompiler(BlueprintCompiler[PrefectWorkflow]):
                             finally:
                                 play_custom_logger.removeHandler(forward_handler)
                                 play_custom_logger.setLevel(orig_play_level)
+                                play_custom_logger.propagate = orig_propagate
 
                     def _compute_task_run_name() -> str:
                         from prefect.context import TaskRunContext

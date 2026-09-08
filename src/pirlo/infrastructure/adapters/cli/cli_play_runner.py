@@ -3,15 +3,12 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import contextlib
-import logging
-import os
 import sys
 import time
 from pathlib import Path
 from typing import Any
 
-from pirlo.core.config import get_log_level, get_workspace_path
+from pirlo.core.config import get_workspace_path
 from pirlo.core.logging_context import workflow_logging_context
 from pirlo.core.models.blueprint import PlayBlueprint, PlayOutput
 from pirlo.core.models.play_invocation import PlayInvocation
@@ -27,6 +24,7 @@ from pirlo.infrastructure.adapters.cli.terminal_play_ui import TerminalPlayUI
 from pirlo.infrastructure.adapters.runner_factory import (
     PlayRunnerFactory,
 )
+from pirlo.infrastructure.services.log_streamer import setup_pirlo_logging
 from pirlo.infrastructure.services.parameter_resolution import ParameterResolver
 from pirlo.infrastructure.services.run_preparer import RunPreparer
 
@@ -102,32 +100,7 @@ class CliPlayRunner:
         runner_instance: PlayRunner = PlayRunnerFactory.get_runner(runner_name)
 
         show_logs: bool = any(arg in sys.argv for arg in ("-l", "--log"))
-        log_level_name: str = logging.getLevelName(get_log_level())
-        if show_logs:
-            os.environ["PREFECT_LOGGING_HANDLERS_CONSOLE_LEVEL"] = log_level_name
-            os.environ["PREFECT_LOGGING_LEVEL"] = log_level_name
-        else:
-            os.environ["PREFECT_LOGGING_HANDLERS_CONSOLE_LEVEL"] = "ERROR"
-
-        with contextlib.suppress(Exception):
-            from prefect.logging.configuration import setup_logging
-
-            setup_logging(incremental=False)
-
-        if show_logs:
-            with contextlib.suppress(Exception):
-                from prefect.logging.handlers import PrefectConsoleHandler
-
-                from pirlo.infrastructure.services.log_streamer import (
-                    PirloConsoleFormatter,
-                )
-
-                root_logger: logging.Logger = logging.getLogger()
-                for handler in root_logger.handlers:
-                    if isinstance(handler, PrefectConsoleHandler):
-                        handler.setFormatter(PirloConsoleFormatter())
-                        handler.stream = sys.stdout
-                        handler.console.file = sys.stdout
+        setup_pirlo_logging(show_logs=show_logs)
 
         force: bool = any(arg in sys.argv for arg in ("-f", "--force", "--no-cache"))
 

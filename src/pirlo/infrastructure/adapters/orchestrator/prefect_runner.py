@@ -67,16 +67,18 @@ class PrefectRunner(PlayRunner):
         override_settings[PREFECT_LOGGING_LOG_PRINTS] = True
 
         with temporary_settings(override_settings):
-            res: PlayOutput | None = await workflow(**kwargs)
-            with contextlib.suppress(Exception):
-                import inspect
+            try:
+                res: PlayOutput | None = await workflow(**kwargs)
+                return res
+            finally:
+                with contextlib.suppress(Exception):
+                    import inspect
 
-                from prefect.logging.handlers import APILogWorker
+                    from prefect.logging.handlers import APILogWorker
 
-                drain_res: Any = APILogWorker.drain_all(at_exit=False)
-                if inspect.isawaitable(drain_res):
-                    await drain_res
-            return res
+                    drain_res: Any = APILogWorker.drain_all(at_exit=False)
+                    if inspect.isawaitable(drain_res):
+                        await drain_res
 
     def get_dashboard_url(self, run_id: str) -> str | None:
         """Constructs Prefect dashboard URL if pirlo connect or a remote Prefect server is active."""

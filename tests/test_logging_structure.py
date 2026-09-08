@@ -140,3 +140,95 @@ def test_stdio_tee_and_capture_play_stdio():
     # Multiline split
     assert "Standard line 1" in received_lines
     assert "Standard line 2" in received_lines
+
+
+def test_pirlo_console_formatter():
+    from pirlo.infrastructure.services.log_streamer import PirloConsoleFormatter
+
+    formatter = PirloConsoleFormatter()
+    logger = logging.getLogger("test_console_logger")
+
+    # 1. Inside workflow and play context
+    with (
+        workflow_logging_context("caedceb9"),
+        play_logging_context("autopass#v1.0:869c68"),
+    ):
+        record = logger.makeRecord(
+            name="test_console_logger",
+            level=logging.INFO,
+            fn="test.py",
+            lno=10,
+            msg="Play START | inputs={...}",
+            args=(),
+            exc_info=None,
+        )
+        line = formatter.format(record)
+        assert (
+            "[INFO] [caedceb9/autopass#v1.0:869c68] Play START | inputs={...}" in line
+        )
+
+        # Multiline message formatting
+        multiline_record = logger.makeRecord(
+            name="test_console_logger",
+            level=logging.INFO,
+            fn="test.py",
+            lno=11,
+            msg="Header line\nDetail line 1\nDetail line 2",
+            args=(),
+            exc_info=None,
+        )
+        multiline_output = formatter.format(multiline_record)
+        lines = multiline_output.splitlines()
+        assert len(lines) == 3
+        for l in lines:
+            assert "[INFO] [caedceb9/autopass#v1.0:869c68]" in l
+
+    # 2. Inside workflow context only
+    with workflow_logging_context("caedceb9"):
+        record = logger.makeRecord(
+            name="test_console_logger",
+            level=logging.INFO,
+            fn="test.py",
+            lno=20,
+            msg="Beginning flow run",
+            args=(),
+            exc_info=None,
+        )
+        line = formatter.format(record)
+        assert "[INFO] [caedceb9] Beginning flow run" in line
+
+    # 3. Via record attributes (Prefect task_run_logger extra)
+    record = logger.makeRecord(
+        name="test_console_logger",
+        level=logging.INFO,
+        fn="test.py",
+        lno=30,
+        msg="Task completed",
+        args=(),
+        exc_info=None,
+        extra={"flow_run_name": "run1234", "task_run_name": "task5678"},
+    )
+    line = formatter.format(record)
+    assert "[INFO] [run1234/task5678] Task completed" in line
+
+
+def test_setup_pirlo_logging_neutralization():
+    from pirlo.infrastructure.services.log_streamer import (
+        PirloConsoleFormatter,
+        setup_pirlo_logging,
+    )
+
+    root = logging.getLogger()
+    # Simulate rogue handler added by a third-party library
+    rogue_handler = logging.StreamHandler()
+    root.addHandler(rogue_handler)
+
+    bu_logger = logging.getLogger("browser_use")
+    bu_logger.addHandler(logging.StreamHandler())
+    bu_logger.propagate = False
+
+    setup_pirlo_logging(show_logs=True)
+
+    assert any(isinstance(h.formatter, PirloConsoleFormatter) for h in root.handlers)
+    assert bu_logger.propagate is True
+    assert len(bu_logger.handlers) == 0

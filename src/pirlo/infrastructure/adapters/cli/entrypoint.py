@@ -155,6 +155,12 @@ def main() -> None:
                 sys.path.insert(0, local_src_dir)
             if local_cwd_dir not in sys.path:
                 sys.path.insert(0, local_cwd_dir)
+            from pirlo.infrastructure.services.log_streamer import (
+                setup_pirlo_logging,
+            )
+
+            show_logs: bool = any(arg in sys.argv for arg in ("-l", "--log"))
+            setup_pirlo_logging(show_logs=show_logs)
 
             module = importlib.import_module(target_spec.module_path)
             session_cls = getattr(module, target_spec.class_name)
