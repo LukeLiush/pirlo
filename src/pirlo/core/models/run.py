@@ -52,8 +52,6 @@ class Run(BaseModel):
     error_message: str | None = None
     dashboard_url: str | None = None
     play_runs: list[PlayRunDetail] = []
-    parameter_file_location: str | None = None
-    log_file_location: str | None = None
 
     def get_run_dir(self, workspace: Path) -> Path:
         return workspace / self.playbook / "runs" / self.run_id
@@ -63,18 +61,6 @@ class Run(BaseModel):
 
         safe_name: str = re.sub(r"[#:/\\?%*|\"<>]", "_", play_id) + ".log"
         return self.get_run_dir(workspace) / "logs" / safe_name
-
-    def get_log_location(self, workspace: Path) -> Path:
-        """Resolves the absolute log file location path."""
-        if self.log_file_location:
-            return workspace / self.log_file_location
-        return self.get_run_dir(workspace) / "run.log"
-
-    def get_parameter_location(self, workspace: Path) -> Path:
-        """Resolves the absolute parameter file location path."""
-        if self.parameter_file_location:
-            return workspace / self.parameter_file_location
-        return self.get_run_dir(workspace) / "params.json"
 
 
 class PreparedRun(BaseModel):
@@ -88,11 +74,3 @@ class PreparedRun(BaseModel):
     @property
     def run_dir(self) -> Path:
         return self.workspace / self.playbook_name / "runs" / self.run_id
-
-    @property
-    def parameter_file_path(self) -> Path:
-        return self.run_dir / "params.json"
-
-    @property
-    def log_file_path(self) -> Path:
-        return self.run_dir / "run.log"

@@ -4,7 +4,6 @@ from __future__ import annotations
 import argparse
 import asyncio
 import contextlib
-import json
 import logging
 import os
 import sys
@@ -21,7 +20,6 @@ from pirlo.core.models.run_result import RunResult
 from pirlo.core.ports.play import Play
 from pirlo.core.ports.runner import PlayRunner
 from pirlo.core.services.blueprint_extractor import BlueprintExtractor
-from pirlo.core.services.masking import mask_sensitive_data
 from pirlo.infrastructure.adapters.cli.argument_parser_builder import (
     ArgumentParserBuilder,
 )
@@ -133,11 +131,6 @@ class CliPlayRunner:
 
         force: bool = any(arg in sys.argv for arg in ("-f", "--force", "--no-cache"))
 
-        prepared_run.run_dir.mkdir(parents=True, exist_ok=True)
-        masked_params = mask_sensitive_data(prepared_run.parameters)
-        with open(prepared_run.parameter_file_path, "w", encoding="utf-8") as f:
-            json.dump(masked_params, f, indent=2, default=str)
-
         start_perf: float = time.perf_counter()
 
         async def _play() -> RunResult[Any]:
@@ -171,7 +164,6 @@ class CliPlayRunner:
                         duration=elapsed,
                         result_data=final_run_result.data,
                         dashboard_url=dashboard_url,
-                        parameter_file_path=prepared_run.parameter_file_path,
                     )
                     return final_run_result
                 except Exception as exc:
@@ -186,7 +178,6 @@ class CliPlayRunner:
                         duration=elapsed,
                         result_data=f"{type(exc).__name__}: {exc}",
                         dashboard_url=dashboard_url,
-                        parameter_file_path=prepared_run.parameter_file_path,
                     )
                     raise
 

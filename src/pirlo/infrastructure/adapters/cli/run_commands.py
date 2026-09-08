@@ -228,7 +228,7 @@ def run_show(run_id: str) -> None:
                 badge = "[bold yellow][◌][/bold yellow]"
 
             p_dur: str = f"({p.duration:.1f}s)" if p.duration is not None else ""
-            escaped_play_id: str = escape(p.play_id)
+            escaped_play_id: str = f"{run.run_id}/{escape(p.play_id)}"
             console.print(f"  {badge} {i}. {escaped_play_id:<36} {p_dur}")
 
     # 3. Error Details (if failed)

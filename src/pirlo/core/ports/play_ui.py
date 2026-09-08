@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from contextlib import AbstractContextManager
-from pathlib import Path
 from typing import Any
 
 
@@ -55,7 +54,5 @@ class PlayUI(ABC):
         duration: float,
         result_data: Any,
         dashboard_url: str | None = None,
-        log_file_path: Path | None = None,
-        parameter_file_path: Path | None = None,
     ) -> None:
         """Draw final execution summary card."""

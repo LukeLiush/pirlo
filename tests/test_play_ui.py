@@ -56,8 +56,6 @@ class MockPlayUI(PlayUI):
         duration: float,
         result_data: Any,
         dashboard_url: str | None = None,
-        log_file_path: Any | None = None,
-        parameter_file_path: Any | None = None,
     ) -> None:
         self.calls.append(f"summary_card:{run_id}:{status}")
 
@@ -101,6 +99,7 @@ def test_terminal_play_ui_console():
     assert "Failed!" in output
     assert "Warning!" in output
     assert "Match update in progress" in output
+    assert "Sub detail" in output
 
 
 def test_terminal_play_ui_run_id_prefix():
@@ -137,12 +136,7 @@ def test_terminal_play_ui_discovers_run_id_from_context():
     assert "[49a3e670/demo_download_report#58f51a]" in output
 
 
-def test_summary_card_local_mode(tmp_path):
-    log_file = tmp_path / "run.log"
-    param_file = tmp_path / "params.json"
-    log_file.write_text("sample log", encoding="utf-8")
-    param_file.write_text("{}", encoding="utf-8")
-
+def test_summary_card_local_mode():
     console = Console(record=True)
     ui = TerminalPlayUI(console=console)
     ui.summary_card(
@@ -152,20 +146,18 @@ def test_summary_card_local_mode(tmp_path):
         duration=3.14,
         result_data={"alert": True},
         dashboard_url=None,
-        log_file_path=log_file,
-        parameter_file_path=param_file,
     )
     output = console.export_text()
     assert "Execution Summary" in output
     assert "Run ID:     8efd6618" in output
     assert "Playbook:   demo_report_dag" in output
     assert "SUCCESS (completed in 3.14s)" in output
-    assert "Log File:" in output
-    assert "Params:" in output
+    assert "Log File:" not in output
+    assert "Params:" not in output
     assert "pirlo run show 8efd6618" in output
 
 
-def test_summary_card_remote_dashboard_mode(tmp_path):
+def test_summary_card_remote_dashboard_mode():
     console = Console(record=True)
     ui = TerminalPlayUI(console=console)
     ui.summary_card(
@@ -180,15 +172,11 @@ def test_summary_card_remote_dashboard_mode(tmp_path):
     assert "Execution Summary" in output
     assert "Run ID:     8efd6618" in output
     assert "Dashboard:  http://prefect.server:4200/flow-runs?name=8efd6618" in output
-    assert "pirlo run show" not in output
+    assert "pirlo run show 8efd6618" in output
 
 
-def test_summary_card_deployed_suppresses_cli_hint(tmp_path, monkeypatch):
+def test_summary_card_deployed_suppresses_cli_hint(monkeypatch):
     monkeypatch.setenv("PIRLO_DEPLOYED", "1")
-    log_file = tmp_path / "run.log"
-    param_file = tmp_path / "params.json"
-    log_file.write_text("sample log", encoding="utf-8")
-    param_file.write_text("{}", encoding="utf-8")
 
     console = Console(record=True)
     ui = TerminalPlayUI(console=console)
@@ -199,8 +187,6 @@ def test_summary_card_deployed_suppresses_cli_hint(tmp_path, monkeypatch):
         duration=2.00,
         result_data="Done",
         dashboard_url=None,
-        log_file_path=log_file,
-        parameter_file_path=param_file,
     )
     output = console.export_text()
     assert "Execution Summary" in output

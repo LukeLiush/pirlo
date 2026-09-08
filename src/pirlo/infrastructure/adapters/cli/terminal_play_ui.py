@@ -5,8 +5,7 @@ import asyncio
 import getpass
 import os
 from contextlib import AbstractContextManager
-from datetime import UTC
-from pathlib import Path
+from datetime import UTC, datetime
 from typing import Any
 
 from rich import box
@@ -73,7 +72,6 @@ class TerminalPlayUI(PlayUI):
         return None
 
     def _timestamp(self) -> str:
-        from datetime import datetime
 
         return datetime.now(UTC).astimezone().strftime("%H:%M:%S")
 
@@ -203,8 +201,6 @@ class TerminalPlayUI(PlayUI):
         duration: float,
         result_data: Any,
         dashboard_url: str | None = None,
-        log_file_path: Path | None = None,
-        parameter_file_path: Path | None = None,
     ) -> None:
         status_style = "bold green" if status == "SUCCESS" else "bold red"
         status_line = (
@@ -237,41 +233,17 @@ class TerminalPlayUI(PlayUI):
                 ]
             )
 
-        # Local files & CLI inspect
-        if parameter_file_path and parameter_file_path.exists():
-            try:
-                home = Path.home()
-                display_params = f"~/{parameter_file_path.relative_to(home)}"
-            except ValueError:
-                display_params = str(parameter_file_path)
-
+        is_deployed = bool(
+            os.environ.get("PIRLO_DEPLOYED")
+            or os.environ.get("KUBERNETES_SERVICE_HOST")
+        )
+        if not is_deployed:
             lines.extend(
                 [
                     "",
-                    f" [bold]Params:[/bold]     {display_params}",
+                    f" [dim]Inspect:[/dim]    [cyan]pirlo run show {run_id}[/cyan]",
                 ]
             )
-
-            if log_file_path and log_file_path.exists():
-                try:
-                    home = Path.home()
-                    display_log = f"~/{log_file_path.relative_to(home)}"
-                except ValueError:
-                    display_log = str(log_file_path)
-
-                lines.append(f" [bold]Log File:[/bold]   {display_log}")
-
-            is_deployed = bool(
-                os.environ.get("PIRLO_DEPLOYED")
-                or os.environ.get("KUBERNETES_SERVICE_HOST")
-            )
-            if not is_deployed:
-                lines.extend(
-                    [
-                        "",
-                        f" [dim]Inspect:[/dim]    [cyan]pirlo run show {run_id}[/cyan]",
-                    ]
-                )
 
         self._console.print(
             Panel(
