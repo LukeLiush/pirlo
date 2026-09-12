@@ -111,12 +111,16 @@ class PirloConsoleFormatter(logging.Formatter):
                             if flow_run and flow_run.name:
                                 flow_run_name = flow_run.name
 
+        import os
+
+        pid: int = os.getpid()
+
         if flow_run_name and task_run_name:
-            prefix: str = f"[{flow_run_name}/{task_run_name}]"
+            prefix: str = f"[{flow_run_name}/{task_run_name} (pid {pid})]"
         elif flow_run_name:
-            prefix = f"[{flow_run_name}]"
+            prefix = f"[{flow_run_name} (pid {pid})]"
         elif task_run_name:
-            prefix = f"[{task_run_name}]"
+            prefix = f"[{task_run_name} (pid {pid})]"
         else:
             prefix = ""
 
