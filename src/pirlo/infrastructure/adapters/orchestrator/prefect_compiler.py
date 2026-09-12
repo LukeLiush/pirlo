@@ -2,12 +2,14 @@
 from __future__ import annotations
 
 import logging
+import os
 import sys
 import time
 from typing import Any, cast
 
 from prefect import flow, tags, task
 from prefect.futures import PrefectFuture
+from prefect.task_runners import ProcessPoolTaskRunner
 
 from pirlo.core.logging_context import (
     generate_short_run_id,
@@ -69,6 +71,7 @@ class PrefectCompiler(BlueprintCompiler[PrefectWorkflow]):
             name=blueprint.name,
             flow_run_name=active_run_id,
             validate_parameters=self.validate_parameters,
+            task_runner=ProcessPoolTaskRunner(max_workers=os.cpu_count())
         )
         async def prefect_master_flow(
             **workflow_kwargs: object,
@@ -277,9 +280,13 @@ class PrefectCompiler(BlueprintCompiler[PrefectWorkflow]):
                     play_cls, blueprint_node.playbook_name, play_name
                 )
 
-                parent_futures: list[PrefectFuture[PlayOutput]] = [
-                    futures[parent_id] for parent_id in blueprint_node.depends_on
-                ]
+                parent_futures: list[PrefectFuture[PlayOutput]] = []
+                for parent_id in blueprint_node.depends_on:
+                    parent_val = futures[parent_id]
+                    if isinstance(parent_val, list):
+                        parent_futures.extend(parent_val)
+                    else:
+                        parent_futures.append(parent_val)
 
                 from prefect.cache_policies import NO_CACHE
 
