@@ -241,9 +241,10 @@ class TestPrefectRunRepository(unittest.IsolatedAsyncioTestCase):
                 )
             ]
 
+            expected_ts: str = now.astimezone().strftime("%Y-%m-%d %H:%M:%S%z")
             self.assertEqual(len(lines), 1)
             self.assertIn(
-                "12:00:00 [INFO] [a1b2c3d4/step1#v1.0:998877] Hello from prefect",
+                f"{expected_ts} [INFO] [a1b2c3d4/step1#v1.0:998877] Hello from prefect",
                 lines[0],
             )
 
@@ -251,7 +252,7 @@ class TestPrefectRunRepository(unittest.IsolatedAsyncioTestCase):
             log_file: Path = run_obj.get_play_log_path(self.workspace, play_id)
             self.assertTrue(log_file.exists())
             self.assertIn(
-                "12:00:00 [INFO] [a1b2c3d4/step1#v1.0:998877] Hello from prefect",
+                f"{expected_ts} [INFO] [a1b2c3d4/step1#v1.0:998877] Hello from prefect",
                 log_file.read_text(),
             )
 

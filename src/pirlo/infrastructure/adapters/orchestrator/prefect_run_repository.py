@@ -322,15 +322,22 @@ class PrefectRunRepository(RunRepository):
             lvl_name: str = logging.getLevelName(lvl)
             lines: list[str] = raw_msg.splitlines() or [""]
             res: list[str] = []
+            formatted_ts: str = (
+                ts.astimezone().strftime("%Y-%m-%d %H:%M:%S%z")
+                if ts.tzinfo is not None
+                else ts.strftime("%Y-%m-%d %H:%M:%S%z")
+            )
             for line in lines:
                 clean_msg: str = line
-                clean_msg = re.sub(r"^\d{2}:\d{2}:\d{2}\s+", "", clean_msg)
+                clean_msg = re.sub(
+                    r"^(?:\d{4}-\d{2}-\d{2}\s+)?\d{2}:\d{2}:\d{2}(?:[+-]\d{4})?\s+",
+                    "",
+                    clean_msg,
+                )
                 clean_msg = re.sub(
                     r"^\[[\w\-#.:/]+(?:\s+\(pid\s+\d+\))?\]\s+", "", clean_msg
                 )
-                res.append(
-                    f"{ts.strftime('%H:%M:%S')} [{lvl_name}] {prefix} {clean_msg}"
-                )
+                res.append(f"{formatted_ts} [{lvl_name}] {prefix} {clean_msg}")
             return res
 
         if local_log_file and local_log_file.exists():
@@ -340,12 +347,17 @@ class PrefectRunRepository(RunRepository):
             for line in cached_lines[-tail_lines:]:
                 if prefix not in line:
                     match_legacy: re.Match[str] | None = re.match(
-                        r"^(\d{2}:\d{2}:\d{2}\s+\[\w+\])\s*(.*)$", line
+                        r"^((?:(?:\d{4}-\d{2}-\d{2}\s+)?\d{2}:\d{2}:\d{2}(?:[+-]\d{4})?)\s+\[\w+\])\s*(.*)$",
+                        line,
                     )
                     if match_legacy:
                         header: str = match_legacy.group(1)
                         msg_part: str = match_legacy.group(2)
-                        clean: str = re.sub(r"^\d{2}:\d{2}:\d{2}\s+", "", msg_part)
+                        clean: str = re.sub(
+                            r"^(?:\d{4}-\d{2}-\d{2}\s+)?\d{2}:\d{2}:\d{2}(?:[+-]\d{4})?\s+",
+                            "",
+                            msg_part,
+                        )
                         clean = re.sub(
                             r"^\[[\w\-#.:/]+(?:\s+\(pid\s+\d+\))?\]\s+", "", clean
                         )
