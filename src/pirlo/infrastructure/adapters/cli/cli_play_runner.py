@@ -114,7 +114,7 @@ class CliPlayRunner:
                 )
                 try:
                     raw_result: PlayOutput | None = await runner_instance.run(
-                        blueprint, force=force, **prepared_run.parameters
+                        blueprint, force=force, show_logs=show_logs, **prepared_run.parameters
                     )
                     elapsed: float = time.perf_counter() - start_perf
                     dashboard_url: str | None = runner_instance.get_dashboard_url(

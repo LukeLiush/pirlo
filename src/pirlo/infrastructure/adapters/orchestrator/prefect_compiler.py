@@ -77,6 +77,7 @@ class PrefectCompiler(BlueprintCompiler[PrefectWorkflow]):
             **workflow_kwargs: object,
         ) -> PlayOutput | None:
             force: bool = bool(workflow_kwargs.get("force", False))
+            show_logs: bool = bool(workflow_kwargs.get("show_logs", False))
             with (
                 workflow_logging_context(active_run_id),
                 tags(f"pirlo_id:{active_run_id}"),
@@ -128,6 +129,9 @@ class PrefectCompiler(BlueprintCompiler[PrefectWorkflow]):
                     async def _inner_task_fn(
                         **kwargs: object,
                     ) -> PlayOutput:
+                        from pirlo.infrastructure.services.log_streamer import setup_pirlo_logging
+                        setup_pirlo_logging(show_logs=show_logs)
+
                         active_play_name = getattr(target_cls, "play_name", node_name)
                         play_version = getattr(target_cls, "play_version", "1.0")
                         identity = compute_play_identity(
@@ -214,9 +218,6 @@ class PrefectCompiler(BlueprintCompiler[PrefectWorkflow]):
                                     }
 
                                 # Executes execute() for Play with stdio captured to task_logger
-                                show_logs: bool = any(
-                                    arg in sys.argv for arg in ("-l", "--log")
-                                )
                                 with capture_play_stdio(
                                     on_line=task_logger.info,
                                     passthrough=not show_logs,
