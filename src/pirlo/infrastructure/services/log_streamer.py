@@ -82,7 +82,7 @@ class PirloConsoleFormatter(logging.Formatter):
             get_current_run_id,
         )
 
-        asctime: str = self.formatTime(record, "%H:%M:%S")
+        asctime: str = self.formatTime(record, "%Y-%m-%d %H:%M:%S%z")
         levelname: str = record.levelname
         flow_run_name: str | None = (
             getattr(record, "flow_run_name", None) or get_current_run_id()
