@@ -31,13 +31,19 @@ class PlayLogCache:
         return LogCursor.from_file(cursor_path)
 
     def read_cached_lines(
-        self, playbook: str, run_id: str, play_id: str, tail_lines: int = 50
+        self,
+        playbook: str,
+        run_id: str,
+        play_id: str,
+        tail_lines: int | None = None,
     ) -> list[str]:
         log_path: Path = self.get_log_path(playbook, run_id, play_id)
         if not log_path.exists():
             return []
         with open(log_path, "r", encoding="utf-8") as f:
             lines: list[str] = [line.rstrip() for line in f]
+        if tail_lines is None or tail_lines <= 0:
+            return lines
         return lines[-tail_lines:]
 
     def append(

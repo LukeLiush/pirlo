@@ -27,6 +27,11 @@ class TestPlayLogCache(unittest.TestCase):
         self.cache.append(playbook, run_id, play_id, "Line 2", ts, log_id="id-2")
         self.cache.append(playbook, run_id, play_id, "Line 3", ts, log_id="id-3")
 
+        lines_all = self.cache.read_cached_lines(
+            playbook, run_id, play_id, tail_lines=None
+        )
+        self.assertEqual(lines_all, ["Line 1", "Line 2", "Line 3"])
+
         lines = self.cache.read_cached_lines(playbook, run_id, play_id, tail_lines=2)
         self.assertEqual(lines, ["Line 2", "Line 3"])
 

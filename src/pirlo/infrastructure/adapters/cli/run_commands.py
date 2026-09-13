@@ -71,7 +71,11 @@ def run_main() -> None:
     )
     log_parser.add_argument("target", help="Run ID or <run_id>/<play_id>")
     log_parser.add_argument(
-        "-n", "--tail", type=int, default=50, help="Lines to tail (default: 50)"
+        "-n",
+        "--tail",
+        type=int,
+        default=None,
+        help="Lines to tail (default: all lines)",
     )
     log_parser.add_argument(
         "-f", "--follow", action="store_true", help="Follow live logs in real time"
@@ -95,7 +99,10 @@ def run_main() -> None:
             run_id, play_id = target.split("/", 1)
         else:
             run_id, play_id = target, None
-        run_log(run_id, play_id=play_id, tail_lines=args.tail, follow=args.follow)
+        tail_lines: int | None = args.tail
+        if args.follow and tail_lines is None:
+            tail_lines = 50
+        run_log(run_id, play_id=play_id, tail_lines=tail_lines, follow=args.follow)
 
 
 def run_list(
@@ -296,16 +303,19 @@ def run_show(run_id: str) -> None:
 def run_log(
     run_id: str,
     play_id: str | None = None,
-    tail_lines: int = 50,
+    tail_lines: int | None = None,
     follow: bool = False,
 ) -> None:
     repo: PrefectRunRepository = PrefectRunRepository()
 
     async def _stream() -> None:
-        async for line in repo.stream_play_logs(
-            run_id, play_id=play_id, tail_lines=tail_lines, follow=follow
-        ):
-            print(line)
+        try:
+            async for line in repo.stream_play_logs(
+                run_id, play_id=play_id, tail_lines=tail_lines, follow=follow
+            ):
+                print(line)
+        except asyncio.CancelledError:
+            pass
 
     try:
         asyncio.run(_stream())

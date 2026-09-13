@@ -65,6 +65,8 @@ def _extract_run_id(fr: FlowRun) -> str:
 
 from pirlo.infrastructure.services.play_log_cache import PlayLogCache
 
+API_LOG_BATCH_SIZE: int = 200
+
 
 class PrefectRunRepository(RunRepository):
     """Queries flow runs, task runs, and logs via Prefect API with local file bookkeeping."""
@@ -254,7 +256,7 @@ class PrefectRunRepository(RunRepository):
         self,
         run_id: str,
         play_id: str | None = None,
-        tail_lines: int = 50,
+        tail_lines: int | None = None,
         follow: bool = False,
     ) -> AsyncIterator[str]:
         run: Run | None = await self.get_by_id(run_id)
@@ -373,69 +375,77 @@ class PrefectRunRepository(RunRepository):
                     return
                 fr_id: uuid.UUID = flow_runs[0].id
 
-                base_filter: LogFilter = (
-                    LogFilter(
-                        task_run_id=LogFilterTaskRunId(
-                            any_=[uuid.UUID(target_play.play_run_id)]
-                        ),
-                        timestamp=LogFilterTimestamp(after_=cast(Any, last_saved_ts))
-                        if last_saved_ts
-                        else None,
-                    )
-                    if target_play
-                    else LogFilter(
-                        flow_run_id=LogFilterFlowRunId(any_=[fr_id]),
-                        timestamp=LogFilterTimestamp(after_=cast(Any, last_saved_ts))
-                        if last_saved_ts
-                        else None,
-                    )
-                )
-
-                logs: list[Log] = await client.read_logs(
-                    log_filter=base_filter,
-                    sort=LogSort.TIMESTAMP_ASC,
-                    limit=min(tail_lines, 2000),
-                )
-
-                log: Log
-                for log in logs:
-                    for line_formatted in _format_log_entry(
-                        log.message, log.timestamp, log.level
-                    ):
-                        yield line_formatted
-                        if target_play:
-                            self._log_cache.append(
-                                run.playbook,
-                                run.run_id,
-                                target_play.play_id,
-                                line_formatted,
-                                log.timestamp,
-                                log.id,
-                            )
-                    if last_saved_ts != log.timestamp:
-                        last_saved_ts = log.timestamp
-                        seen_ids_at_last_ts = {str(log.id)}
-                    else:
-                        seen_ids_at_last_ts.add(str(log.id))
-
-                while follow:
-                    current_run: FlowRun = await client.read_flow_run(fr_id)
-                    more_filter: LogFilter = (
+                while True:
+                    fetch_filter: LogFilter = (
                         LogFilter(
                             task_run_id=LogFilterTaskRunId(
                                 any_=[uuid.UUID(target_play.play_run_id)]
-                            )
-                            if target_play
-                            else None,
-                            flow_run_id=LogFilterFlowRunId(any_=[fr_id])
-                            if not target_play
-                            else None,
+                            ),
                             timestamp=LogFilterTimestamp(
                                 after_=cast(Any, last_saved_ts)
-                            ),
+                            )
+                            if last_saved_ts
+                            else None,
                         )
+                        if target_play
+                        else LogFilter(
+                            flow_run_id=LogFilterFlowRunId(any_=[fr_id]),
+                            timestamp=LogFilterTimestamp(
+                                after_=cast(Any, last_saved_ts)
+                            )
+                            if last_saved_ts
+                            else None,
+                        )
+                    )
+
+                    logs: list[Log] = await client.read_logs(
+                        log_filter=fetch_filter,
+                        sort=LogSort.TIMESTAMP_ASC,
+                        limit=API_LOG_BATCH_SIZE,
+                    )
+                    if not logs:
+                        break
+
+                    new_logs_count: int = 0
+                    for log in logs:
+                        if str(log.id) not in seen_ids_at_last_ts:
+                            new_logs_count += 1
+                            for line_formatted in _format_log_entry(
+                                log.message, log.timestamp, log.level
+                            ):
+                                yield line_formatted
+                                if target_play:
+                                    self._log_cache.append(
+                                        run.playbook,
+                                        run.run_id,
+                                        target_play.play_id,
+                                        line_formatted,
+                                        log.timestamp,
+                                        log.id,
+                                    )
+                            if last_saved_ts != log.timestamp:
+                                last_saved_ts = log.timestamp
+                                seen_ids_at_last_ts = {str(log.id)}
+                            else:
+                                seen_ids_at_last_ts.add(str(log.id))
+
+                    if len(logs) < API_LOG_BATCH_SIZE or new_logs_count == 0:
+                        break
+
+                while follow:
+                    current_run: FlowRun = await client.read_flow_run(fr_id)
+                    more_filter: LogFilter = LogFilter(
+                        task_run_id=LogFilterTaskRunId(
+                            any_=[uuid.UUID(target_play.play_run_id)]
+                        )
+                        if target_play
+                        else None,
+                        flow_run_id=LogFilterFlowRunId(any_=[fr_id])
+                        if not target_play
+                        else None,
+                        timestamp=LogFilterTimestamp(after_=cast(Any, last_saved_ts))
                         if last_saved_ts
-                        else base_filter
+                        else None,
                     )
 
                     more_logs: list[Log] = await client.read_logs(
