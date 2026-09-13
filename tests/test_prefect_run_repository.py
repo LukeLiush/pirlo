@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from pirlo.core.models.run import PlayRunDetail, Run, RunStatus
+from pirlo.core.models.run import LogCursor, PlayRunDetail, Run, RunStatus
 from pirlo.infrastructure.adapters.orchestrator.prefect_run_repository import (
     PrefectRunRepository,
     _extract_run_id,
@@ -256,7 +256,11 @@ class TestPrefectRunRepository(unittest.IsolatedAsyncioTestCase):
                 log_file.read_text(),
             )
 
-            # Verify cursor was saved
+            # Verify cursor was saved as structured LogCursor JSON
             cursor_file: Path = log_file.with_suffix(".cursor")
             self.assertTrue(cursor_file.exists())
-            self.assertEqual(cursor_file.read_text(), now.isoformat())
+            saved_cursor: LogCursor | None = LogCursor.from_file(cursor_file)
+            self.assertIsNotNone(saved_cursor)
+            self.assertEqual(saved_cursor.last_timestamp_utc, now)
+            self.assertEqual(saved_cursor.lines_count, 1)
+            self.assertEqual(saved_cursor.last_log_id, str(mock_log.id))

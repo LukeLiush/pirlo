@@ -63,24 +63,22 @@ def _extract_run_id(fr: FlowRun) -> str:
     return fr.name
 
 
+from pirlo.infrastructure.services.play_log_cache import PlayLogCache
+
+
 class PrefectRunRepository(RunRepository):
     """Queries flow runs, task runs, and logs via Prefect API with local file bookkeeping."""
 
-    def __init__(self, server_url: str | None = None) -> None:
+    def __init__(
+        self,
+        server_url: str | None = None,
+        log_cache: PlayLogCache | None = None,
+    ) -> None:
         self._settings: PrefectServerSettings = PrefectServerSettings.resolve(
             server_url
         )
         self._workspace: Path = get_workspace_path()
-
-    def _get_local_play_log_path(
-        self, playbook: str, run_id: str, play_id: str
-    ) -> Path:
-        run_dummy: Run = Run(
-            run_id=run_id,
-            playbook=playbook,
-            status=RunStatus.STARTED,
-        )
-        return run_dummy.get_play_log_path(self._workspace, play_id)
+        self._log_cache: PlayLogCache = log_cache or PlayLogCache(self._workspace)
 
     async def list_runs(
         self,
@@ -301,14 +299,6 @@ class PrefectRunRepository(RunRepository):
                     yield f"  • {run_id}/{p.play_id} (status: {p.status.value})"
                 return
 
-        local_log_file: Path | None = (
-            self._get_local_play_log_path(run.playbook, run.run_id, target_play.play_id)
-            if target_play
-            else None
-        )
-        if local_log_file:
-            local_log_file.parent.mkdir(parents=True, exist_ok=True)
-
         last_saved_ts: datetime | None = None
         seen_ids_at_last_ts: set[str] = set()
 
@@ -340,46 +330,28 @@ class PrefectRunRepository(RunRepository):
                 res.append(f"{formatted_ts} [{lvl_name}] {prefix} {clean_msg}")
             return res
 
-        if local_log_file and local_log_file.exists():
-            with open(local_log_file, "r", encoding="utf-8") as f:  # noqa: ASYNC230
-                cached_lines: list[str] = [line.rstrip() for line in f]
-
-            for line in cached_lines[-tail_lines:]:
-                if prefix not in line:
-                    match_legacy: re.Match[str] | None = re.match(
-                        r"^((?:(?:\d{4}-\d{2}-\d{2}\s+)?\d{2}:\d{2}:\d{2}(?:[+-]\d{4})?)\s+\[\w+\])\s*(.*)$",
-                        line,
-                    )
-                    if match_legacy:
-                        header: str = match_legacy.group(1)
-                        msg_part: str = match_legacy.group(2)
-                        clean: str = re.sub(
-                            r"^(?:\d{4}-\d{2}-\d{2}\s+)?\d{2}:\d{2}:\d{2}(?:[+-]\d{4})?\s+",
-                            "",
-                            msg_part,
-                        )
-                        clean = re.sub(
-                            r"^\[[\w\-#.:/]+(?:\s+\(pid\s+\d+\))?\]\s+", "", clean
-                        )
-                        yield f"{header} {prefix} {clean}"
-                        continue
+        if target_play and self._log_cache.is_cached(
+            run.playbook, run.run_id, target_play.play_id
+        ):
+            cached_lines: list[str] = self._log_cache.read_cached_lines(
+                run.playbook, run.run_id, target_play.play_id, tail_lines=tail_lines
+            )
+            for line in cached_lines:
                 yield line
 
             if (
-                target_play
-                and target_play.status in (RunStatus.COMPLETED, RunStatus.FAILED)
+                target_play.status in (RunStatus.COMPLETED, RunStatus.FAILED)
                 and not follow
             ):
                 return
 
-            meta_cursor_file: Path = local_log_file.with_suffix(".cursor")
-            if meta_cursor_file.exists():
-                try:
-                    last_saved_ts = datetime.fromisoformat(
-                        meta_cursor_file.read_text().strip()
-                    )
-                except (ValueError, OSError):
-                    pass
+            cursor = self._log_cache.get_cursor(
+                run.playbook, run.run_id, target_play.play_id
+            )
+            if cursor:
+                last_saved_ts = cursor.last_timestamp_utc
+                if cursor.last_log_id:
+                    seen_ids_at_last_ts = {cursor.last_log_id}
 
         with temporary_settings(self._settings.overrides):
             client: PrefectClient
@@ -400,13 +372,6 @@ class PrefectRunRepository(RunRepository):
                 if not flow_runs:
                     return
                 fr_id: uuid.UUID = flow_runs[0].id
-
-                def _append_to_cache(line_str: str, ts: datetime) -> None:
-                    if local_log_file:
-                        with open(local_log_file, "a", encoding="utf-8") as out:
-                            out.write(line_str + "\n")
-                        meta_cursor: Path = local_log_file.with_suffix(".cursor")
-                        meta_cursor.write_text(ts.isoformat())
 
                 base_filter: LogFilter = (
                     LogFilter(
@@ -438,7 +403,15 @@ class PrefectRunRepository(RunRepository):
                         log.message, log.timestamp, log.level
                     ):
                         yield line_formatted
-                        _append_to_cache(line_formatted, log.timestamp)
+                        if target_play:
+                            self._log_cache.append(
+                                run.playbook,
+                                run.run_id,
+                                target_play.play_id,
+                                line_formatted,
+                                log.timestamp,
+                                log.id,
+                            )
                     if last_saved_ts != log.timestamp:
                         last_saved_ts = log.timestamp
                         seen_ids_at_last_ts = {str(log.id)}
@@ -476,7 +449,15 @@ class PrefectRunRepository(RunRepository):
                                 log.message, log.timestamp, log.level
                             ):
                                 yield line_formatted
-                                _append_to_cache(line_formatted, log.timestamp)
+                                if target_play:
+                                    self._log_cache.append(
+                                        run.playbook,
+                                        run.run_id,
+                                        target_play.play_id,
+                                        line_formatted,
+                                        log.timestamp,
+                                        log.id,
+                                    )
                             if last_saved_ts != log.timestamp:
                                 last_saved_ts = log.timestamp
                                 seen_ids_at_last_ts = {str(log.id)}

@@ -149,6 +149,7 @@ def test_pirlo_console_formatter():
     logger = logging.getLogger("test_console_logger")
 
     # 1. Inside workflow and play context
+    pid = os.getpid()
     with (
         workflow_logging_context("caedceb9"),
         play_logging_context("autopass#v1.0:869c68"),
@@ -164,7 +165,8 @@ def test_pirlo_console_formatter():
         )
         line = formatter.format(record)
         assert (
-            "[INFO] [caedceb9/autopass#v1.0:869c68] Play START | inputs={...}" in line
+            f"[INFO] [caedceb9/autopass#v1.0:869c68 (pid {pid})] Play START | inputs={{...}}"
+            in line
         )
 
         # Multiline message formatting
@@ -181,7 +183,7 @@ def test_pirlo_console_formatter():
         lines = multiline_output.splitlines()
         assert len(lines) == 3
         for l in lines:
-            assert "[INFO] [caedceb9/autopass#v1.0:869c68]" in l
+            assert f"[INFO] [caedceb9/autopass#v1.0:869c68 (pid {pid})]" in l
 
     # 2. Inside workflow context only
     with workflow_logging_context("caedceb9"):
@@ -195,7 +197,7 @@ def test_pirlo_console_formatter():
             exc_info=None,
         )
         line = formatter.format(record)
-        assert "[INFO] [caedceb9] Beginning flow run" in line
+        assert f"[INFO] [caedceb9 (pid {pid})] Beginning flow run" in line
 
     # 3. Via record attributes (Prefect task_run_logger extra)
     record = logger.makeRecord(
@@ -209,7 +211,7 @@ def test_pirlo_console_formatter():
         extra={"flow_run_name": "run1234", "task_run_name": "task5678"},
     )
     line = formatter.format(record)
-    assert "[INFO] [run1234/task5678] Task completed" in line
+    assert f"[INFO] [run1234/task5678 (pid {pid})] Task completed" in line
 
 
 def test_setup_pirlo_logging_neutralization():
