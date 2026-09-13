@@ -46,9 +46,10 @@ class BlueprintExtractor:
         play_cls: type[Play[object]],
         user_kwargs: dict[str, ParameterValue] | None = None,
     ) -> PlayBlueprint:
+        play_registered_name = getattr(play_cls, "play_name", None) or play_cls.__name__
         blueprint = PlayBlueprint(
-            name=play_cls.__name__,
-            entry_playbook=play_cls.__name__,
+            name=play_registered_name,
+            entry_playbook=play_registered_name,
         )
         visited_nodes: dict[type[Play[object]], str] = {}
         all_user_kwargs: dict[str, ParameterValue] = user_kwargs or {}

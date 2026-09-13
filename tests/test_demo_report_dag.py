@@ -17,7 +17,7 @@ def test_demo_report_dag_blueprint_extraction():
     dag = SendAlertPlay()
     blueprint: PlayBlueprint = dag.extract_blueprint()
 
-    assert blueprint.name == "SendAlertPlay"
+    assert blueprint.name == "demo_report_dag"
     assert len(blueprint.nodes) == 5
 
     node_map: dict[str, BlueprintNode] = {n.playbook_name: n for n in blueprint.nodes}

@@ -403,7 +403,10 @@ class PrefectCompiler(BlueprintCompiler[PrefectWorkflow]):
                     if (
                         isinstance(obj, type)
                         and issubclass(obj, Play)
-                        and obj.__name__ == play_name
+                        and (
+                            obj.__name__ == play_name
+                            or getattr(obj, "play_name", None) == play_name
+                        )
                     ):
                         return cast(type[Any], obj)
 
