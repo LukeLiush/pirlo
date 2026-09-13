@@ -60,6 +60,8 @@ class AlertOutput(PlayOutput):
 class SelectReportDatesPlay(Play[DatesOutput]):
     async def execute(self) -> DatesOutput:
         self.ui.commentary("Selecting target quarterly report periods...")
+        for i in range(1, 101):
+            self.logger.info("Processing date selection batch %03d/100...", i)
         dates = ["2026-06", "2026-07", "2026-08"]
         self.ui.goal(
             message="Target periods selected", detail=f"Periods: {', '.join(dates)}"
