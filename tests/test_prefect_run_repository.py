@@ -264,3 +264,55 @@ class TestPrefectRunRepository(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(saved_cursor.last_timestamp_utc, now)
             self.assertEqual(saved_cursor.lines_count, 1)
             self.assertEqual(saved_cursor.last_log_id, str(mock_log.id))
+
+    @patch(
+        "pirlo.infrastructure.adapters.orchestrator.prefect_run_repository.get_client"
+    )
+    async def test_stream_play_logs_with_pid(self, mock_get_client: MagicMock) -> None:
+        mock_client: AsyncMock = AsyncMock()
+        mock_get_client.return_value.__aenter__.return_value = mock_client
+
+        playbook: str = "demo_pb"
+        run_id: str = "b2c3d4e5"
+        play_id: str = "step2#v1.0:112233"
+        task_uuid: uuid.UUID = uuid.uuid4()
+        fr_uuid: uuid.UUID = uuid.uuid4()
+
+        play_detail: PlayRunDetail = PlayRunDetail(
+            play_run_id=str(task_uuid),
+            play_name="step2",
+            play_id=play_id,
+            status=RunStatus.RUNNING,
+        )
+        run_obj: Run = Run(
+            run_id=run_id,
+            playbook=playbook,
+            status=RunStatus.RUNNING,
+            play_runs=[play_detail],
+        )
+
+        now: datetime = datetime(2026, 9, 8, 12, 0, 0, tzinfo=UTC)
+        mock_log: MagicMock = MagicMock()
+        mock_log.id = uuid.uuid4()
+        mock_log.level = 20  # INFO
+        mock_log.message = "[(pid 45678)] Play START | inputs={'key': 'val'}"
+        mock_log.timestamp = now
+
+        mock_flow_run: MagicMock = MagicMock(id=fr_uuid)
+        mock_client.read_flow_runs.return_value = [mock_flow_run]
+        mock_client.read_logs.return_value = [mock_log]
+
+        with patch.object(self.repo, "get_by_id", return_value=run_obj):
+            lines: list[str] = [
+                line
+                async for line in self.repo.stream_play_logs(
+                    run_id, play_id=play_id, tail_lines=50, follow=False
+                )
+            ]
+
+            expected_ts: str = now.astimezone().strftime("%Y-%m-%d %H:%M:%S%z")
+            self.assertEqual(len(lines), 1)
+            self.assertEqual(
+                lines[0],
+                f"{expected_ts} [INFO] [b2c3d4e5/step2#v1.0:112233 (pid 45678)] Play START | inputs={{'key': 'val'}}",
+            )

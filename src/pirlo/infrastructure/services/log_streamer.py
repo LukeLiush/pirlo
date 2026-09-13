@@ -128,6 +128,7 @@ class PirloConsoleFormatter(logging.Formatter):
         clean_msg: str = msg
         clean_msg = re.sub(r"^\d{2}:\d{2}:\d{2}\s+", "", clean_msg)
         clean_msg = re.sub(r"^\[[\w\-#.:/]+(?:\s+\(pid\s+\d+\))?\]\s+", "", clean_msg)
+        clean_msg = re.sub(r"^\[\(pid\s+\d+\)\]\s*", "", clean_msg)
 
         header: str = (
             f"{asctime} [{levelname}] {prefix}".rstrip()

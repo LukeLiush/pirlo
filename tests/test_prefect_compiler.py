@@ -56,3 +56,28 @@ def test_prefect_compiler_flow_generation():
     assert prefect_workflow is not None
     assert prefect_workflow.name == blueprint.name
     assert callable(prefect_workflow.flow)
+
+
+def test_prefect_task_log_forward_handler():
+    import logging
+    from unittest.mock import MagicMock
+
+    from pirlo.infrastructure.adapters.orchestrator.prefect_compiler import (
+        _PrefectTaskLogForwardHandler,
+    )
+
+    mock_logger = MagicMock()
+    handler = _PrefectTaskLogForwardHandler(mock_logger)
+    record = logging.LogRecord(
+        name="test",
+        level=logging.INFO,
+        pathname="",
+        lineno=0,
+        msg="Custom play log message",
+        args=(),
+        exc_info=None,
+    )
+    handler.emit(record)
+    mock_logger.log.assert_called_once_with(
+        logging.INFO, f"[(pid {handler.pid})] Custom play log message"
+    )

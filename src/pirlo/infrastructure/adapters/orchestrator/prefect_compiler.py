@@ -45,9 +45,12 @@ class _PrefectTaskLogForwardHandler(logging.Handler):
     ) -> None:
         super().__init__()
         self.target_logger: logging.Logger | logging.LoggerAdapter[Any] = target_logger
+        self.pid: int = os.getpid()
 
     def emit(self, record: logging.LogRecord) -> None:
-        self.target_logger.log(record.levelno, record.getMessage())
+        self.target_logger.log(
+            record.levelno, f"[(pid {self.pid})] {record.getMessage()}"
+        )
 
 
 class PrefectCompiler(BlueprintCompiler[PrefectWorkflow]):
@@ -168,7 +171,12 @@ class PrefectCompiler(BlueprintCompiler[PrefectWorkflow]):
                             masked_inputs: dict[str, Any] = mask_sensitive_data(
                                 dict(kwargs)
                             )
-                            task_logger.info("Play START | inputs=%s", masked_inputs)
+                            worker_pid: int = os.getpid()
+                            task_logger.info(
+                                "[(pid %d)] Play START | inputs=%s",
+                                worker_pid,
+                                masked_inputs,
+                            )
                             start_perf: float = time.perf_counter()
                             try:
                                 try:
@@ -222,7 +230,9 @@ class PrefectCompiler(BlueprintCompiler[PrefectWorkflow]):
 
                                 # Executes execute() for Play with stdio captured to task_logger
                                 with capture_play_stdio(
-                                    on_line=task_logger.info,
+                                    on_line=lambda line: task_logger.info(
+                                        "[(pid %d)] %s", worker_pid, line
+                                    ),
                                     passthrough=not show_logs,
                                 ):
                                     play_result: Any = await instance.execute(
@@ -240,7 +250,8 @@ class PrefectCompiler(BlueprintCompiler[PrefectWorkflow]):
                                     output_repr = output_repr[:197] + "..."
 
                                 task_logger.info(
-                                    "Play SUCCESS | duration=%.3fs | output=%s",
+                                    "[(pid %d)] Play SUCCESS | duration=%.3fs | output=%s",
+                                    worker_pid,
                                     elapsed,
                                     output_repr,
                                 )
@@ -248,7 +259,8 @@ class PrefectCompiler(BlueprintCompiler[PrefectWorkflow]):
                             except Exception as exc:
                                 elapsed = time.perf_counter() - start_perf
                                 task_logger.exception(
-                                    "Play FAILED | duration=%.3fs | error=%s",
+                                    "[(pid %d)] Play FAILED | duration=%.3fs | error=%s",
+                                    worker_pid,
                                     elapsed,
                                     type(exc).__name__,
                                 )

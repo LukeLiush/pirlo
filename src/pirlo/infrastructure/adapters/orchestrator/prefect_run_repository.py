@@ -304,12 +304,6 @@ class PrefectRunRepository(RunRepository):
         last_saved_ts: datetime | None = None
         seen_ids_at_last_ts: set[str] = set()
 
-        prefix: str = (
-            f"[{run.run_id}/{target_play.play_id}]"
-            if target_play
-            else f"[{run.run_id}]"
-        )
-
         def _format_log_entry(raw_msg: str, ts: datetime, lvl: int) -> list[str]:
             lvl_name: str = logging.getLevelName(lvl)
             lines: list[str] = raw_msg.splitlines() or [""]
@@ -326,10 +320,27 @@ class PrefectRunRepository(RunRepository):
                     "",
                     clean_msg,
                 )
+                pid_match = re.search(r"\(pid\s+(\d+)\)", clean_msg)
+                extracted_pid = pid_match.group(1) if pid_match else None
+
                 clean_msg = re.sub(
                     r"^\[[\w\-#.:/]+(?:\s+\(pid\s+\d+\))?\]\s+", "", clean_msg
                 )
-                res.append(f"{formatted_ts} [{lvl_name}] {prefix} {clean_msg}")
+                clean_msg = re.sub(r"^\[\(pid\s+\d+\)\]\s*", "", clean_msg)
+
+                if target_play:
+                    line_prefix = (
+                        f"[{run.run_id}/{target_play.play_id} (pid {extracted_pid})]"
+                        if extracted_pid
+                        else f"[{run.run_id}/{target_play.play_id}]"
+                    )
+                else:
+                    line_prefix = (
+                        f"[{run.run_id} (pid {extracted_pid})]"
+                        if extracted_pid
+                        else f"[{run.run_id}]"
+                    )
+                res.append(f"{formatted_ts} [{lvl_name}] {line_prefix} {clean_msg}")
             return res
 
         if target_play and self._log_cache.is_cached(
