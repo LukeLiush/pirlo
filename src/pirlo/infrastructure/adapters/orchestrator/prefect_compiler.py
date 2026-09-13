@@ -41,16 +41,26 @@ class _PrefectTaskLogForwardHandler(logging.Handler):
     """Forwards standard logging.LogRecord objects to a Prefect task runner logger."""
 
     def __init__(
-        self, target_logger: logging.Logger | logging.LoggerAdapter[Any]
+        self,
+        target_logger: logging.Logger | logging.LoggerAdapter[Any],
+        envelope: Any | None = None,
     ) -> None:
         super().__init__()
+        from pirlo.core.ports.log_envelope import LogEnvelope
+        from pirlo.infrastructure.services.log_formatter import JsonLogEnvelope
+
         self.target_logger: logging.Logger | logging.LoggerAdapter[Any] = target_logger
+        self.envelope: LogEnvelope = envelope or JsonLogEnvelope()
         self.pid: int = os.getpid()
 
     def emit(self, record: logging.LogRecord) -> None:
-        self.target_logger.log(
-            record.levelno, f"[(pid {self.pid})] {record.getMessage()}"
+        from pirlo.core.ports.log_envelope import LogMetadata
+
+        payload: str = self.envelope.pack(
+            record.getMessage(),
+            metadata=LogMetadata(pid=self.pid),
         )
+        self.target_logger.log(record.levelno, payload)
 
 
 class PrefectCompiler(BlueprintCompiler[PrefectWorkflow]):
@@ -171,10 +181,20 @@ class PrefectCompiler(BlueprintCompiler[PrefectWorkflow]):
                             masked_inputs: dict[str, Any] = mask_sensitive_data(
                                 dict(kwargs)
                             )
+                            from pirlo.core.ports.log_envelope import (
+                                LogEnvelope,
+                                LogMetadata,
+                            )
+                            from pirlo.infrastructure.services.log_formatter import (
+                                JsonLogEnvelope,
+                            )
+
                             worker_pid: int = os.getpid()
+                            envelope: LogEnvelope = JsonLogEnvelope()
+                            worker_meta: LogMetadata = LogMetadata(pid=worker_pid)
+
                             task_logger.info(
-                                "[(pid %d)] Play START | inputs=%s",
-                                worker_pid,
+                                envelope.pack("Play START | inputs=%s", worker_meta),
                                 masked_inputs,
                             )
                             start_perf: float = time.perf_counter()
@@ -231,7 +251,7 @@ class PrefectCompiler(BlueprintCompiler[PrefectWorkflow]):
                                 # Executes execute() for Play with stdio captured to task_logger
                                 with capture_play_stdio(
                                     on_line=lambda line: task_logger.info(
-                                        "[(pid %d)] %s", worker_pid, line
+                                        "%s", envelope.pack(line, worker_meta)
                                     ),
                                     passthrough=not show_logs,
                                 ):
@@ -250,8 +270,10 @@ class PrefectCompiler(BlueprintCompiler[PrefectWorkflow]):
                                     output_repr = output_repr[:197] + "..."
 
                                 task_logger.info(
-                                    "[(pid %d)] Play SUCCESS | duration=%.3fs | output=%s",
-                                    worker_pid,
+                                    envelope.pack(
+                                        "Play SUCCESS | duration=%.3fs | output=%s",
+                                        worker_meta,
+                                    ),
                                     elapsed,
                                     output_repr,
                                 )
@@ -259,8 +281,10 @@ class PrefectCompiler(BlueprintCompiler[PrefectWorkflow]):
                             except Exception as exc:
                                 elapsed = time.perf_counter() - start_perf
                                 task_logger.exception(
-                                    "[(pid %d)] Play FAILED | duration=%.3fs | error=%s",
-                                    worker_pid,
+                                    envelope.pack(
+                                        "Play FAILED | duration=%.3fs | error=%s",
+                                        worker_meta,
+                                    ),
                                     elapsed,
                                     type(exc).__name__,
                                 )

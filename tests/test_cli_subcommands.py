@@ -43,5 +43,5 @@ async def test_subcommand_cli_execution(monkeypatch, tmp_path):
         assert result is not None
         mock_run.assert_called_once()
         blueprint = mock_run.call_args[0][0]
-        assert blueprint.name == "MockSubcommandPlay"
+        assert blueprint.name == "mock"
         assert blueprint.nodes[0].static_kwargs["task"] == "Search Google"

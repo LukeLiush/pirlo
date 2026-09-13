@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import re
 import uuid
 from collections.abc import AsyncIterator
 from datetime import datetime
@@ -75,12 +74,16 @@ class PrefectRunRepository(RunRepository):
         self,
         server_url: str | None = None,
         log_cache: PlayLogCache | None = None,
+        formatter: Any | None = None,
     ) -> None:
+        from pirlo.infrastructure.services.log_formatter import PlayLogFormatter
+
         self._settings: PrefectServerSettings = PrefectServerSettings.resolve(
             server_url
         )
         self._workspace: Path = get_workspace_path()
         self._log_cache: PlayLogCache = log_cache or PlayLogCache(self._workspace)
+        self._formatter: PlayLogFormatter = formatter or PlayLogFormatter()
 
     async def list_runs(
         self,
@@ -301,47 +304,15 @@ class PrefectRunRepository(RunRepository):
                     yield f"  • {run_id}/{p.play_id} (status: {p.status.value})"
                 return
 
+        from pirlo.core.ports.log_envelope import LogMetadata
+
         last_saved_ts: datetime | None = None
         seen_ids_at_last_ts: set[str] = set()
 
-        def _format_log_entry(raw_msg: str, ts: datetime, lvl: int) -> list[str]:
-            lvl_name: str = logging.getLevelName(lvl)
-            lines: list[str] = raw_msg.splitlines() or [""]
-            res: list[str] = []
-            formatted_ts: str = (
-                ts.astimezone().strftime("%Y-%m-%d %H:%M:%S%z")
-                if ts.tzinfo is not None
-                else ts.strftime("%Y-%m-%d %H:%M:%S%z")
-            )
-            for line in lines:
-                clean_msg: str = line
-                clean_msg = re.sub(
-                    r"^(?:\d{4}-\d{2}-\d{2}\s+)?\d{2}:\d{2}:\d{2}(?:[+-]\d{4})?\s+",
-                    "",
-                    clean_msg,
-                )
-                pid_match = re.search(r"\(pid\s+(\d+)\)", clean_msg)
-                extracted_pid = pid_match.group(1) if pid_match else None
-
-                clean_msg = re.sub(
-                    r"^\[[\w\-#.:/]+(?:\s+\(pid\s+\d+\))?\]\s+", "", clean_msg
-                )
-                clean_msg = re.sub(r"^\[\(pid\s+\d+\)\]\s*", "", clean_msg)
-
-                if target_play:
-                    line_prefix = (
-                        f"[{run.run_id}/{target_play.play_id} (pid {extracted_pid})]"
-                        if extracted_pid
-                        else f"[{run.run_id}/{target_play.play_id}]"
-                    )
-                else:
-                    line_prefix = (
-                        f"[{run.run_id} (pid {extracted_pid})]"
-                        if extracted_pid
-                        else f"[{run.run_id}]"
-                    )
-                res.append(f"{formatted_ts} [{lvl_name}] {line_prefix} {clean_msg}")
-            return res
+        explicit_meta: LogMetadata = LogMetadata(
+            run_id=run.run_id,
+            play_id=target_play.play_id if target_play else None,
+        )
 
         if target_play and self._log_cache.is_cached(
             run.playbook, run.run_id, target_play.play_id
@@ -421,9 +392,14 @@ class PrefectRunRepository(RunRepository):
                     for log in logs:
                         if str(log.id) not in seen_ids_at_last_ts:
                             new_logs_count += 1
-                            for line_formatted in _format_log_entry(
-                                log.message, log.timestamp, log.level
-                            ):
+                            lines: list[str] = log.message.splitlines() or [""]
+                            for line in lines:
+                                line_formatted: str = self._formatter.format_line(
+                                    raw_message=line,
+                                    timestamp=log.timestamp,
+                                    level_name=logging.getLevelName(log.level),
+                                    explicit_metadata=explicit_meta,
+                                )
                                 yield line_formatted
                                 if target_play:
                                     self._log_cache.append(
@@ -466,9 +442,14 @@ class PrefectRunRepository(RunRepository):
                     )
                     for log in more_logs:
                         if str(log.id) not in seen_ids_at_last_ts:
-                            for line_formatted in _format_log_entry(
-                                log.message, log.timestamp, log.level
-                            ):
+                            lines = log.message.splitlines() or [""]
+                            for line in lines:
+                                line_formatted = self._formatter.format_line(
+                                    raw_message=line,
+                                    timestamp=log.timestamp,
+                                    level_name=logging.getLevelName(log.level),
+                                    explicit_metadata=explicit_meta,
+                                )
                                 yield line_formatted
                                 if target_play:
                                     self._log_cache.append(

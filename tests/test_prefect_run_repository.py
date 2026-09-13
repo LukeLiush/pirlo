@@ -295,7 +295,7 @@ class TestPrefectRunRepository(unittest.IsolatedAsyncioTestCase):
         mock_log: MagicMock = MagicMock()
         mock_log.id = uuid.uuid4()
         mock_log.level = 20  # INFO
-        mock_log.message = "[(pid 45678)] Play START | inputs={'key': 'val'}"
+        mock_log.message = "[meta:{\"pid\":45678}] Play START | inputs={'key': 'val'}"
         mock_log.timestamp = now
 
         mock_flow_run: MagicMock = MagicMock(id=fr_uuid)

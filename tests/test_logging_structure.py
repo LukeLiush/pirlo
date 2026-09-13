@@ -212,13 +212,13 @@ def test_pirlo_console_formatter():
     line = formatter.format(record)
     assert f"[INFO] [run1234/task5678 (pid {pid})] Task completed" in line
 
-    # 4. Strips embedded [(pid 9999)] tag without duplicating PID in output
+    # 4. Strips embedded [meta:{"pid":9999}] tag without duplicating PID in output
     record_with_pid_tag = logger.makeRecord(
         name="test_console_logger",
         level=logging.INFO,
         fn="test.py",
         lno=35,
-        msg="[(pid 9999)] Task completed with embedded tag",
+        msg='[meta:{"pid":9999}] Task completed with embedded tag',
         args=(),
         exc_info=None,
         extra={"flow_run_name": "run1234", "task_run_name": "task5678"},
@@ -228,7 +228,7 @@ def test_pirlo_console_formatter():
         f"[INFO] [run1234/task5678 (pid {pid})] Task completed with embedded tag"
         in line_with_pid_tag
     )
-    assert "[(pid 9999)]" not in line_with_pid_tag
+    assert '[meta:{"pid":9999}]' not in line_with_pid_tag
 
 
 def test_setup_pirlo_logging_neutralization():

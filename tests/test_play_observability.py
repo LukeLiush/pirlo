@@ -214,11 +214,17 @@ async def test_prefect_compiler_lifecycle_logging():
     assert "Play SUCCESS | duration=" in full_log_text
     assert "SampleOutput(message='Hello, admin!')" in full_log_text
 
-    # Verify every line has the standardized [run_id/play_id] prefix
+    # Verify every line has the standardized [run_id/play_id (pid PID)] prefix
     assert len(logs) > 0
-    expected_prefix = f"[{run_id}/{play_run.play_id}]"
+    expected_target = f"{run_id}/{play_run.play_id}"
     for line in logs:
-        assert expected_prefix in line, f"Line missing prefix {expected_prefix}: {line}"
+        assert expected_target in line, f"Line missing target {expected_target}: {line}"
+        if (
+            "Play START" in line
+            or "Play SUCCESS" in line
+            or "Executing sample play" in line
+        ):
+            assert "(pid " in line, f"Task line missing pid tag: {line}"
 
 
 def test_get_log_level_resolution(monkeypatch: pytest.MonkeyPatch):

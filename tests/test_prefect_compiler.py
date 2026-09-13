@@ -79,5 +79,5 @@ def test_prefect_task_log_forward_handler():
     )
     handler.emit(record)
     mock_logger.log.assert_called_once_with(
-        logging.INFO, f"[(pid {handler.pid})] Custom play log message"
+        logging.INFO, f'[meta:{{"pid":{handler.pid}}}] Custom play log message'
     )

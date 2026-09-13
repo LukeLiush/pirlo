@@ -51,7 +51,7 @@ def test_extract_blueprint():
     workflow = CheckoutDAGPlay()
     blueprint: PlayBlueprint = workflow.extract_blueprint()
 
-    assert blueprint.name == "CheckoutDAGPlay"
+    assert blueprint.name == "test_checkout_dag"
     assert len(blueprint.nodes) == 3
 
     node_names = [n.playbook_name for n in blueprint.nodes]

@@ -82,7 +82,7 @@ def test_pull_extractor_strategy():
     """Verify that PullBasedPlayExtractorStrategy resolves the full DAG backwards."""
     blueprint: PlayBlueprint = BlueprintExtractor.extract_from_play(MockAlertPlay)
 
-    assert blueprint.name == "MockAlertPlay"
+    assert blueprint.name == "test_alert"
     assert len(blueprint.nodes) == 3
 
     node_names = [n.playbook_name for n in blueprint.nodes]

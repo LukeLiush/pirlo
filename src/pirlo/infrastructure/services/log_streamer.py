@@ -52,6 +52,7 @@ AnsiStrippingFormatter = PirloLogFormatter
 
 
 import contextvars
+from datetime import UTC
 
 _current_stdio_handler: contextvars.ContextVar[Callable[[str], None] | None] = (
     contextvars.ContextVar("_current_stdio_handler", default=None)
@@ -74,16 +75,21 @@ _original_global_stdout: Any = None
 
 
 class PirloConsoleFormatter(logging.Formatter):
-    """Formats console log records with consistent [run_id/play_id] prefix matching pirlo run log."""
+    """Formats console log records using shared PlayLogFormatter."""
+
+    def __init__(self, formatter: Any | None = None) -> None:
+        super().__init__()
+        from pirlo.infrastructure.services.log_formatter import PlayLogFormatter
+
+        self._formatter: PlayLogFormatter = formatter or PlayLogFormatter()
 
     def format(self, record: logging.LogRecord) -> str:
         from pirlo.core.logging_context import (
             get_current_play_id,
             get_current_run_id,
         )
+        from pirlo.core.ports.log_envelope import LogMetadata
 
-        asctime: str = self.formatTime(record, "%Y-%m-%d %H:%M:%S%z")
-        levelname: str = record.levelname
         flow_run_name: str | None = (
             getattr(record, "flow_run_name", None) or get_current_run_id()
         )
@@ -112,38 +118,27 @@ class PirloConsoleFormatter(logging.Formatter):
                                 flow_run_name = flow_run.name
 
         import os
+        from datetime import datetime
 
-        pid: int = os.getpid()
-
-        if flow_run_name and task_run_name:
-            prefix: str = f"[{flow_run_name}/{task_run_name} (pid {pid})]"
-        elif flow_run_name:
-            prefix = f"[{flow_run_name} (pid {pid})]"
-        elif task_run_name:
-            prefix = f"[{task_run_name} (pid {pid})]"
-        else:
-            prefix = ""
+        record_dt: datetime = datetime.fromtimestamp(record.created, tz=UTC)
+        meta: LogMetadata = LogMetadata(
+            run_id=flow_run_name,
+            play_id=task_run_name,
+            pid=os.getpid(),
+        )
 
         msg: str = record.getMessage()
-        clean_msg: str = msg
-        clean_msg = re.sub(r"^\d{2}:\d{2}:\d{2}\s+", "", clean_msg)
-        clean_msg = re.sub(r"^\[[\w\-#.:/]+(?:\s+\(pid\s+\d+\))?\]\s+", "", clean_msg)
-        clean_msg = re.sub(r"^\[\(pid\s+\d+\)\]\s*", "", clean_msg)
-
-        header: str = (
-            f"{asctime} [{levelname}] {prefix}".rstrip()
-            if prefix
-            else f"{asctime} [{levelname}]"
-        )
-        lines: list[str] = clean_msg.splitlines()
-        if not lines:
-            formatted: str = header
-        elif len(lines) == 1:
-            formatted = f"{header} {lines[0]}"
-        else:
-            formatted = "\n".join(
-                f"{header} {line}" if line else header for line in lines
+        lines: list[str] = msg.splitlines() or [""]
+        formatted_lines: list[str] = [
+            self._formatter.format_line(
+                raw_message=line,
+                timestamp=record_dt,
+                level_name=record.levelname,
+                explicit_metadata=meta,
             )
+            for line in lines
+        ]
+        formatted: str = "\n".join(formatted_lines)
 
         if record.exc_info and not record.exc_text:
             record.exc_text = self.formatException(record.exc_info)

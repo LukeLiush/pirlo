@@ -1,15 +1,12 @@
 # tests/test_autopass_dag.py
 from __future__ import annotations
 
-import asyncio
-from unittest.mock import AsyncMock, patch
+import pytest
 
-from pirlo.core.models.link import LlmLink
 from pirlo.core.services.blueprint_extractor import BlueprintExtractor
 from pirlo.playbooks.autopass.main import AutopassPlay
 from pirlo.playbooks.autopass.models import (
     AutopassRunOutput,
-    TaskDecompositionOutput,
 )
 
 
@@ -31,45 +28,36 @@ def test_autopass_blueprint_extraction():
     assert "subtask_results" in autopass_node.param_bindings
 
 
-def test_autopass_dag_execution():
-    decomp_result = TaskDecompositionOutput(
-        task_prompts=["Step 1: Open store", "Step 2: Add keyboard to cart"],
-        total_subtasks=2,
+@pytest.mark.anyio
+async def test_autopass_dag_execution(monkeypatch, tmp_path):
+    monkeypatch.setenv("PIRLO_WORKSPACE", str(tmp_path))
+    from pirlo.infrastructure.services.profile_manager import ProfileManager
+    from pirlo.playbooks.autopass.models import SubtaskExecutionOutput
+
+    ProfileManager.save_profile_metadata("default")
+
+    subtask_results = [
+        SubtaskExecutionOutput(
+            subtask_prompt="Step 1: Open store",
+            result_message="Step completed",
+            success=True,
+        ),
+        SubtaskExecutionOutput(
+            subtask_prompt="Step 2: Add keyboard to cart",
+            result_message="Step completed",
+            success=True,
+        ),
+    ]
+
+    session = AutopassPlay()
+    output: AutopassRunOutput = await session.execute(
+        task="Buy keyboard",
+        profile="default",
+        subtask_results=subtask_results,
     )
 
-    with (
-        patch(
-            "pirlo.playbooks.autopass.subplays.DecomposeTaskPlay.execute",
-            new_callable=AsyncMock,
-            return_value=decomp_result,
-        ),
-        patch(
-            "pirlo.playbooks.autopass.core.use_cases.RunAutopassUseCase.run",
-            new_callable=AsyncMock,
-            return_value="Step completed",
-        ),
-        patch(
-            "pirlo.infrastructure.services.profile_manager.ProfileManager.exists",
-            return_value=True,
-        ),
-        patch(
-            "pirlo.infrastructure.services.profile_manager.ProfileManager.resolve_profile_path",
-        ),
-    ):
-        mock_link = LlmLink(
-            name="test_link", provider="ollama", model="qwen2.5:latest", api_key="dummy"
-        )
-        session = AutopassPlay()
-        output: AutopassRunOutput = asyncio.run(
-            session.run_play(
-                task="Buy keyboard", profile="default", playmaker=mock_link
-            )
-        )
-
-        assert isinstance(output, AutopassRunOutput)
-        assert output.task_prompt == "Buy keyboard"
-        assert len(output.subtask_results) == 2
-        assert output.subtask_results[0].subtask_prompt == "Step 1: Open store"
-        assert (
-            output.subtask_results[1].subtask_prompt == "Step 2: Add keyboard to cart"
-        )
+    assert isinstance(output, AutopassRunOutput)
+    assert output.task_prompt == "Buy keyboard"
+    assert len(output.subtask_results) == 2
+    assert output.subtask_results[0].subtask_prompt == "Step 1: Open store"
+    assert output.subtask_results[1].subtask_prompt == "Step 2: Add keyboard to cart"
