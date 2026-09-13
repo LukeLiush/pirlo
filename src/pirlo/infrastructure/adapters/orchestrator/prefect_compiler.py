@@ -71,7 +71,7 @@ class PrefectCompiler(BlueprintCompiler[PrefectWorkflow]):
             name=blueprint.name,
             flow_run_name=active_run_id,
             validate_parameters=self.validate_parameters,
-            task_runner=ProcessPoolTaskRunner(max_workers=os.cpu_count())
+            task_runner=ProcessPoolTaskRunner(max_workers=os.cpu_count()),  # type: ignore[arg-type]
         )
         async def prefect_master_flow(
             **workflow_kwargs: object,
@@ -129,7 +129,10 @@ class PrefectCompiler(BlueprintCompiler[PrefectWorkflow]):
                     async def _inner_task_fn(
                         **kwargs: object,
                     ) -> PlayOutput:
-                        from pirlo.infrastructure.services.log_streamer import setup_pirlo_logging
+                        from pirlo.infrastructure.services.log_streamer import (
+                            setup_pirlo_logging,
+                        )
+
                         setup_pirlo_logging(show_logs=show_logs)
 
                         active_play_name = getattr(target_cls, "play_name", node_name)
@@ -389,7 +392,6 @@ class PrefectCompiler(BlueprintCompiler[PrefectWorkflow]):
 
     def _resolve_play_class(self, play_name: str) -> type[Any]:
         import contextlib
-        import sys
 
         # 1. Search sys.modules for loaded Play subclasses
         for module in list(sys.modules.values()):

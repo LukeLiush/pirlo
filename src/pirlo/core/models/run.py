@@ -90,19 +90,23 @@ class LogCursor(BaseModel):
     @classmethod
     def from_file(cls, path: Path) -> LogCursor | None:
         """Reads and parses a .cursor file, supporting both JSON and legacy plain ISO format."""
+        import contextlib
         import json
+
+        from pydantic import ValidationError
 
         if not path.exists():
             return None
         content: str = path.read_text(encoding="utf-8").strip()
         if not content:
             return None
-        try:
+        with contextlib.suppress(
+            json.JSONDecodeError, ValidationError, ValueError, TypeError
+        ):
             data: Any = json.loads(content)
             if isinstance(data, dict) and "last_timestamp_utc" in data:
                 return cls.model_validate(data)
-        except Exception:
-            pass
+
         # Fallback to legacy raw ISO timestamp string
         try:
             dt: datetime = datetime.fromisoformat(content)
@@ -116,7 +120,7 @@ class LogCursor(BaseModel):
                 last_timestamp_local=local_str,
                 lines_count=0,
             )
-        except Exception:
+        except (ValueError, TypeError):
             return None
 
     def save_to_file(self, path: Path) -> None:
