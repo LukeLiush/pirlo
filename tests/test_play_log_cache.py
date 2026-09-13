@@ -1,8 +1,8 @@
-from datetime import datetime, timezone
 import json
-from pathlib import Path
 import tempfile
 import unittest
+from datetime import UTC, datetime
+from pathlib import Path
 
 from pirlo.core.models.run import LogCursor
 from pirlo.infrastructure.services.play_log_cache import PlayLogCache
@@ -21,7 +21,7 @@ class TestPlayLogCache(unittest.TestCase):
         playbook = "ecommerce"
         run_id = "run123"
         play_id = "login#v1.0:abc"
-        ts = datetime(2026, 9, 12, 17, 0, 0, tzinfo=timezone.utc)
+        ts = datetime(2026, 9, 12, 17, 0, 0, tzinfo=UTC)
 
         self.cache.append(playbook, run_id, play_id, "Line 1", ts, log_id="id-1")
         self.cache.append(playbook, run_id, play_id, "Line 2", ts, log_id="id-2")
@@ -60,6 +60,6 @@ class TestPlayLogCache(unittest.TestCase):
         self.assertIsNotNone(legacy_parsed)
         self.assertEqual(
             legacy_parsed.last_timestamp_utc,
-            datetime(2026, 9, 13, 0, 11, 21, 71416, tzinfo=timezone.utc),
+            datetime(2026, 9, 13, 0, 11, 21, 71416, tzinfo=UTC),
         )
         self.assertEqual(legacy_parsed.lines_count, 0)

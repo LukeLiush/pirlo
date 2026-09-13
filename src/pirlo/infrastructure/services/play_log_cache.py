@@ -58,8 +58,8 @@ class PlayLogCache:
         cursor_path: Path = self.get_cursor_path(playbook, run_id, play_id)
         current_cursor: LogCursor | None = LogCursor.from_file(cursor_path)
         current_lines_count: int = (
-            (current_cursor.lines_count if current_cursor else 0) + 1
-        )
+            current_cursor.lines_count if current_cursor else 0
+        ) + 1
 
         local_ts_str: str = (
             ts.astimezone().strftime("%Y-%m-%d %H:%M:%S%z")
