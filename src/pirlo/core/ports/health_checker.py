@@ -38,7 +38,9 @@ class PrefectHealthChecker(ServiceHealthChecker):
     @staticmethod
     def check_url(url: str, timeout_seconds: float = 0.3) -> bool:
         """Fast endpoint health probe for any Prefect server API URL."""
-        endpoint = f"{url.rstrip('/')}/health"
+        clean_url = url.rstrip("/")
+        api_url = clean_url if clean_url.endswith("/api") else f"{clean_url}/api"
+        endpoint = f"{api_url}/health"
         try:
             res = httpx.get(endpoint, timeout=timeout_seconds)
             return res.status_code == 200

@@ -85,6 +85,7 @@ def main() -> None:
         print("Usage: pirlo <command> [<args>]")
         print("\nAvailable commands:")
         print("  link          - Manage LLM links (API keys, base URLs)")
+        print("  orchestrator  - Manage orchestrator links (Prefect, Airflow)")
         print("  profile       - Manage browser profiles (list, delete)")
         print("  run           - Manage execution run history (list, show)")
         if specs:
@@ -103,7 +104,19 @@ def main() -> None:
     command: str = sys.argv[1]
 
     # Quick dispatch for built-in non-playbook subcommands
-    if command in ("link", "profile", "run"):
+    if command in ("link", "orchestrator", "profile", "run"):
+        if command == "orchestrator":
+            from pirlo.infrastructure.adapters.cli.orchestrator_commands import (
+                orchestrator_main,
+            )
+
+            try:
+                orchestrator_main()
+            except Exception as e:  # noqa: BLE001
+                sys.stderr.write(f"Error: {e}\n")
+                sys.exit(1)
+            sys.exit(0)
+
         if command == "link":
             from pirlo.infrastructure.adapters.cli.link_commands import (
                 link_main,

@@ -10,7 +10,7 @@ from typing import Any
 
 from pirlo.core.config import get_workspace_path
 from pirlo.core.logging_context import workflow_logging_context
-from pirlo.core.models.blueprint import PlayBlueprint, PlayOutput
+from pirlo.core.models.blueprint import PlayBlueprint
 from pirlo.core.models.play_invocation import PlayInvocation
 from pirlo.core.models.run import PreparedRun, RunStatus
 from pirlo.core.models.run_result import RunResult
@@ -72,6 +72,10 @@ class CliPlayRunner:
             resolved_play_name
         )
 
+        parsed_args, _ = play_parser.parse_known_args(play_invocation.play_args)
+        routine: str | None = getattr(parsed_args, "routine", None)
+        orchestrator: str | None = getattr(parsed_args, "orchestrator", None)
+
         parameter_resolver: ParameterResolver = ParameterResolver.create(
             playbook_parser=play_parser,
             playbook_invocation=play_invocation,
@@ -89,15 +93,20 @@ class CliPlayRunner:
             playbook_invocation=play_invocation,
         )
 
-        # Step B: Instantiate play with injected TerminalPlayUI
-        play_instance: Play[Any] = play_cls(ui=TerminalPlayUI())
+        # Step B: Instantiate play with injected TerminalPlayUI and routine
+        play_instance: Play[Any] = play_cls(
+            ui=TerminalPlayUI(),
+            routine=routine,
+        )
 
-        runner_name: str = (
+        runner_name: str = orchestrator or (
             play_invocation.orchestrator_args[0]
             if play_invocation.orchestrator_args
             else "prefect"
         )
-        runner_instance: PlayRunner = PlayRunnerFactory.get_runner(runner_name)
+        runner_instance: PlayRunner = PlayRunnerFactory.get_runner(
+            runner_name, orchestrator_name=orchestrator
+        )
 
         show_logs: bool = any(arg in sys.argv for arg in ("-l", "--log"))
         setup_pirlo_logging(show_logs=show_logs)
@@ -112,15 +121,60 @@ class CliPlayRunner:
                     play_cls,
                     user_kwargs=prepared_run.parameters,
                 )
+                blueprint.routine = routine
                 try:
-                    raw_result: PlayOutput | None = await runner_instance.run(
+                    raw_result: Any = await runner_instance.run(
                         blueprint,
+                        routine=routine,
                         force=force,
                         show_logs=show_logs,
                         **prepared_run.parameters,
                     )
                     elapsed: float = time.perf_counter() - start_perf
-                    dashboard_url: str | None = runner_instance.get_dashboard_url(
+
+                    from pirlo.core.models.orchestrator import RoutineRegistration
+
+                    if isinstance(raw_result, RoutineRegistration):
+                        from rich import box
+                        from rich.panel import Panel
+
+                        dashboard_url: str | None = getattr(
+                            raw_result, "dashboard_url", None
+                        )
+                        lines: list[str] = [
+                            f" [bold]Play:[/bold]          {raw_result.play_name}",
+                            f" [bold]Routine:[/bold]       {raw_result.routine}",
+                            f" [bold]Registration:[/bold]  {raw_result.registration_id}",
+                            f" [bold]Orchestrator:[/bold]  {raw_result.orchestrator}",
+                        ]
+                        if hasattr(raw_result, "work_pool") and raw_result.work_pool:
+                            lines.append(
+                                f" [bold]Work Pool:[/bold]     {raw_result.work_pool}"
+                            )
+                        if dashboard_url:
+                            lines.extend(
+                                [
+                                    "",
+                                    f" [bold cyan]Dashboard:[/bold cyan]     {dashboard_url}",
+                                ]
+                            )
+
+                        if isinstance(play_instance.ui, TerminalPlayUI):
+                            play_instance.ui.console.print(
+                                Panel(
+                                    "\n".join(lines),
+                                    title="[bold green]⚽ Routine Registered[/bold green]",
+                                    border_style="green",
+                                    box=box.ROUNDED,
+                                )
+                            )
+                        return RunResult(
+                            run_id=prepared_run.run_id,
+                            status=RunStatus.COMPLETED,
+                            data=raw_result,
+                        )
+
+                    dashboard_url = runner_instance.get_dashboard_url(
                         prepared_run.run_id
                     )
 

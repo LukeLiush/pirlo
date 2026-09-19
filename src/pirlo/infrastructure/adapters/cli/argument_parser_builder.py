@@ -232,6 +232,25 @@ class ArgumentParserBuilder:
             default=False,
             help="Bypass cached results and force complete re-execution",
         )
+        parser.add_argument(
+            "-r",
+            "--routine",
+            type=str,
+            default=None,
+            metavar="CRON_OR_PRESET",
+            help=(
+                "Execution routine as a cron expression (e.g. '0 9 * * *') "
+                "or preset ('hourly', 'daily', 'weekly', 'monthly'). "
+                "If omitted (default is None), executes immediately as a one-time run."
+            ),
+        )
+        parser.add_argument(
+            "--orchestrator",
+            type=str,
+            default=None,
+            metavar="NAME",
+            help="Target orchestrator link name. If omitted, defaults to local ephemeral Prefect.",
+        )
         return parser
 
     @staticmethod

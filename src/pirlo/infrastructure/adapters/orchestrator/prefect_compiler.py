@@ -181,6 +181,8 @@ class PrefectCompiler(BlueprintCompiler[PrefectWorkflow]):
                             masked_inputs: dict[str, Any] = mask_sensitive_data(
                                 dict(kwargs)
                             )
+                            from prefect.context import TaskRunContext
+
                             from pirlo.core.ports.log_envelope import (
                                 LogEnvelope,
                                 LogMetadata,
@@ -189,16 +191,47 @@ class PrefectCompiler(BlueprintCompiler[PrefectWorkflow]):
                                 JsonLogEnvelope,
                             )
 
+                            ctx = TaskRunContext.get()
+                            current_attempt: int = (
+                                ctx.task_run.run_count if ctx and ctx.task_run else 1
+                            )
+                            play_retries: int = getattr(target_cls, "play_retries", 0)
+                            play_retry_delay: int = getattr(
+                                target_cls, "play_retry_delay", 0
+                            )
+                            play_timeout: int | None = getattr(
+                                target_cls, "play_timeout", None
+                            )
+
                             worker_pid: int = os.getpid()
                             envelope: LogEnvelope = JsonLogEnvelope()
-                            worker_meta: LogMetadata = LogMetadata(pid=worker_pid)
+                            worker_meta: LogMetadata = LogMetadata(
+                                pid=worker_pid,
+                                run_id=active_run_id,
+                                play_id=identity.full_id,
+                                play_name=active_play_name,
+                                play_version=play_version,
+                                attempt=current_attempt,
+                                max_retries=play_retries,
+                                retry_delay=play_retry_delay,
+                                timeout=play_timeout,
+                            )
 
+                            attempt_tag: str = (
+                                f" | attempt={current_attempt}/{play_retries + 1}"
+                                if play_retries
+                                else ""
+                            )
                             task_logger.info(
-                                envelope.pack("Play START | inputs=%s", worker_meta),
+                                envelope.pack(
+                                    f"Play START{attempt_tag} | inputs=%s",
+                                    worker_meta,
+                                ),
                                 masked_inputs,
                             )
                             start_perf: float = time.perf_counter()
                             try:
+                                blueprint_routine = getattr(blueprint, "routine", None)
                                 try:
                                     instance: Any = target_cls(
                                         ui=TerminalPlayUI(
@@ -206,6 +239,7 @@ class PrefectCompiler(BlueprintCompiler[PrefectWorkflow]):
                                             run_id=active_run_id,
                                         ),
                                         play_id=identity.full_id,
+                                        routine=blueprint_routine,
                                     )
                                 except TypeError:
                                     try:
@@ -213,10 +247,19 @@ class PrefectCompiler(BlueprintCompiler[PrefectWorkflow]):
                                             ui=TerminalPlayUI(
                                                 play_name=identity.short_id,
                                                 run_id=active_run_id,
-                                            )
+                                            ),
+                                            play_id=identity.full_id,
                                         )
                                     except TypeError:
-                                        instance = target_cls()
+                                        try:
+                                            instance = target_cls(
+                                                ui=TerminalPlayUI(
+                                                    play_name=identity.short_id,
+                                                    run_id=active_run_id,
+                                                )
+                                            )
+                                        except TypeError:
+                                            instance = target_cls()
 
                                 exec_kwargs: dict[str, object] = dict(kwargs)
                                 import inspect
@@ -271,7 +314,7 @@ class PrefectCompiler(BlueprintCompiler[PrefectWorkflow]):
 
                                 task_logger.info(
                                     envelope.pack(
-                                        "Play SUCCESS | duration=%.3fs | output=%s",
+                                        f"Play SUCCESS{attempt_tag} | duration=%.3fs | output=%s",
                                         worker_meta,
                                     ),
                                     elapsed,
@@ -280,9 +323,14 @@ class PrefectCompiler(BlueprintCompiler[PrefectWorkflow]):
                                 return output_data
                             except Exception as exc:
                                 elapsed = time.perf_counter() - start_perf
+                                retry_tag = (
+                                    f" | will_retry_in={play_retry_delay}s"
+                                    if current_attempt <= play_retries
+                                    else ""
+                                )
                                 task_logger.exception(
                                     envelope.pack(
-                                        "Play FAILED | duration=%.3fs | error=%s",
+                                        f"Play FAILED{attempt_tag}{retry_tag} | duration=%.3fs | error=%s",
                                         worker_meta,
                                     ),
                                     elapsed,
@@ -308,12 +356,19 @@ class PrefectCompiler(BlueprintCompiler[PrefectWorkflow]):
                         )
                         return identity.short_id
 
+                    task_retries: int = getattr(target_cls, "play_retries", 0)
+                    task_retry_delay: int = getattr(target_cls, "play_retry_delay", 0)
+                    task_timeout: int | None = getattr(target_cls, "play_timeout", None)
+
                     _inner_task_fn.__name__ = f"execute_{task_play_name}"
                     _inner_task_fn.__qualname__ = f"execute_{task_play_name}"
                     return task(
                         name=f"Task: {task_play_name}",
                         task_run_name=_compute_task_run_name,
                         persist_result=True,
+                        retries=task_retries,
+                        retry_delay_seconds=task_retry_delay,
+                        timeout_seconds=task_timeout,
                     )(_inner_task_fn)
 
                 execute_play_task = _build_task_fn(

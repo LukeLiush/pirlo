@@ -2,9 +2,12 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pirlo.core.models.blueprint import PlayBlueprint, PlayOutput
+
+if TYPE_CHECKING:
+    from pirlo.core.models.orchestrator import RoutineRegistration
 
 
 class PlayRunner(ABC):
@@ -14,9 +17,13 @@ class PlayRunner(ABC):
     async def run(
         self,
         blueprint: PlayBlueprint,
+        *,
+        routine: str | None = None,
+        force: bool = False,
+        show_logs: bool = False,
         **kwargs: Any,
-    ) -> PlayOutput | None:
-        """Executes the workflow and returns the output of the terminal Play node."""
+    ) -> PlayOutput | RoutineRegistration | None:
+        """Executes the workflow immediately or registers a recurring routine."""
         raise NotImplementedError
 
     @abstractmethod

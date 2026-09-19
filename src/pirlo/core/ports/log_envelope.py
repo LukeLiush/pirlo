@@ -17,6 +17,12 @@ class LogMetadata(BaseModel):
     play_name: str | None = None
     play_version: str | None = None
 
+    # Task-level resilience & execution metadata
+    attempt: int | None = None
+    max_retries: int | None = None
+    retry_delay: int | None = None
+    timeout: int | None = None
+
 
 class UnpackedLog(NamedTuple):
     """Self-documenting result of unpacking a raw log payload into clean text and metadata."""

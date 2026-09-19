@@ -11,7 +11,7 @@ from pirlo.core.models.blueprint import ParameterValue, ProxyRef, ScalarValue
 from pirlo.core.ports.play_ui import PlayUI
 
 if TYPE_CHECKING:
-    from pirlo.core.models.blueprint import PlayBlueprint, PlayOutput
+    from pirlo.core.models.blueprint import PlayBlueprint
 
 
 class MappedParameter:
@@ -68,6 +68,7 @@ class Play[OutputT](ABC):
         self,
         ui: PlayUI | None = None,
         play_id: str | None = None,
+        routine: str | None = None,
     ) -> None:
         if ui is None:
             from pirlo.infrastructure.adapters.cli.terminal_play_ui import (
@@ -78,6 +79,7 @@ class Play[OutputT](ABC):
         else:
             self._ui = ui
         self._play_id: str | None = play_id
+        self._routine: str | None = routine
 
     @property
     def ui(self) -> PlayUI:
@@ -88,6 +90,11 @@ class Play[OutputT](ABC):
     def play_id(self) -> str | None:
         """Deterministic content-addressed idempotency ID for this execution instance."""
         return self._play_id
+
+    @property
+    def routine(self) -> str | None:
+        """The cron routine expression this play is running under, or None for immediate one-time runs."""
+        return self._routine
 
     @property
     def logger(self) -> logging.Logger:
@@ -117,6 +124,8 @@ class Play[OutputT](ABC):
         cls,
         runner: str = "prefect",
         force: bool = False,
+        routine: str | None = None,
+        orchestrator: str | None = None,
         **kwargs: ParameterValue,
     ) -> OutputT:
         """Executes the Play and all upstream dependencies via the specified runner."""
@@ -130,8 +139,10 @@ class Play[OutputT](ABC):
         blueprint: PlayBlueprint = BlueprintExtractor.extract_from_play(
             cls, user_kwargs=kwargs
         )
-        play_runner: PlayRunner = PlayRunnerFactory.get_runner(runner)
-        raw_result: PlayOutput | None = await play_runner.run(blueprint, force=force)
+        play_runner: PlayRunner = PlayRunnerFactory.get_runner(
+            runner, orchestrator_name=orchestrator
+        )
+        raw_result: Any = await play_runner.run(blueprint, force=force, routine=routine)
         return cast(OutputT, raw_result)
 
     def extract_blueprint(

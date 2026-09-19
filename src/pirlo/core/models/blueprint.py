@@ -87,6 +87,7 @@ class PlayBlueprint:
     entry_playbook: str
     output_node_id: str | None = None
     nodes: list[BlueprintNode] = field(default_factory=list)
+    routine: str | None = None
 
     @property
     def entry_play(self) -> str:
