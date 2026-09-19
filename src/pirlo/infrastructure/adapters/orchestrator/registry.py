@@ -56,24 +56,6 @@ class OrchestratorRegistry:
                             cls._plugins[engine] = obj()
 
     @classmethod
-    def register(cls, plugin: OrchestratorPlugin[Any]) -> None:
-        """Registers a plugin instance (retains engine_name lookup)."""
-        engine = getattr(plugin, "engine_name", None)
-        if not engine:
-            for base in getattr(plugin.__class__, "__orig_bases__", ()):
-                args = get_args(base)
-                if (
-                    args
-                    and isinstance(args[0], type)
-                    and issubclass(args[0], OrchestratorLink)
-                ):
-                    engine = args[0].model_fields["engine"].default
-                    break
-        if not engine:
-            engine = plugin.__class__.__name__.lower().replace("plugin", "")
-        cls._plugins[engine.lower()] = plugin
-
-    @classmethod
     def get(cls, engine_name: str) -> OrchestratorPlugin[Any]:
         """Retrieves a registered plugin by engine name."""
         cls._discover_plugins()
