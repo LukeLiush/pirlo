@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import inspect
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Annotated, Any
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from pirlo.core.models.parameters import Parameter
 
 ROUTINE_PRESETS: dict[str, str] = {
     "hourly": "0 * * * *",
@@ -18,30 +21,31 @@ class OrchestratorLink(BaseModel, ABC):
 
     model_config = ConfigDict(frozen=True)
 
-    name: str
-
-    @property
-    @abstractmethod
-    def engine(self) -> str:
-        """Subclasses MUST implement this to define their engine identifier (e.g. 'prefect')."""
-        ...
-
-    def to_dict(self) -> dict[str, str]:
-        """Serializes flat string attributes including engine, excluding None."""
-        data = {k: str(v) for k, v in self.model_dump(exclude_none=True).items()}
-        data["engine"] = self.engine
-        return data
+    name: Annotated[
+        str,
+        Parameter(
+            help="Unique link name (e.g. prod, staging)",
+            short="-n",
+        ),
+    ]
+    engine: str = ""
 
     @classmethod
-    def from_dict(cls, name: str, data: dict[str, str]) -> OrchestratorLink:
-        """Polymorphic factory resolving concrete link subclass via OrchestratorRegistry."""
-        from pirlo.infrastructure.adapters.orchestrator.registry import (
-            OrchestratorRegistry,
-        )
+    def __pydantic_init_subclass__(cls, **kwargs: Any) -> None:
+        super().__pydantic_init_subclass__(**kwargs)
+        if inspect.isabstract(cls):
+            return
 
-        engine = data.get("engine", "prefect")
-        plugin = OrchestratorRegistry.get(engine)
-        return plugin.link_cls.model_validate({"name": name, **data})
+        for field_name, field_info in cls.model_fields.items():
+            if field_name in ("name", "engine"):
+                continue
+            has_param = any(isinstance(m, Parameter) for m in field_info.metadata)
+            if not has_param:
+                raise TypeError(
+                    f"Invalid field '{field_name}' on {cls.__name__}: "
+                    f"OrchestratorLink fields must be annotated with Parameter, e.g.:\n"
+                    f"  {field_name}: Annotated[str, Parameter(help='...')] = 'default'"
+                )
 
 
 class RoutineRegistration(BaseModel, ABC):

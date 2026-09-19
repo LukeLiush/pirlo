@@ -1,24 +1,29 @@
-from pydantic import Field
+from __future__ import annotations
+
+from typing import Annotated
 
 from pirlo.core.config import DEFAULT_WORK_POOL
 from pirlo.core.models.orchestrator import OrchestratorLink, RoutineRegistration
+from pirlo.core.models.parameters import Parameter
 
 
 class PrefectLink(OrchestratorLink):
     """Prefect 3.x specific orchestrator connection."""
 
-    server_url: str = Field(
-        default="ephemeral",
-        description="Prefect API server URL or 'ephemeral' for local runs",
-    )
-    work_pool: str = Field(
-        default=DEFAULT_WORK_POOL,
-        description="Target work pool for scheduled routine deployments",
-    )
-
-    @property
-    def engine(self) -> str:
-        return "prefect"
+    server_url: Annotated[
+        str,
+        Parameter(
+            help="Prefect API server URL or 'ephemeral' for local runs",
+            short="-s",
+        ),
+    ] = "ephemeral"
+    work_pool: Annotated[
+        str,
+        Parameter(
+            help="Target work pool for scheduled routine deployments",
+            short="-w",
+        ),
+    ] = DEFAULT_WORK_POOL
 
     @property
     def is_ephemeral(self) -> bool:

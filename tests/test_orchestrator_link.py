@@ -2,12 +2,15 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from pirlo.core.config import DEFAULT_WORK_POOL
 from pirlo.core.models.orchestrator import (
     ROUTINE_PRESETS,
     OrchestratorLink,
     RoutineRegistration,
 )
+from pirlo.core.models.parameters import Parameter
 from pirlo.infrastructure.adapters.orchestrator.prefect.models import (
     PrefectLink,
     PrefectRoutineRegistration,
@@ -24,6 +27,23 @@ def test_routine_presets() -> None:
     assert ROUTINE_PRESETS["monthly"] == "0 9 1 * *"
 
 
+def test_orchestrator_link_parameter_enforcement() -> None:
+    # Subclasses with fields missing Parameter annotation should raise TypeError
+    with pytest.raises(TypeError, match="must be annotated with Parameter"):
+
+        class BadLink(OrchestratorLink):
+            bad_field: str = "foo"
+
+    # Properly annotated subclass works
+    from typing import Annotated
+
+    class GoodLink(OrchestratorLink):
+        good_field: Annotated[str, Parameter(help="Good field")] = "bar"
+
+    gl = GoodLink(name="good")
+    assert gl.good_field == "bar"
+
+
 def test_prefect_link_defaults() -> None:
     link = PrefectLink(name="local")
     assert link.name == "local"
@@ -33,28 +53,28 @@ def test_prefect_link_defaults() -> None:
     assert link.is_ephemeral is True
 
 
-def test_prefect_link_to_dict_flat() -> None:
+def test_prefect_link_model_dump() -> None:
     link = PrefectLink(
         name="prod",
         server_url="http://prefect.company:4200/api",
         work_pool="custom-pool",
     )
-    data = link.to_dict()
+    data = link.model_dump(mode="json", exclude_none=True)
     assert isinstance(data, dict)
-    assert all(isinstance(k, str) and isinstance(v, str) for k, v in data.items())
     assert data["name"] == "prod"
     assert data["engine"] == "prefect"
     assert data["server_url"] == "http://prefect.company:4200/api"
     assert data["work_pool"] == "custom-pool"
 
 
-def test_prefect_link_from_dict() -> None:
+def test_prefect_link_model_validate() -> None:
     raw_data = {
+        "name": "prod",
         "engine": "prefect",
         "server_url": "http://prefect.company:4200/api",
         "work_pool": "custom-pool",
     }
-    link = OrchestratorLink.from_dict("prod", raw_data)
+    link = PrefectLink.model_validate(raw_data)
     assert isinstance(link, PrefectLink)
     assert link.name == "prod"
     assert link.engine == "prefect"

@@ -5,6 +5,9 @@ from typing import Any
 
 from pirlo.core.models.orchestrator import OrchestratorLink
 from pirlo.core.ports.orchestrator_repository import OrchestratorRepository
+from pirlo.infrastructure.adapters.orchestrator.registry import (
+    OrchestratorRegistry,
+)
 
 
 class JsonOrchestratorRepository(OrchestratorRepository):
@@ -32,14 +35,17 @@ class JsonOrchestratorRepository(OrchestratorRepository):
 
     def save(self, link: OrchestratorLink) -> None:
         data = self._load_data()
-        data[link.name] = link.to_dict()
+        data[link.name] = link.model_dump(mode="json", exclude_none=True)
         self._save_data(data)
 
     def get_by_name(self, name: str) -> OrchestratorLink | None:
         data = self._load_data()
-        if name in data and isinstance(data[name], dict):
-            return OrchestratorLink.from_dict(name, data[name])
-        return None
+        if name not in data or not isinstance(data[name], dict):
+            return None
+        details = data[name]
+        engine = details.get("engine", "prefect")
+        link_cls = OrchestratorRegistry.get_orchestrator_link_cls(engine)
+        return link_cls.model_validate(details)
 
     def delete(self, name: str) -> bool:
         data = self._load_data()
@@ -52,8 +58,10 @@ class JsonOrchestratorRepository(OrchestratorRepository):
     def list_all(self) -> list[OrchestratorLink]:
         data = self._load_data()
         links: list[OrchestratorLink] = []
-        for name, details in data.items():
+        for details in data.values():
             if isinstance(details, dict):
+                engine = details.get("engine", "prefect")
                 with contextlib.suppress(Exception):
-                    links.append(OrchestratorLink.from_dict(name, details))
+                    link_cls = OrchestratorRegistry.get_orchestrator_link_cls(engine)
+                    links.append(link_cls.model_validate(details))
         return links

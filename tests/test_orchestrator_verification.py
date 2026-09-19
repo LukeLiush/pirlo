@@ -11,7 +11,7 @@ def test_prefect_verify_connection_ephemeral() -> None:
     plugin = PrefectPlugin()
     link = PrefectLink(name="local", server_url="ephemeral")
 
-    res = plugin.verify_connection(link)
+    res = plugin.verify(link)
     assert isinstance(res, OrchestratorVerificationResult)
     assert res.success is True
     assert "ephemeral" in res.message.lower()
@@ -30,7 +30,7 @@ def test_prefect_verify_connection_server_healthy() -> None:
     mock_resp.status_code = 200
 
     with patch("httpx.get", return_value=mock_resp) as mock_get:
-        res = plugin.verify_connection(link)
+        res = plugin.verify(link)
         mock_get.assert_called_once_with(
             "http://prefect.corp:4200/api/health", timeout=3.0
         )
@@ -51,7 +51,7 @@ def test_prefect_verify_connection_server_unhealthy() -> None:
     mock_resp.status_code = 503
 
     with patch("httpx.get", return_value=mock_resp):
-        res = plugin.verify_connection(link)
+        res = plugin.verify(link)
         assert res.success is False
         assert "503" in res.message
         assert res.details.get("status_code") == 503
@@ -65,7 +65,7 @@ def test_prefect_verify_connection_server_network_error() -> None:
     )
 
     with patch("httpx.get", side_effect=ConnectionError("Connection refused")):
-        res = plugin.verify_connection(link)
+        res = plugin.verify(link)
         assert res.success is False
         assert "Connection failed" in res.message
         assert "Connection refused" in res.details.get("error", "")
@@ -82,7 +82,7 @@ def test_prefect_verify_connection_server_auto_api_suffix() -> None:
     mock_resp.status_code = 200
 
     with patch("httpx.get", return_value=mock_resp) as mock_get:
-        res = plugin.verify_connection(link)
+        res = plugin.verify(link)
         mock_get.assert_called_once_with(
             "http://prefect.corp:4200/api/health", timeout=3.0
         )

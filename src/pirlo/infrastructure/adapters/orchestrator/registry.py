@@ -4,8 +4,9 @@ import importlib.metadata
 import inspect
 import pkgutil
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import Any, ClassVar, get_args
 
+from pirlo.core.models.orchestrator import OrchestratorLink
 from pirlo.core.ports.orchestrator_plugin import OrchestratorPlugin
 
 
@@ -15,6 +16,7 @@ class OrchestratorRegistry:
     base_package: ClassVar[str] = "pirlo.infrastructure.adapters.orchestrator"
     search_dir: ClassVar[Path | None] = None
     _plugins: ClassVar[dict[str, OrchestratorPlugin[Any]]] = {}
+    _orchestrator_link_classes: ClassVar[dict[str, type[OrchestratorLink]]] = {}
     _initialized: ClassVar[bool] = False
 
     @classmethod
@@ -28,7 +30,7 @@ class OrchestratorRegistry:
         current_dir = cls.search_dir or Path(__file__).parent
         for module_info in pkgutil.iter_modules([str(current_dir)]):
             if module_info.ispkg:
-                try:
+                with contextlib.suppress(ImportError, AttributeError):
                     module = importlib.import_module(
                         f"{cls.base_package}.{module_info.name}.plugin"
                     )
@@ -37,20 +39,58 @@ class OrchestratorRegistry:
                             issubclass(obj, OrchestratorPlugin)
                             and obj is not OrchestratorPlugin
                         ):
-                            cls.register(obj())
-                except (ImportError, AttributeError):
-                    pass
+                            engine = getattr(obj, "engine_name", module_info.name)
+
+                            # Extract link class from generic base OrchestratorPlugin[TLink]
+                            for base in getattr(obj, "__orig_bases__", ()):
+                                args = get_args(base)
+                                if (
+                                    args
+                                    and isinstance(args[0], type)
+                                    and issubclass(args[0], OrchestratorLink)
+                                ):
+                                    link_cls = args[0]
+                                    link_cls.model_fields["engine"].default = engine
+                                    cls._orchestrator_link_classes[engine] = link_cls
+                                    break
+
+                            cls._plugins[engine] = obj()
 
         # 2. Auto-load 3rd-party plugins registered via entry_points
         with contextlib.suppress(Exception):
             for ep in importlib.metadata.entry_points(group="pirlo.orchestrators"):
                 plugin_cls = ep.load()
-                cls.register(plugin_cls())
+                engine = getattr(plugin_cls, "engine_name", ep.name)
+                for base in getattr(plugin_cls, "__orig_bases__", ()):
+                    args = get_args(base)
+                    if (
+                        args
+                        and isinstance(args[0], type)
+                        and issubclass(args[0], OrchestratorLink)
+                    ):
+                        link_cls = args[0]
+                        link_cls.model_fields["engine"].default = engine
+                        cls._orchestrator_link_classes[engine] = link_cls
+                        break
+                cls._plugins[engine] = plugin_cls()
 
     @classmethod
     def register(cls, plugin: OrchestratorPlugin[Any]) -> None:
-        """Registers a plugin instance."""
-        cls._plugins[plugin.engine_name.lower()] = plugin
+        """Registers a plugin instance (retains engine_name lookup)."""
+        engine = getattr(plugin, "engine_name", None)
+        if not engine:
+            for base in getattr(plugin.__class__, "__orig_bases__", ()):
+                args = get_args(base)
+                if (
+                    args
+                    and isinstance(args[0], type)
+                    and issubclass(args[0], OrchestratorLink)
+                ):
+                    engine = args[0].model_fields["engine"].default
+                    break
+        if not engine:
+            engine = plugin.__class__.__name__.lower().replace("plugin", "")
+        cls._plugins[engine.lower()] = plugin
 
     @classmethod
     def get(cls, engine_name: str) -> OrchestratorPlugin[Any]:
@@ -63,6 +103,18 @@ class OrchestratorRegistry:
                 f"Discovered engines: {list(cls._plugins.keys())}"
             )
         return cls._plugins[normalized]
+
+    @classmethod
+    def get_orchestrator_link_cls(cls, engine_name: str) -> type[OrchestratorLink]:
+        """Retrieves the OrchestratorLink class associated with the engine."""
+        cls._discover_plugins()
+        normalized = engine_name.lower().strip()
+        if normalized not in cls._orchestrator_link_classes:
+            raise ValueError(
+                f"Unknown orchestrator engine '{engine_name}'. "
+                f"Discovered engines: {list(cls._orchestrator_link_classes.keys())}"
+            )
+        return cls._orchestrator_link_classes[normalized]
 
     @classmethod
     def is_registered(cls, engine_name: str) -> bool:
@@ -80,4 +132,5 @@ class OrchestratorRegistry:
     def reset(cls) -> None:
         """Resets the registry state (useful in test suites)."""
         cls._plugins.clear()
+        cls._orchestrator_link_classes.clear()
         cls._initialized = False

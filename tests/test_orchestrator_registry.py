@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import argparse
-
 import pytest
 
 from pirlo.infrastructure.adapters.orchestrator.prefect.models import PrefectLink
@@ -22,32 +20,25 @@ def test_registry_discovers_prefect() -> None:
 
     plugin = OrchestratorRegistry.get("prefect")
     assert isinstance(plugin, PrefectPlugin)
-    assert plugin.engine_name == "prefect"
-    assert plugin.link_cls is PrefectLink
+
+    link_cls = OrchestratorRegistry.get_orchestrator_link_cls("prefect")
+    assert link_cls is PrefectLink
+    # Default engine property configured automatically on the model
+    assert link_cls.model_fields["engine"].default == "prefect"
 
 
 def test_registry_case_insensitive() -> None:
     plugin = OrchestratorRegistry.get("PREFECT")
     assert isinstance(plugin, PrefectPlugin)
+    link_cls = OrchestratorRegistry.get_orchestrator_link_cls("PREFECT")
+    assert link_cls is PrefectLink
 
 
 def test_registry_unknown_engine_raises() -> None:
     with pytest.raises(ValueError, match="Unknown orchestrator engine 'nonexistent'"):
         OrchestratorRegistry.get("nonexistent")
-
-
-def test_prefect_plugin_prompt_create_link() -> None:
-    plugin = PrefectPlugin()
-    args = argparse.Namespace(
-        name="staging",
-        server="http://prefect.staging:4200/api",
-        work_pool="staging-pool",
-    )
-    link = plugin.prompt_create_link("staging", args, interactive=False)
-    assert isinstance(link, PrefectLink)
-    assert link.name == "staging"
-    assert link.server_url == "http://prefect.staging:4200/api"
-    assert link.work_pool == "staging-pool"
+    with pytest.raises(ValueError, match="Unknown orchestrator engine 'nonexistent'"):
+        OrchestratorRegistry.get_orchestrator_link_cls("nonexistent")
 
 
 def test_prefect_plugin_create_runner_ephemeral() -> None:

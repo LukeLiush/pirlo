@@ -22,7 +22,7 @@ def test_orchestrator_cli_crud(
     captured = capsys.readouterr().out
     assert "No orchestrator links registered" in captured
 
-    # 2. Create prod link
+    # 2. Create prod link via engine subparser
     with patch.object(
         sys,
         "argv",
@@ -30,10 +30,9 @@ def test_orchestrator_cli_crud(
             "pirlo",
             "orchestrator",
             "create",
-            "prod",
-            "--engine",
             "prefect",
-            "--server",
+            "prod",
+            "--server-url",
             "http://prefect.prod:4200/api",
             "--work-pool",
             "prod-pool",
@@ -72,12 +71,12 @@ def test_orchestrator_cli_crud(
     assert "No orchestrator links registered" in captured
 
 
-def test_orchestrator_cli_verify_and_engines(
+def test_orchestrator_cli_engine_subparsers_and_interactive(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     monkeypatch.setenv("PIRLO_WORKSPACE", str(tmp_path))
 
-    # 1. Create link with --verify (ephemeral)
+    # 1. Create link with short flags and --verify
     with patch.object(
         sys,
         "argv",
@@ -85,10 +84,9 @@ def test_orchestrator_cli_verify_and_engines(
             "pirlo",
             "orchestrator",
             "create",
-            "local-test",
-            "--engine",
             "prefect",
-            "--server",
+            "local-test",
+            "-s",
             "ephemeral",
             "--verify",
         ],
@@ -106,17 +104,33 @@ def test_orchestrator_cli_verify_and_engines(
     assert "Verifying orchestrator link 'local-test'" in captured
     assert "Local ephemeral Prefect engine is ready" in captured
 
-    # 3. Engines list command
-    with patch.object(sys, "argv", ["pirlo", "orchestrator", "engines"]):
+    # 3. Help for create displays engine subparsers
+    with (
+        pytest.raises(SystemExit),
+        patch.object(sys, "argv", ["pirlo", "orchestrator", "create", "-h"]),
+    ):
         orchestrator_main()
     captured = capsys.readouterr().out
-    assert "Registered Orchestrator Engines" in captured
     assert "prefect" in captured
 
-    # 4. Engines schema command (inspect prefect)
-    with patch.object(sys, "argv", ["pirlo", "orchestrator", "engines", "prefect"]):
+    # 4. Help for create prefect displays options including short flags
+    with (
+        pytest.raises(SystemExit),
+        patch.object(sys, "argv", ["pirlo", "orchestrator", "create", "prefect", "-h"]),
+    ):
         orchestrator_main()
     captured = capsys.readouterr().out
-    assert "Engine: prefect" in captured
-    assert "--server-url" in captured
-    assert "--work-pool" in captured
+    assert "-s SERVER_URL, --server-url SERVER_URL" in captured
+    assert "-w WORK_POOL, --work-pool WORK_POOL" in captured
+    assert "--verify" in captured
+
+    # 5. Interactive creation wizard
+    simulated_inputs = iter(["1", "interactive-demo", "", "", "y"])
+    monkeypatch.setattr("builtins.input", lambda prompt="": next(simulated_inputs))
+
+    with patch.object(sys, "argv", ["pirlo", "orchestrator", "create"]):
+        orchestrator_main()
+    captured = capsys.readouterr().out
+    assert "Select Orchestrator Engine" in captured
+    assert "Verifying connection to 'interactive-demo'" in captured
+    assert "created successfully" in captured

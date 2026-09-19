@@ -1,5 +1,7 @@
 from collections.abc import Callable
-from typing import Any, TypeVar
+from typing import Any, TypeVar, get_args
+
+from pirlo.core.models.orchestrator import OrchestratorLink
 
 T = TypeVar("T", bound=type[Any])
 
@@ -22,6 +24,38 @@ def play(
         cls.play_retries = retries
         cls.play_retry_delay = retry_delay
         cls.play_timeout = timeout
+        return cls
+
+    return decorator
+
+
+PluginT = TypeVar("PluginT")
+
+
+def orchestrator(
+    name: str,
+    description: str | None = None,
+) -> Callable[[type[PluginT]], type[PluginT]]:
+    """Decorator marking an OrchestratorPlugin with engine metadata."""
+
+    def decorator(cls: type[PluginT]) -> type[PluginT]:
+        engine_str = name.lower().strip()
+        cls.engine_name = engine_str  # type: ignore[attr-defined]
+        if description:
+            cls.__doc__ = description
+
+        # If generic OrchestratorPlugin[TLink], set the link's default engine
+        for base in getattr(cls, "__orig_bases__", ()):
+            args = get_args(base)
+            if (
+                args
+                and isinstance(args[0], type)
+                and issubclass(args[0], OrchestratorLink)
+            ):
+                args[0].model_fields["engine"].default = engine_str
+                args[0].model_rebuild(force=True)
+                break
+
         return cls
 
     return decorator

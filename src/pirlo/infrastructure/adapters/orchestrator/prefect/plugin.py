@@ -1,9 +1,7 @@
-from __future__ import annotations
-
-import argparse
 from typing import Any
 
 from pirlo.core.config import DEFAULT_WORK_POOL
+from pirlo.core.decorators import orchestrator
 from pirlo.core.models.orchestrator import OrchestratorVerificationResult
 from pirlo.core.ports.orchestrator_plugin import OrchestratorPlugin
 from pirlo.core.ports.runner import PlayRunner
@@ -16,36 +14,14 @@ from pirlo.infrastructure.adapters.orchestrator.prefect_runner import (
 )
 
 
+@orchestrator(
+    name="prefect",
+    description="Plugin adapter integrating Prefect 3.x with Pirlo.",
+)
 class PrefectPlugin(OrchestratorPlugin[PrefectLink]):
     """Plugin adapter integrating Prefect 3.x with Pirlo."""
 
-    @property
-    def engine_name(self) -> str:
-        return "prefect"
-
-    @property
-    def link_cls(self) -> type[PrefectLink]:
-        return PrefectLink
-
-    def prompt_create_link(
-        self, name: str, args: argparse.Namespace, interactive: bool
-    ) -> PrefectLink:
-        server_url = getattr(args, "server", None)
-        work_pool = getattr(args, "work_pool", None) or DEFAULT_WORK_POOL
-        if interactive and not server_url:
-            val = input("? Server URL (press ENTER for local/ephemeral): ").strip()
-            server_url = val if val else "ephemeral"
-        if server_url and server_url != "ephemeral":
-            server_url = server_url.rstrip("/")
-            if not server_url.endswith("/api"):
-                server_url = f"{server_url}/api"
-        return PrefectLink(
-            name=name,
-            server_url=server_url or "ephemeral",
-            work_pool=work_pool,
-        )
-
-    def verify_connection(self, link: PrefectLink) -> OrchestratorVerificationResult:
+    def verify(self, link: PrefectLink) -> OrchestratorVerificationResult:
         """Verifies connectivity, authentication, and readiness of the orchestrator link."""
         if link.is_ephemeral:
             return OrchestratorVerificationResult(
