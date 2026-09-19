@@ -1,6 +1,5 @@
 import contextlib
 import importlib
-import importlib.metadata
 import inspect
 import pkgutil
 from pathlib import Path
@@ -21,7 +20,7 @@ class OrchestratorRegistry:
 
     @classmethod
     def _discover_plugins(cls) -> None:
-        """Fully automated discovery: scans local subpackages and entry points."""
+        """Fully automated discovery: scans local subpackages."""
         if cls._initialized:
             return
         cls._initialized = True
@@ -55,24 +54,6 @@ class OrchestratorRegistry:
                                     break
 
                             cls._plugins[engine] = obj()
-
-        # 2. Auto-load 3rd-party plugins registered via entry_points
-        with contextlib.suppress(Exception):
-            for ep in importlib.metadata.entry_points(group="pirlo.orchestrators"):
-                plugin_cls = ep.load()
-                engine = getattr(plugin_cls, "engine_name", ep.name)
-                for base in getattr(plugin_cls, "__orig_bases__", ()):
-                    args = get_args(base)
-                    if (
-                        args
-                        and isinstance(args[0], type)
-                        and issubclass(args[0], OrchestratorLink)
-                    ):
-                        link_cls = args[0]
-                        link_cls.model_fields["engine"].default = engine
-                        cls._orchestrator_link_classes[engine] = link_cls
-                        break
-                cls._plugins[engine] = plugin_cls()
 
     @classmethod
     def register(cls, plugin: OrchestratorPlugin[Any]) -> None:
