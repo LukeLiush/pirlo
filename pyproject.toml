@@ -53,3 +53,8 @@ module = "tests.*"
 disallow_untyped_defs = false
 disallow_incomplete_defs = false
 check_untyped_defs = false
+
+[tool.pytest.ini_options]
+# anyio_mode = "auto" would auto-mark all async tests; keep default ("strict")
+# so only @pytest.mark.anyio tests are collected as anyio tests.
+# Prefect requires asyncio backend — anyio defaults to asyncio so this is fine.

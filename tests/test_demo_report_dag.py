@@ -1,8 +1,6 @@
 # tests/test_demo_report_dag.py
 from __future__ import annotations
 
-import asyncio
-
 from pirlo.core.models.blueprint import BlueprintNode, PlayBlueprint
 from pirlo.infrastructure.adapters.orchestrator.prefect_compiler import (
     PrefectCompiler,
@@ -62,9 +60,15 @@ def test_demo_report_dag_blueprint_extraction():
     assert alert_node.depends_on == [summary_node.node_id]
 
 
-def test_demo_report_dag_local_practice_run():
-    # Test execution via Prefect runner (ephemeral)
-    result: AlertOutput = asyncio.run(SendAlertPlay.run_play(channel="#testing"))
+import pytest
+
+
+@pytest.mark.anyio
+async def test_demo_report_dag_local_practice_run():
+    # Test execution via Prefect ephemeral runner.
+    # _resolve_future_result now uses asyncio.wrap_future (non-blocking),
+    # so this call completes without deadlocking.
+    result: AlertOutput = await SendAlertPlay.run_play(channel="#testing")
     assert isinstance(result, AlertOutput)
     assert result.alert_sent is True
     assert result.channel == "#testing"

@@ -1,4 +1,5 @@
 import ast
+import contextlib
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -48,12 +49,71 @@ class PlayScanner:
 
         from pirlo.core.config import get_workspace_path
 
+        specs: dict[str, PlaySpec] = {}
+
+        # 1. Built-in package playbooks
+        with contextlib.suppress(Exception):
+            import pirlo
+
+            pkg_playbooks_dir = Path(pirlo.__file__).resolve().parent / "playbooks"
+            if pkg_playbooks_dir.exists():
+                specs.update(cls.scan_directory(pkg_playbooks_dir))
+
+        # 2. Local current working directory playbooks (any package under src/ or playbooks/)
+        cwd_src = Path.cwd() / "src"
+        if cwd_src.exists():
+            specs.update(cls.scan_directory(cwd_src))
+
+        cwd_playbooks = Path.cwd() / "playbooks"
+        if cwd_playbooks.exists():
+            specs.update(cls.scan_directory(cwd_playbooks))
+
+        # 3. Workspace path
         workspace_path = get_workspace_path()
-        playbooks_dir = workspace_path / "src" / "pirlo" / "playbooks"
-        specs = cls.scan_directory(playbooks_dir)
+        if (workspace_path / "src").exists():
+            specs.update(cls.scan_directory(workspace_path / "src"))
+        if (workspace_path / "playbooks").exists():
+            specs.update(cls.scan_directory(workspace_path / "playbooks"))
+
+        # 4. Any installed pirlo_* packages in sys.path
+        for p in sys.path:
+            p_path = Path(p)
+            if p_path.exists() and p_path.is_dir():
+                with contextlib.suppress(Exception):
+                    for candidate in p_path.glob("pirlo_*"):
+                        if candidate.is_dir() and not candidate.name.endswith(
+                            ".dist-info"
+                        ):
+                            specs.update(cls.scan_directory(candidate))
+
         spec = specs.get(play_name)
         if not spec:
+            # 5. Fallback to entrypoint registry or pyproject.toml
+            from pirlo.infrastructure.adapters.cli.entrypoint import (
+                load_all_playbooks,
+            )
+
+            all_specs = load_all_playbooks()
+            spec = all_specs.get(play_name)
+
+        if not spec:
             raise KeyError(f"Play '{play_name}' not found.")
+
+        # Ensure directory containing the module is in sys.path
+        if spec.file_path and spec.file_path.exists():
+            for parent in spec.file_path.parents:
+                if parent.name == "src":
+                    if str(parent) not in sys.path:
+                        sys.path.insert(0, str(parent))
+                    break
+                if (parent / "pyproject.toml").exists():
+                    candidate_src = parent / "src"
+                    target = (
+                        str(candidate_src) if candidate_src.exists() else str(parent)
+                    )
+                    if target not in sys.path:
+                        sys.path.insert(0, target)
+                    break
 
         module = importlib.import_module(spec.module_path)
         return getattr(module, spec.class_name)  # type: ignore[no-any-return]

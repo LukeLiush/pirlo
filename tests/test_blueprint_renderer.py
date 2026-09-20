@@ -14,7 +14,7 @@ from pirlo.infrastructure.adapters.visualization.grandalf_renderer import (
 from pirlo.infrastructure.adapters.visualization.renderer_factory import (
     BlueprintRendererFactory,
 )
-from pirlo.playbooks.autopass.main import AutopassPlay
+from pirlo.playbooks.demo.report_dag import SendAlertPlay
 
 
 def test_grandalf_renderer_empty_blueprint():
@@ -128,14 +128,12 @@ def test_solid_renderer_substitution_on_blueprint():
 
 
 def test_argument_parser_builder_includes_dag_and_play_names_in_help():
-    builder = ArgumentParserBuilder(AutopassPlay)
-    parser = builder.build_parser("autopass")
+    builder = ArgumentParserBuilder(SendAlertPlay)
+    parser = builder.build_parser("demo_report_dag")
     help_text = parser.format_help()
 
     assert "Workflow DAG:" in help_text
-    assert "autopass_decompose" in help_text
-    assert "autopass_execute_subtask [map]" in help_text
-    assert "autopass" in help_text
-    assert "Target Play Options (autopass)" in help_text
-    assert "Upstream Dependency Options (autopass_execute_subtask)" in help_text
-    assert "Upstream Dependency Options (autopass_decompose)" in help_text
+    assert "demo_report_dag" in help_text
+    assert "demo_download_report [map]" in help_text
+    assert "Target Play Options (demo_report_dag)" in help_text
+    assert "Upstream Dependency Options (demo_fetch_budget_target)" in help_text

@@ -55,7 +55,7 @@ class RoutineRegistration(BaseModel, ABC):
 
     registration_id: str
     play_name: str
-    routine: str
+    routine: str | None = None
 
     @property
     @abstractmethod

@@ -125,7 +125,7 @@ def test_orchestrator_cli_engine_subparsers_and_interactive(
     assert "--verify" in captured
 
     # 5. Interactive creation wizard
-    simulated_inputs = iter(["1", "interactive-demo", "", "", "y"])
+    simulated_inputs = iter(["1", "interactive-demo", "", "", "", "", "y"])
     monkeypatch.setattr("builtins.input", lambda prompt="": next(simulated_inputs))
 
     with patch.object(sys, "argv", ["pirlo", "orchestrator", "create"]):

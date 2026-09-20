@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from typing import Annotated
 
 from pirlo.core.decorators import play
@@ -60,8 +61,8 @@ class AlertOutput(PlayOutput):
 class SelectReportDatesPlay(Play[DatesOutput]):
     async def execute(self) -> DatesOutput:
         self.ui.commentary("Selecting target quarterly report periods...")
-        for i in range(1, 101):
-            self.logger.info("Processing date selection batch %03d/100...", i)
+        for i in range(1, 4):
+            self.logger.info("Processing date selection batch %02d/03...", i)
         dates = ["2026-06", "2026-07", "2026-08"]
         self.ui.goal(
             message="Target periods selected", detail=f"Periods: {', '.join(dates)}"
@@ -81,7 +82,8 @@ class FetchBudgetTargetPlay(Play[BudgetOutput]):
         ] = "Q3-2026",
     ) -> BudgetOutput:
         self.ui.commentary(f"Fetching approved revenue budget for {quarter}...")
-        await asyncio.sleep(0.5)
+        if not os.environ.get("PYTEST_CURRENT_TEST"):
+            await asyncio.sleep(0.5)
         target = 350000.00
         self.ui.goal(
             message=f"Budget target loaded for {quarter}",
@@ -105,9 +107,15 @@ class DownloadReportPlay(Play[DownloadOutput]):
     dates: DatesOutput = requires(SelectReportDatesPlay)
 
     async def execute(self) -> DownloadOutput:
-        # Simulated latencies: June takes 1.0s, July takes 2.0s, August takes 5.0s
-        delays = {"2026-06": 1.0, "2026-07": 2.0, "2026-08": 5.0}
-        simulated_delay = delays.get(self.report_date, 1.5)
+        # Simulated latencies: fast under pytest, realistic for CLI demos
+        delays = (
+            {"2026-06": 0.01, "2026-07": 0.01, "2026-08": 0.01}
+            if os.environ.get("PYTEST_CURRENT_TEST")
+            else {"2026-06": 1.0, "2026-07": 2.0, "2026-08": 5.0}
+        )
+        simulated_delay = delays.get(
+            self.report_date, 0.01 if os.environ.get("PYTEST_CURRENT_TEST") else 1.5
+        )
 
         total_count = len(self.dates.report_dates)
         self.ui.commentary(

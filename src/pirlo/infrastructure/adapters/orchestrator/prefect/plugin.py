@@ -73,10 +73,21 @@ class PrefectPlugin(OrchestratorPlugin[PrefectLink]):
         work_pool = kwargs.pop("work_pool", default_work_pool)
         compiler = kwargs.pop("compiler", None) or PrefectCompiler()
 
+        code_storage = kwargs.pop(
+            "code_storage",
+            getattr(link, "code_storage", "in_memory") if link else "in_memory",
+        )
+        s3_bucket = kwargs.pop(
+            "s3_bucket",
+            getattr(link, "s3_bucket", "") if link else "",
+        )
+
         return PrefectRunner(
             compiler=compiler,
             mode=mode,
             server_url=server_url,
             work_pool=work_pool,
+            code_storage=code_storage,
+            s3_bucket=s3_bucket,
             **kwargs,
         )

@@ -7,9 +7,9 @@ from pirlo.infrastructure.adapters.cli.entrypoint import main
 def test_cli_orchestrator_playbook_routing():
     test_args = [
         "pirlo",
-        "autopass",
-        "--task",
-        "Search Google",
+        "demo_report_dag",
+        "--channel",
+        "#testing",
         "--",
         "prefect",
         "--help",
@@ -17,11 +17,11 @@ def test_cli_orchestrator_playbook_routing():
 
     with (
         patch.object(sys, "argv", test_args),
-        patch("pirlo.playbooks.autopass.main.AutopassPlay.cli") as mock_session_cli,
+        patch("pirlo.playbooks.demo.report_dag.SendAlertPlay.cli") as mock_session_cli,
     ):
         try:
             main()
         except SystemExit:
             pass
 
-        mock_session_cli.assert_called_once_with(play_name="autopass")
+        mock_session_cli.assert_called_once_with(play_name="demo_report_dag")

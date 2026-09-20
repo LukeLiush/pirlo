@@ -315,6 +315,13 @@ async def test_prefect_compiler_failure_lifecycle_logging():
     with pytest.raises(ValueError), workflow_logging_context(run_id):
         await runner.run(blueprint)
 
+    import logging
+
+    for h in logging.getLogger("prefect").handlers:
+        if hasattr(h, "flush"):
+            h.flush()
+    await asyncio.sleep(0.5)
+
     repo = PrefectRunRepository()
     run_record = await repo.get_by_id(run_id)
     assert run_record is not None
@@ -330,7 +337,7 @@ async def test_prefect_compiler_failure_lifecycle_logging():
             )
         ]
         full_log_text = "\n".join(logs)
-        if "Play START" in full_log_text:
+        if "Play FAILED" in full_log_text:
             break
         await asyncio.sleep(0.1)
 

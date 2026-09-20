@@ -24,6 +24,19 @@ class PrefectLink(OrchestratorLink):
             short="-w",
         ),
     ] = DEFAULT_WORK_POOL
+    code_storage: Annotated[
+        str,
+        Parameter(
+            help="Code packaging backend: in_memory, prefect_artifact, or s3",
+            short="-c",
+        ),
+    ] = "prefect_artifact"
+    s3_bucket: Annotated[
+        str,
+        Parameter(
+            help="S3 bucket name if using s3 code storage backend",
+        ),
+    ] = ""
 
     @property
     def is_ephemeral(self) -> bool:

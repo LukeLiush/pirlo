@@ -143,10 +143,25 @@ class CliPlayRunner:
                         )
                         lines: list[str] = [
                             f" [bold]Play:[/bold]          {raw_result.play_name}",
-                            f" [bold]Routine:[/bold]       {raw_result.routine}",
-                            f" [bold]Registration:[/bold]  {raw_result.registration_id}",
-                            f" [bold]Orchestrator:[/bold]  {raw_result.orchestrator}",
                         ]
+                        if raw_result.routine:
+                            lines.append(
+                                f" [bold]Routine:[/bold]       {raw_result.routine}"
+                            )
+                            id_label = "Registration:"
+                            title = "[bold green]⚽ Routine Registered[/bold green]"
+                        else:
+                            id_label = "Run ID:"
+                            title = (
+                                "[bold green]⚽ Remote Flow Run Submitted[/bold green]"
+                            )
+
+                        lines.extend(
+                            [
+                                f" [bold]{id_label:<14}[/bold] {raw_result.registration_id}",
+                                f" [bold]Orchestrator:[/bold]  {raw_result.orchestrator}",
+                            ]
+                        )
                         if hasattr(raw_result, "work_pool") and raw_result.work_pool:
                             lines.append(
                                 f" [bold]Work Pool:[/bold]     {raw_result.work_pool}"
@@ -163,7 +178,7 @@ class CliPlayRunner:
                             play_instance.ui.console.print(
                                 Panel(
                                     "\n".join(lines),
-                                    title="[bold green]⚽ Routine Registered[/bold green]",
+                                    title=title,
                                     border_style="green",
                                     box=box.ROUNDED,
                                 )

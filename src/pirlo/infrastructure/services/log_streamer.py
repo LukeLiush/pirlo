@@ -2,14 +2,20 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import os
 import re
 import sys
+import threading
 import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from typing import Any
 
-import ftfy
+try:
+    import ftfy
+except ImportError:
+    ftfy = None  # type: ignore[assignment]
+
 from rich.text import Text
 
 from pirlo.core.logging_context import resolve_log_prefix
@@ -154,6 +160,11 @@ class PirloConsoleFormatter(logging.Formatter):
         return formatted
 
 
+_LOGGING_INITIALIZED_PID: int | None = None
+_LOGGING_INITIALIZED_SHOW_LOGS: bool | None = None
+_LOGGING_INIT_LOCK: threading.Lock = threading.Lock()
+
+
 def setup_pirlo_logging(show_logs: bool = False) -> None:
     """Configures centralized Pirlo logging with consistent [run_id/play_id] formatting.
 
@@ -161,9 +172,23 @@ def setup_pirlo_logging(show_logs: bool = False) -> None:
     logger, configures Prefect logging, and ensures all console output respects
     show_logs and PirloConsoleFormatter.
     """
-    import os
+    global _LOGGING_INITIALIZED_PID, _LOGGING_INITIALIZED_SHOW_LOGS
 
-    from pirlo.core.config import get_log_level
+    current_pid = os.getpid()
+    if (
+        _LOGGING_INITIALIZED_PID == current_pid
+        and _LOGGING_INITIALIZED_SHOW_LOGS == show_logs
+    ):
+        return
+
+    with _LOGGING_INIT_LOCK:
+        if (
+            _LOGGING_INITIALIZED_PID == current_pid
+            and _LOGGING_INITIALIZED_SHOW_LOGS == show_logs
+        ):
+            return
+
+        from pirlo.core.config import get_log_level
 
     # 1. Neutralize browser_use logging hijack if present
     with contextlib.suppress(Exception):
@@ -230,6 +255,9 @@ def setup_pirlo_logging(show_logs: bool = False) -> None:
         core_l.setLevel(log_level_int)
         core_l.propagate = True
 
+    _LOGGING_INITIALIZED_PID = current_pid
+    _LOGGING_INITIALIZED_SHOW_LOGS = show_logs
+
 
 class StdioTee:
     """Tees stdout/stderr stream: forwards raw output to terminal while streaming clean lines to a callback."""
@@ -289,7 +317,7 @@ class StdioTee:
             return
 
         plain_text: str = Text.from_ansi(raw_data).plain.replace("\r", "")
-        clean_data: str = ftfy.fix_text(plain_text)
+        clean_data: str = ftfy.fix_text(plain_text) if ftfy is not None else plain_text
         lines: list[str] = clean_data.splitlines()
 
         for raw_line in lines:

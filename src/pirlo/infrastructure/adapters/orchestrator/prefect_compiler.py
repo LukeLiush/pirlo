@@ -9,7 +9,6 @@ from typing import Any, cast
 
 from prefect import flow, tags, task
 from prefect.futures import PrefectFuture
-from prefect.task_runners import ProcessPoolTaskRunner
 
 from pirlo.core.logging_context import (
     generate_short_run_id,
@@ -66,8 +65,13 @@ class _PrefectTaskLogForwardHandler(logging.Handler):
 class PrefectCompiler(BlueprintCompiler[PrefectWorkflow]):
     """Compiles a PlayBlueprint into an executable PrefectWorkflow model."""
 
-    def __init__(self, validate_parameters: bool = False) -> None:
+    def __init__(
+        self,
+        validate_parameters: bool = False,
+        task_runner: Any | None = None,
+    ) -> None:
         self.validate_parameters: bool = validate_parameters
+        self.task_runner: Any = task_runner
 
     def compile(
         self,
@@ -80,12 +84,15 @@ class PrefectCompiler(BlueprintCompiler[PrefectWorkflow]):
 
         active_run_id = run_id or get_current_run_id() or generate_short_run_id()
 
-        @flow(
-            name=blueprint.name,
-            flow_run_name=active_run_id,
-            validate_parameters=self.validate_parameters,
-            task_runner=ProcessPoolTaskRunner(max_workers=os.cpu_count()),  # type: ignore[arg-type]
-        )
+        flow_kwargs: dict[str, Any] = {
+            "name": blueprint.name,
+            "flow_run_name": active_run_id,
+            "validate_parameters": self.validate_parameters,
+        }
+        if self.task_runner is not None:
+            flow_kwargs["task_runner"] = self.task_runner
+
+        @flow(**flow_kwargs)
         async def prefect_master_flow(
             **workflow_kwargs: object,
         ) -> PlayOutput | None:
@@ -100,11 +107,30 @@ class PrefectCompiler(BlueprintCompiler[PrefectWorkflow]):
             futures: dict[str, PrefectFuture[PlayOutput]] = {}
 
             async def _resolve_future_result(fut: Any) -> Any:
+                import asyncio
                 import inspect
 
                 if isinstance(fut, list):
                     return [await _resolve_future_result(f) for f in fut]
-                res = fut.result()
+
+                # PrefectConcurrentFuture wraps a concurrent.futures.Future.
+                # Calling fut.result() synchronously inside an async flow invokes
+                # run_coro_as_sync() on the running event loop → deadlock.
+                # Use asyncio.wrap_future() instead: it registers a completion
+                # callback and never blocks the event loop.
+                from prefect.client.schemas.objects import State
+                from prefect.futures import PrefectConcurrentFuture
+
+                if isinstance(fut, PrefectConcurrentFuture):
+                    cf = fut.wrapped_future  # concurrent.futures.Future
+                    state_or_result = await asyncio.wrap_future(cf)
+                    if isinstance(state_or_result, State):
+                        return await state_or_result.aresult()
+                    return state_or_result
+
+                # Generic fallback (PrefectDistributedFuture, etc.)
+                loop = asyncio.get_event_loop()
+                res = await loop.run_in_executor(None, fut.result)
                 if inspect.isawaitable(res):
                     return await res
                 return res

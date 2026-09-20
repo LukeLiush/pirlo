@@ -1,3 +1,4 @@
+import contextlib
 import importlib
 import sys
 import tomllib
@@ -40,20 +41,46 @@ def load_pyproject_playbooks() -> dict[str, str]:
 
 
 def load_all_playbooks() -> dict[str, PlaySpec]:
-    """Discovers playbooks via AST scanning with pyproject.toml fallbacks."""
+    """Discovers playbooks via AST scanning across built-in, local src, workspace, and installed packages."""
     specs: dict[str, PlaySpec] = {}
 
-    # 1. AST Auto-Scan built-in & local workspace playbooks
-    import pirlo
+    # 1. AST Auto-Scan built-in playbooks
+    with contextlib.suppress(Exception):
+        import pirlo
 
-    pkg_playbooks_dir: Path = Path(pirlo.__file__).resolve().parent / "playbooks"
-    specs.update(PlayScanner.scan_directory(pkg_playbooks_dir))
+        pkg_playbooks_dir: Path = Path(pirlo.__file__).resolve().parent / "playbooks"
+        if pkg_playbooks_dir.exists():
+            specs.update(PlayScanner.scan_directory(pkg_playbooks_dir))
+
+    # 2. Local current working directory (src/ and playbooks/)
+    cwd_src: Path = Path.cwd() / "src"
+    if cwd_src.exists():
+        specs.update(PlayScanner.scan_directory(cwd_src))
 
     cwd_playbooks_dir: Path = Path.cwd() / "playbooks"
-    if cwd_playbooks_dir.exists() and cwd_playbooks_dir != pkg_playbooks_dir:
+    if cwd_playbooks_dir.exists():
         specs.update(PlayScanner.scan_directory(cwd_playbooks_dir))
 
-    # 2. Fallback: Pyproject.toml overrides for 3rd-party installed playbooks
+    # 3. Workspace path
+    with contextlib.suppress(Exception):
+        from pirlo.core.config import get_workspace_path
+
+        workspace_path = get_workspace_path()
+        if (workspace_path / "src").exists():
+            specs.update(PlayScanner.scan_directory(workspace_path / "src"))
+        if (workspace_path / "playbooks").exists():
+            specs.update(PlayScanner.scan_directory(workspace_path / "playbooks"))
+
+    # 4. Any installed pirlo_* packages in sys.path
+    for p in sys.path:
+        p_path = Path(p)
+        if p_path.exists() and p_path.is_dir():
+            with contextlib.suppress(Exception):
+                for candidate in p_path.glob("pirlo_*"):
+                    if candidate.is_dir() and not candidate.name.endswith(".dist-info"):
+                        specs.update(PlayScanner.scan_directory(candidate))
+
+    # 5. Fallback: Pyproject.toml overrides for 3rd-party installed playbooks
     pyproject_playbooks: dict[str, str] = load_pyproject_playbooks()
     for name, entrypoint in pyproject_playbooks.items():
         if name not in specs:
@@ -78,6 +105,14 @@ def main() -> None:
         sys.path.insert(0, src_dir)
     if cwd_dir not in sys.path:
         sys.path.insert(0, cwd_dir)
+
+    # Ensure local cwd and cwd/src are in sys.path
+    local_src: str = str(Path.cwd() / "src")
+    if Path(local_src).exists() and local_src not in sys.path:
+        sys.path.insert(0, local_src)
+    local_cwd: str = str(Path.cwd())
+    if local_cwd not in sys.path:
+        sys.path.insert(0, local_cwd)
 
     specs: dict[str, PlaySpec] = load_all_playbooks()
 
