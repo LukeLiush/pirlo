@@ -6,6 +6,9 @@ import pytest
 from pirlo.core.decorators import play
 from pirlo.core.models.blueprint import PlayBlueprint, PlayOutput
 from pirlo.core.ports.play import Play, requires
+from pirlo.infrastructure.adapters.orchestrator.prefect.models import (
+    PrefectLink,
+)
 from pirlo.infrastructure.adapters.orchestrator.prefect_compiler import (
     PrefectCompiler,
 )
@@ -43,7 +46,7 @@ async def test_prefect_runner_ephemeral_execution():
     blueprint: PlayBlueprint = play_instance.extract_blueprint()
 
     compiler = PrefectCompiler()
-    runner = PrefectRunner(compiler=compiler, mode="ephemeral")
+    runner = PrefectRunner(compiler=compiler)
     result = await runner.run(blueprint)
 
     assert isinstance(result, StepTwoOutput)
@@ -55,7 +58,7 @@ async def test_prefect_runner_via_factory():
     play_instance = StepTwoPlay()
     blueprint: PlayBlueprint = play_instance.extract_blueprint()
 
-    runner = PlayRunnerFactory.get_runner("prefect", mode="ephemeral")
+    runner = PlayRunnerFactory.get_runner("prefect")
     result = await runner.run(blueprint)
 
     assert isinstance(result, StepTwoOutput)
@@ -64,7 +67,7 @@ async def test_prefect_runner_via_factory():
 
 def test_prefect_runner_get_dashboard_url_ephemeral():
     compiler = PrefectCompiler()
-    runner = PrefectRunner(compiler=compiler, mode="ephemeral")
+    runner = PrefectRunner(compiler=compiler)
     assert runner.get_dashboard_url("test_run_123") is None
 
 
@@ -72,8 +75,7 @@ def test_prefect_runner_get_dashboard_url_server():
     compiler = PrefectCompiler()
     runner = PrefectRunner(
         compiler=compiler,
-        mode="server",
-        server_url="http://prefect.internal:4200/api",
+        link=PrefectLink(server_url="http://prefect.internal:4200/api"),
     )
     assert (
         runner.get_dashboard_url("test_run_123")
@@ -88,7 +90,8 @@ def test_prefect_runner_sync_environ():
 
     compiler = PrefectCompiler()
     runner = PrefectRunner(
-        compiler=compiler, mode="server", server_url="http://test.url:4200/api"
+        compiler=compiler,
+        link=PrefectLink(server_url="http://test.url:4200/api"),
     )
 
     assert "PREFECT_API_URL" not in os.environ
@@ -112,9 +115,10 @@ async def test_prefect_runner_server_mode_dispatches_to_submit_remote_run():
     compiler = PrefectCompiler()
     runner = PrefectRunner(
         compiler=compiler,
-        mode="server",
-        server_url="http://prefect.internal:4200/api",
-        work_pool="custom-pool",
+        link=PrefectLink(
+            server_url="http://prefect.internal:4200/api",
+            work_pool="custom-pool",
+        ),
     )
 
     mock_reg = PrefectRoutineRegistration(
@@ -150,9 +154,11 @@ async def test_prefect_runner_submit_remote_run():
     compiler = PrefectCompiler()
     runner = PrefectRunner(
         compiler=compiler,
-        mode="server",
-        server_url="http://prefect.internal:4200/api",
-        work_pool="pirlo-pool",
+        link=PrefectLink(
+            server_url="http://prefect.internal:4200/api",
+            work_pool="pirlo-pool",
+            code_storage="in_memory",
+        ),
     )
 
     mock_deployment = MagicMock()

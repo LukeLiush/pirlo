@@ -170,7 +170,7 @@ async def test_prefect_compiler_lifecycle_logging():
     )
 
     compiler = PrefectCompiler()
-    runner = PrefectRunner(compiler=compiler, mode="ephemeral")
+    runner = PrefectRunner(compiler=compiler)
 
     run_id = generate_short_run_id()
     with workflow_logging_context(run_id):
@@ -309,7 +309,7 @@ async def test_prefect_compiler_failure_lifecycle_logging():
         FailingObservabilityPlay
     )
     compiler = PrefectCompiler()
-    runner = PrefectRunner(compiler=compiler, mode="ephemeral")
+    runner = PrefectRunner(compiler=compiler)
 
     run_id = generate_short_run_id()
     with pytest.raises(ValueError), workflow_logging_context(run_id):
@@ -370,7 +370,7 @@ async def test_run_id_consistency_across_disk_and_logs():
     assert len(run_id) == 8
 
     compiler = PrefectCompiler()
-    runner = PrefectRunner(compiler=compiler, mode="ephemeral")
+    runner = PrefectRunner(compiler=compiler)
     blueprint = BlueprintExtractor.extract_from_play(
         SampleObservabilityPlay,
         user_kwargs={"user": "alice"},

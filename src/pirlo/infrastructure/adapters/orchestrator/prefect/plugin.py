@@ -1,14 +1,10 @@
 from typing import Any
 
-from pirlo.core.config import DEFAULT_WORK_POOL
 from pirlo.core.decorators import orchestrator
 from pirlo.core.models.orchestrator import OrchestratorVerificationResult
 from pirlo.core.ports.orchestrator_plugin import OrchestratorPlugin
 from pirlo.core.ports.runner import PlayRunner
 from pirlo.infrastructure.adapters.orchestrator.prefect.models import PrefectLink
-from pirlo.infrastructure.adapters.orchestrator.prefect_compiler import (
-    PrefectCompiler,
-)
 from pirlo.infrastructure.adapters.orchestrator.prefect_runner import (
     PrefectRunner,
 )
@@ -59,35 +55,5 @@ class PrefectPlugin(OrchestratorPlugin[PrefectLink]):
             )
 
     def create_runner(self, link: PrefectLink | None, **kwargs: Any) -> PlayRunner:
-        if link is None or link.is_ephemeral:
-            default_mode = "ephemeral"
-            default_server_url = None
-            default_work_pool = DEFAULT_WORK_POOL
-        else:
-            default_mode = "server"
-            default_server_url = link.server_url
-            default_work_pool = link.work_pool
-
-        mode = kwargs.pop("mode", default_mode)
-        server_url = kwargs.pop("server_url", default_server_url)
-        work_pool = kwargs.pop("work_pool", default_work_pool)
-        compiler = kwargs.pop("compiler", None) or PrefectCompiler()
-
-        code_storage = kwargs.pop(
-            "code_storage",
-            getattr(link, "code_storage", "in_memory") if link else "in_memory",
-        )
-        s3_bucket = kwargs.pop(
-            "s3_bucket",
-            getattr(link, "s3_bucket", "") if link else "",
-        )
-
-        return PrefectRunner(
-            compiler=compiler,
-            mode=mode,
-            server_url=server_url,
-            work_pool=work_pool,
-            code_storage=code_storage,
-            s3_bucket=s3_bucket,
-            **kwargs,
-        )
+        compiler = kwargs.pop("compiler", None)
+        return PrefectRunner(compiler=compiler, link=link)

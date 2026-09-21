@@ -158,66 +158,12 @@ class PrefectArtifactCodeStorage(CodeStorageBackend):
         return dest_dir
 
 
-class S3CodeStorage(CodeStorageBackend):
-    """Uploads and streams tarball directly from/to S3 with O(1) memory usage."""
-
-    def __init__(
-        self, bucket: str | None = None, prefix: str = "pirlo-snapshots"
-    ) -> None:
-        self.bucket: str = bucket or os.environ.get("PIRLO_CODE_STORAGE_S3_BUCKET", "")
-        self.prefix: str = prefix
-
-    async def upload(self, tar_bytes: bytes, snapshot_name: str) -> str:
-        if not self.bucket:
-            raise ValueError(
-                "S3 bucket must be configured via PIRLO_CODE_STORAGE_S3_BUCKET "
-                "environment variable or link config."
-            )
-        import anyio
-        import boto3
-
-        s3: Any = boto3.client("s3")
-        key: str = f"{self.prefix}/{snapshot_name}.tar.gz"
-        await anyio.to_thread.run_sync(
-            lambda: s3.put_object(Bucket=self.bucket, Key=key, Body=tar_bytes)
-        )
-        return f"s3://{self.bucket}/{key}"
-
-    async def extract(self, code_ref: str, dest_dir: Path) -> Path:
-        from urllib.parse import urlparse
-
-        import anyio
-        import boto3
-
-        parsed: Any = urlparse(code_ref)
-        bucket: str = parsed.netloc
-        key: str = parsed.path.lstrip("/")
-
-        dest_dir.mkdir(parents=True, exist_ok=True)
-        archive_path: Path = dest_dir / "bundle.tar.gz"
-
-        # Stream download directly to file on disk (O(1) memory)
-        s3: Any = boto3.client("s3")
-        await anyio.to_thread.run_sync(
-            lambda: s3.download_file(bucket, key, str(archive_path))
-        )
-
-        # Unpack archive into dest_dir
-        with tarfile.open(archive_path, mode="r:gz") as tar:
-            tar.extractall(path=dest_dir, filter="data")
-
-        archive_path.unlink(missing_ok=True)
-        return dest_dir
-
-
 def get_code_storage_backend(
-    storage_type: Literal["in_memory", "prefect_artifact", "s3"] = "in_memory",
+    storage_type: Literal["in_memory", "prefect_artifact"] = "in_memory",
     **kwargs: Any,
 ) -> CodeStorageBackend:
     if storage_type == "prefect_artifact":
         return PrefectArtifactCodeStorage()
-    if storage_type == "s3":
-        return S3CodeStorage(bucket=kwargs.get("s3_bucket"))
     return InMemoryCodeStorage()
 
 

@@ -6,7 +6,7 @@ import contextlib
 import logging
 import os
 from collections.abc import Generator
-from typing import Any, Literal
+from typing import Any
 
 from prefect.settings import (
     PREFECT_API_URL,
@@ -19,6 +19,7 @@ from pirlo.core.models.blueprint import PlayBlueprint, PlayOutput
 from pirlo.core.models.orchestrator import ROUTINE_PRESETS, RoutineRegistration
 from pirlo.core.ports.runner import PlayRunner
 from pirlo.infrastructure.adapters.orchestrator.prefect.models import (
+    PrefectLink,
     PrefectRoutineRegistration,
 )
 from pirlo.infrastructure.adapters.orchestrator.prefect_compiler import (
@@ -39,23 +40,17 @@ class PrefectRunner(PlayRunner):
 
     def __init__(
         self,
-        compiler: PrefectCompiler,
-        mode: Literal["auto", "ephemeral", "server"] = "auto",
-        server_url: str | None = None,
-        work_pool: str = DEFAULT_WORK_POOL,
-        code_storage: Literal["in_memory", "prefect_artifact", "s3"] = "in_memory",
-        s3_bucket: str = "",
+        compiler: PrefectCompiler | None = None,
+        link: PrefectLink | None = None,
     ) -> None:
-        self.compiler: PrefectCompiler = compiler
-        self.mode: Literal["auto", "ephemeral", "server"] = mode
-        self.server_url: str | None = server_url
-        self.work_pool: str = work_pool
-        self.code_storage: Literal["in_memory", "prefect_artifact", "s3"] = code_storage
-        self.s3_bucket: str = s3_bucket
+        self.compiler: PrefectCompiler = compiler or PrefectCompiler()
+        self.link: PrefectLink = link or PrefectLink()
 
     def _resolve_active_api_url(self) -> str | None:
-        active_api_url: str | None = self.server_url
-        if active_api_url is None and self.mode in ("auto", "server"):
+        if self.link.is_ephemeral:
+            return None
+        active_api_url: str | None = self.link.server_url
+        if active_api_url is None:
             active_api_url = discover_prefect_server_url()
         if active_api_url and active_api_url != "ephemeral":
             active_api_url = active_api_url.rstrip("/")
@@ -70,7 +65,7 @@ class PrefectRunner(PlayRunner):
             PREFECT_LOGGING_LOG_PRINTS,
         )
 
-        if self.mode == "ephemeral" or (self.mode == "auto" and active_api_url is None):
+        if self.link.is_ephemeral or active_api_url is None:
             override_settings: dict[Any, Any] = {
                 PREFECT_API_URL: None,
                 PREFECT_SERVER_ALLOW_EPHEMERAL_MODE: True,
@@ -110,7 +105,7 @@ class PrefectRunner(PlayRunner):
 
         if routine:
             return await self._deploy_routine(workflow, routine, **kwargs)
-        if self.mode == "server" and self.work_pool:
+        if not self.link.is_ephemeral and self.link.work_pool:
             return await self._submit_remote_run(
                 workflow, force=force, show_logs=show_logs, **kwargs
             )
@@ -143,9 +138,7 @@ class PrefectRunner(PlayRunner):
             temporary_settings(override_settings),
             self._sync_environ(override_settings),
         ):
-            storage = get_code_storage_backend(
-                self.code_storage, s3_bucket=self.s3_bucket
-            )
+            storage = get_code_storage_backend(self.link.code_storage)
             tar_bytes = create_tarball_bytes()
             snapshot_hash = hashlib.sha256(tar_bytes).hexdigest()[:12]
             code_ref = await storage.upload(
@@ -157,7 +150,7 @@ class PrefectRunner(PlayRunner):
                 "play_name": workflow.name,
                 "parameters": kwargs,
                 "code_ref": code_ref,
-                "storage_type": self.code_storage,
+                "storage_type": self.link.code_storage,
                 "force": False,
                 "show_logs": False,
             }
@@ -167,7 +160,7 @@ class PrefectRunner(PlayRunner):
             raw_deployment: Any = run_play_remote.to_deployment(
                 name=deployment_name,
                 cron=cron_expr,
-                work_pool_name=self.work_pool or DEFAULT_WORK_POOL,
+                work_pool_name=self.link.work_pool or DEFAULT_WORK_POOL,
                 parameters=payload,
                 job_variables={"command": bootstrap_cmd},
                 enforce_parameter_schema=False,
@@ -184,7 +177,7 @@ class PrefectRunner(PlayRunner):
                 play_name=workflow.name,
                 routine=cron_expr,
                 dashboard_url=dashboard_url,
-                work_pool=self.work_pool or DEFAULT_WORK_POOL,
+                work_pool=self.link.work_pool or DEFAULT_WORK_POOL,
             )
 
     async def _submit_remote_run(
@@ -216,9 +209,7 @@ class PrefectRunner(PlayRunner):
             temporary_settings(override_settings),
             self._sync_environ(override_settings),
         ):
-            storage = get_code_storage_backend(
-                self.code_storage, s3_bucket=self.s3_bucket
-            )
+            storage = get_code_storage_backend(self.link.code_storage)
             tar_bytes = create_tarball_bytes()
             snapshot_hash = hashlib.sha256(tar_bytes).hexdigest()[:12]
             code_ref = await storage.upload(
@@ -230,7 +221,7 @@ class PrefectRunner(PlayRunner):
                 "play_name": workflow.name,
                 "parameters": kwargs,
                 "code_ref": code_ref,
-                "storage_type": self.code_storage,
+                "storage_type": self.link.code_storage,
                 "force": force,
                 "show_logs": show_logs,
             }
@@ -240,7 +231,7 @@ class PrefectRunner(PlayRunner):
             bootstrap_cmd = build_worker_bootstrap_command()
             raw_deployment: Any = run_play_remote.to_deployment(
                 name=deployment_name,
-                work_pool_name=self.work_pool or DEFAULT_WORK_POOL,
+                work_pool_name=self.link.work_pool or DEFAULT_WORK_POOL,
                 parameters=payload,
                 job_variables={"command": bootstrap_cmd},
                 enforce_parameter_schema=False,
@@ -295,7 +286,7 @@ class PrefectRunner(PlayRunner):
                 play_name=workflow.name,
                 routine=None,
                 dashboard_url=dashboard_url,
-                work_pool=self.work_pool or DEFAULT_WORK_POOL,
+                work_pool=self.link.work_pool or DEFAULT_WORK_POOL,
             )
 
     async def _run_immediate_once(
@@ -362,10 +353,9 @@ class PrefectRunner(PlayRunner):
 
     def get_dashboard_url(self, run_id: str) -> str | None:
         """Constructs Prefect dashboard URL if pirlo connect or a remote Prefect server is active."""
-        active_api_url: str | None = self.server_url
-        if active_api_url is None and self.mode in ("auto", "server"):
-            active_api_url = discover_prefect_server_url()
-
+        if self.link.is_ephemeral:
+            return None
+        active_api_url: str | None = self._resolve_active_api_url()
         if not active_api_url:
             return None
 

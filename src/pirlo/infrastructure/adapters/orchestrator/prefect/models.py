@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pirlo.core.config import DEFAULT_WORK_POOL
 from pirlo.core.models.orchestrator import OrchestratorLink, RoutineRegistration
@@ -10,6 +10,8 @@ from pirlo.core.models.parameters import Parameter
 class PrefectLink(OrchestratorLink):
     """Prefect 3.x specific orchestrator connection."""
 
+    name: str = "ephemeral"
+    engine: str = "prefect"
     server_url: Annotated[
         str,
         Parameter(
@@ -25,18 +27,12 @@ class PrefectLink(OrchestratorLink):
         ),
     ] = DEFAULT_WORK_POOL
     code_storage: Annotated[
-        str,
+        Literal["in_memory", "prefect_artifact"],
         Parameter(
-            help="Code packaging backend: in_memory, prefect_artifact, or s3",
+            help="Code packaging backend: in_memory or prefect_artifact",
             short="-c",
         ),
     ] = "prefect_artifact"
-    s3_bucket: Annotated[
-        str,
-        Parameter(
-            help="S3 bucket name if using s3 code storage backend",
-        ),
-    ] = ""
 
     @property
     def is_ephemeral(self) -> bool:

@@ -14,7 +14,7 @@ async def run_play_remote(
     play_name: str,
     parameters: dict[str, Any] | None = None,
     code_ref: str | None = None,
-    storage_type: Literal["in_memory", "prefect_artifact", "s3"] = "in_memory",
+    storage_type: Literal["in_memory", "prefect_artifact"] = "in_memory",
     force: bool = False,
     show_logs: bool = True,
 ) -> Any:

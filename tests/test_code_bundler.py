@@ -12,7 +12,6 @@ import pytest
 from pirlo.infrastructure.services.code_bundler import (
     InMemoryCodeStorage,
     PrefectArtifactCodeStorage,
-    S3CodeStorage,
     create_tarball_bytes,
     get_code_storage_backend,
 )
@@ -106,34 +105,8 @@ async def test_prefect_artifact_code_storage(tmp_path: Path):
         assert (res_dir / "play.py").read_text() == "print('play')"
 
 
-@pytest.mark.anyio
-async def test_s3_code_storage(tmp_path: Path):
-    src_file = tmp_path / "pipeline.py"
-    src_file.write_text("def run(): pass")
-    tar_bytes = create_tarball_bytes(root_dir=tmp_path)
-
-    storage = S3CodeStorage(bucket="my-bucket", prefix="snapshots")
-    mock_s3 = MagicMock()
-
-    def mock_download(bucket, key, local_dest):
-        Path(local_dest).write_bytes(tar_bytes)
-
-    mock_s3.download_file = MagicMock(side_effect=mock_download)
-
-    with patch("boto3.client", return_value=mock_s3):
-        code_ref = await storage.upload(tar_bytes, "my_flow")
-        assert code_ref == "s3://my-bucket/snapshots/my_flow.tar.gz"
-
-        dest_dir = tmp_path / "extracted_s3"
-        res_dir = await storage.extract(code_ref, dest_dir)
-        assert (res_dir / "pipeline.py").read_text() == "def run(): pass"
-
-
 def test_get_code_storage_backend_factory():
     assert isinstance(get_code_storage_backend("in_memory"), InMemoryCodeStorage)
     assert isinstance(
         get_code_storage_backend("prefect_artifact"), PrefectArtifactCodeStorage
-    )
-    assert isinstance(
-        get_code_storage_backend("s3", s3_bucket="test-bkt"), S3CodeStorage
     )

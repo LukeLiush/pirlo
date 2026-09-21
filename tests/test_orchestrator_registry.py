@@ -46,8 +46,7 @@ def test_prefect_plugin_create_runner_ephemeral() -> None:
     link = PrefectLink(name="local", server_url="ephemeral")
     runner = plugin.create_runner(link)
     assert isinstance(runner, PrefectRunner)
-    assert runner.mode == "ephemeral"
-    assert runner.server_url is None
+    assert runner.link.is_ephemeral is True
 
 
 def test_prefect_plugin_create_runner_server() -> None:
@@ -59,14 +58,13 @@ def test_prefect_plugin_create_runner_server() -> None:
     )
     runner = plugin.create_runner(link)
     assert isinstance(runner, PrefectRunner)
-    assert runner.mode == "server"
-    assert runner.server_url == "http://prefect.prod:4200/api"
-    assert runner.work_pool == "prod-pool"
+    assert runner.link.is_ephemeral is False
+    assert runner.link.server_url == "http://prefect.prod:4200/api"
+    assert runner.link.work_pool == "prod-pool"
 
 
 def test_prefect_plugin_create_runner_none_default() -> None:
     plugin = PrefectPlugin()
     runner = plugin.create_runner(None)
     assert isinstance(runner, PrefectRunner)
-    assert runner.mode == "ephemeral"
-    assert runner.server_url is None
+    assert runner.link.is_ephemeral is True
