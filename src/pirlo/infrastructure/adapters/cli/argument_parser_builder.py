@@ -9,6 +9,9 @@ from typing import Annotated, Any, get_args, get_origin, get_type_hints
 
 from pirlo.core.models.parameters import LinkParameter, Parameter
 from pirlo.core.ports.play import Play
+from pirlo.infrastructure.adapters.cli.compact_help_formatter import (
+    CompactHelpFormatter,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -193,7 +196,7 @@ class ArgumentParserBuilder:
             prog=prog_name,
             description=description,
             epilog=epilog_text,
-            formatter_class=argparse.RawDescriptionHelpFormatter,
+            formatter_class=CompactHelpFormatter,
         )
         added_flags: set[str] = set()
 
@@ -241,18 +244,18 @@ class ArgumentParserBuilder:
             "--routine",
             type=str,
             default=None,
-            metavar="CRON_OR_PRESET",
+            metavar="CRON",
             help=(
                 "Execution routine as a cron expression (e.g. '0 9 * * *') "
                 "or preset ('hourly', 'daily', 'weekly', 'monthly'). "
-                "If omitted (default is None), executes immediately as a one-time run."
+                "Omit to run once immediately."
             ),
         )
         parser.add_argument(
             "--orchestrator",
             type=str,
             default=None,
-            metavar="NAME",
+            metavar="LINK",
             help="Target orchestrator link name. If omitted, defaults to local ephemeral Prefect.",
         )
         return parser
