@@ -183,7 +183,11 @@ class ArgumentParserBuilder:
                             else dag_text.strip()
                         )
                 except Exception as err:  # noqa: BLE001
-                    logger.debug("Could not render DAG in help: %s", err)
+                    logger.warning(
+                        "Could not render workflow DAG in help for %s: %s",
+                        prog_name,
+                        err,
+                    )
 
         parser = argparse.ArgumentParser(
             prog=prog_name,
