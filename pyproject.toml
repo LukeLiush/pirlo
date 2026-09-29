@@ -1,7 +1,7 @@
 [project]
 name = "pirlo"
-version = "0.1.0"
-description = "Agentic orchestration framework"
+dynamic = ["version"]
+description = "Declarative DAG runner for typed Python plays"
 readme = "README.md"
 requires-python = ">=3.12"
 
@@ -26,9 +26,16 @@ dependencies = [
 [project.scripts]
 pirlo = "pirlo.infrastructure.adapters.cli.entrypoint:main"
 
+[project.urls]
+Repository = "https://github.com/LukeLiush/pirlo"
+Issues = "https://github.com/LukeLiush/pirlo/issues"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.version]
+path = "src/pirlo/__init__.py"
 
 [dependency-groups]
 dev = [

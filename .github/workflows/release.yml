@@ -1,0 +1,45 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    environment: pypi
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: ".python-version"
+
+      - run: uv sync --locked --dev
+      - run: uv run pytest
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run mypy .
+      - run: uv build
+
+      - name: Verify tag matches package
+        run: |
+          VERSION="$(uv run python -c 'import pirlo; print(pirlo.__version__)')"
+          test "v${VERSION}" = "${GITHUB_REF_NAME}"
+          echo "VERSION=${VERSION}" >> "${GITHUB_ENV}"
+
+      - name: Test built wheel
+        run: |
+          python -m venv /tmp/pirlo-wheel-test
+          /tmp/pirlo-wheel-test/bin/pip install dist/*.whl
+          /tmp/pirlo-wheel-test/bin/pirlo --help
+
+      - name: Publish to PyPI
+        run: uv publish --trusted-publishing always dist/*
