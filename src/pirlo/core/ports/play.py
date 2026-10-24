@@ -9,9 +9,11 @@ logger = logging.getLogger(__name__)
 
 from pirlo.core.models.blueprint import ParameterValue, ProxyRef, ScalarValue
 from pirlo.core.ports.play_ui import PlayUI
+from pirlo.core.services.shell import Shell
 
 if TYPE_CHECKING:
     from pirlo.core.models.blueprint import PlayBlueprint
+    from pirlo.core.ports.command_runner import CommandRunner
 
 
 class MappedParameter:
@@ -70,6 +72,7 @@ class Play[OutputT](ABC):
         play_id: str | None = None,
         routine: str | None = None,
         logger: logging.Logger | None = None,
+        command_runner: CommandRunner | None = None,
     ) -> None:
         if ui is None:
             from pirlo.infrastructure.adapters.cli.terminal_play_ui import (
@@ -82,6 +85,8 @@ class Play[OutputT](ABC):
         self._play_id: str | None = play_id
         self._routine: str | None = routine
         self._logger: logging.Logger | None = logger
+        self._command_runner: CommandRunner | None = command_runner
+        self._shell: Shell | None = None
 
     @property
     def ui(self) -> PlayUI:
@@ -105,6 +110,19 @@ class Play[OutputT](ABC):
             return self._logger
         play_name = getattr(self, "play_name", None) or self.__class__.__name__
         return logging.getLogger(f"pirlo.play.{play_name}")
+
+    @property
+    def shell(self) -> Shell:
+        """Runs external commands, streaming their output into self.logger as it arrives."""
+        if self._shell is None:
+            if self._command_runner is None:
+                from pirlo.infrastructure.adapters.shell.local_runner import (
+                    LocalCommandRunner,
+                )
+
+                self._command_runner = LocalCommandRunner()
+            self._shell = Shell(self._command_runner, self.logger)
+        return self._shell
 
     @abstractmethod
     async def execute(self, *args: Any, **kwargs: Any) -> OutputT:

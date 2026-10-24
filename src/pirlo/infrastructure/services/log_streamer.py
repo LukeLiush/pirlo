@@ -19,8 +19,7 @@ except ImportError:
 from rich.text import Text
 
 from pirlo.core.logging_context import resolve_log_prefix
-
-ANSI_PATTERN = re.compile(r"\x1b\[[0-9;]*[a-zA-Z]|\b\[\d+m")
+from pirlo.core.utils.ansi import ANSI_PATTERN
 
 
 class PirloLogFilter(logging.Filter):

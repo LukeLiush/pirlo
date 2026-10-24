@@ -6,6 +6,7 @@ import logging
 from typing import Annotated
 
 import pytest
+from command_runner_stub import StubCommandRunner
 
 from pirlo.core.decorators import play
 from pirlo.core.logging_context import (
@@ -160,6 +161,33 @@ def test_play_uses_injected_logger():
     injected = logging.getLogger("test.injected_play_logger")
     instance = SampleObservabilityPlay(logger=injected)
     assert instance.logger is injected
+
+
+@pytest.mark.anyio
+async def test_play_shell_uses_injected_runner_and_logger(
+    caplog: pytest.LogCaptureFixture,
+):
+    caplog.set_level(logging.INFO, logger="test.injected_play_logger")
+    stub = StubCommandRunner().respond("echo", "hi", output="hi\n")
+    instance = SampleObservabilityPlay(
+        logger=logging.getLogger("test.injected_play_logger"), command_runner=stub
+    )
+
+    result = await instance.shell.run("echo", "hi")
+
+    assert result.exit_code == 0
+    assert stub.calls[0].argv == ("echo", "hi")
+    assert "hi" in [
+        r.getMessage() for r in caplog.records if r.name == "test.injected_play_logger"
+    ]
+
+
+def test_play_shell_defaults_to_local_runner():
+    from pirlo.infrastructure.adapters.shell.local_runner import LocalCommandRunner
+
+    instance = SampleObservabilityPlay()
+    assert isinstance(instance.shell._runner, LocalCommandRunner)
+    assert instance.shell is instance.shell
 
 
 @pytest.mark.anyio
