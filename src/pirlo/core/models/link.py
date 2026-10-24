@@ -1,5 +1,9 @@
+import logging
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, ClassVar
+
+logger = logging.getLogger(__name__)
 
 SUPPORTED_PROVIDERS: dict[str, dict[str, Any]] = {
     "dashscope": {
@@ -33,9 +37,33 @@ class LinkTestResult:
     message: str
 
 
+class Link(ABC):
+    """A named way to reach something pirlo can use, stored under its kind."""
+
+    kind: ClassVar[str]
+    name: str
+    source: str | None
+    is_default: bool
+
+    @abstractmethod
+    def to_dict(self) -> dict[str, Any]:
+        """Returns the persisted representation, including the kind."""
+
+    @abstractmethod
+    def to_safe_dict(self) -> dict[str, Any]:
+        """Returns a display representation with sensitive fields masked."""
+
+    @classmethod
+    @abstractmethod
+    def from_dict(cls, name: str, data: dict[str, Any]) -> "Link":
+        """Rebuilds a link of this kind from its persisted representation."""
+
+
 @dataclass
-class LlmLink:
+class LlmLink(Link):
     """Represents an LLM provider connection link."""
+
+    kind: ClassVar[str] = "api"
 
     name: str
     provider: str
@@ -69,8 +97,9 @@ class LlmLink:
             f"is_default={self.is_default!r})"
         )
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         data: dict[str, Any] = {
+            "kind": self.kind,
             "provider": self.provider,
             "model": self.model,
             "api_key": self.api_key,
@@ -86,6 +115,7 @@ class LlmLink:
     def to_safe_dict(self) -> dict[str, Any]:
         """Returns a dict representation with sensitive fields masked."""
         data: dict[str, Any] = {
+            "kind": self.kind,
             "provider": self.provider,
             "model": self.model,
             "api_key": self.masked_api_key,
@@ -99,7 +129,7 @@ class LlmLink:
         return data
 
     @classmethod
-    def from_dict(cls, name: str, data: dict) -> "LlmLink":
+    def from_dict(cls, name: str, data: dict[str, Any]) -> "LlmLink":
         return cls(
             name=name,
             provider=data.get("provider", ""),
@@ -109,3 +139,16 @@ class LlmLink:
             source=data.get("source"),
             is_default=data.get("is_default", False),
         )
+
+
+LINK_KINDS: dict[str, type[Link]] = {LlmLink.kind: LlmLink}
+
+
+def link_from_dict(name: str, data: dict[str, Any]) -> Link | None:
+    """Loads a stored link by its kind; entries without a kind are API links."""
+    kind = data.get("kind", LlmLink.kind)
+    link_cls = LINK_KINDS.get(kind)
+    if link_cls is None:
+        logger.warning("Skipping link '%s': unknown kind '%s'", name, kind)
+        return None
+    return link_cls.from_dict(name, data)

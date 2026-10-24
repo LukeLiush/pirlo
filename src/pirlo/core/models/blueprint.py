@@ -14,12 +14,12 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from pirlo.core.models.link import LlmLink
+    from pirlo.core.models.link import Link
     from pirlo.core.ports.blueprint_renderer import BlueprintRenderer
     from pirlo.core.ports.play import MappedParameter
 
 type ScalarValue = (
-    str | int | float | bool | Path | LlmLink | PlayOutput | ProxyRef | MappedParameter
+    str | int | float | bool | Path | Link | PlayOutput | ProxyRef | MappedParameter
 )
 
 # Union type for strongly-typed static kwarg values

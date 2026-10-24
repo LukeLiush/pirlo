@@ -4,7 +4,7 @@ import argparse
 from pathlib import Path
 from typing import Any
 
-from pirlo.core.models.link import LlmLink
+from pirlo.core.models.link import Link
 from pirlo.core.models.parameters import LinkParameter
 from pirlo.core.models.play_invocation import PlayInvocation
 from pirlo.core.ports.link_repository import LinkRepository
@@ -122,7 +122,7 @@ class ParameterResolver:
             return None
         return self._resolve_link(name, value)
 
-    def _resolve_link(self, param_name: str, name: str) -> LlmLink:
+    def _resolve_link(self, param_name: str, name: str) -> Link:
         assert self._link_repository is not None
         link_obj = self._link_repository.get_by_name(name)
         if not link_obj:

@@ -15,4 +15,4 @@ class Parameter:
 
 
 class LinkParameter(Parameter):
-    """Specialized metadata tag for parameters that resolve to LlmLink domain objects."""
+    """Specialized metadata tag for parameters that resolve to Link domain objects."""

@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from pirlo.core.models.link import LlmLink
+from pirlo.core.models.link import Link, link_from_dict
 from pirlo.core.ports.link_repository import LinkRepository
 
 
@@ -27,15 +27,16 @@ class JsonLinkRepository(LinkRepository):
             json.dump(data, f, indent=4)
         temp_file.replace(self.filepath)
 
-    def save(self, link: LlmLink) -> None:
+    def save(self, link: Link) -> None:
         data = self._load_data()
         data[link.name] = link.to_dict()
         self._save_data(data)
 
-    def get_by_name(self, name: str) -> LlmLink | None:
+    def get_by_name(self, name: str) -> Link | None:
         data = self._load_data()
-        if name in data:
-            return LlmLink.from_dict(name, data[name])
+        details = data.get(name)
+        if isinstance(details, dict):
+            return link_from_dict(name, details)
         return None
 
     def delete(self, name: str) -> bool:
@@ -46,10 +47,11 @@ class JsonLinkRepository(LinkRepository):
             return True
         return False
 
-    def list_all(self) -> list[LlmLink]:
+    def list_all(self) -> list[Link]:
         data = self._load_data()
-        return [
-            LlmLink.from_dict(name, details)
+        links = (
+            link_from_dict(name, details)
             for name, details in data.items()
             if isinstance(details, dict)
-        ]
+        )
+        return [link for link in links if link is not None]

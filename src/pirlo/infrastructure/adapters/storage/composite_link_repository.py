@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from pirlo.core.config import get_workspace_path
-from pirlo.core.models.link import LlmLink
+from pirlo.core.models.link import Link
 from pirlo.core.ports.link_repository import LinkRepository
 from pirlo.infrastructure.adapters.storage.json_link_repository import (
     JsonLinkRepository,
@@ -25,11 +25,11 @@ class CompositeLinkRepository(LinkRepository):
         self.connect_repo = JsonLinkRepository(connect_path)
         self.static_repo = JsonLinkRepository(static_path)
 
-    def save(self, link: LlmLink) -> None:
+    def save(self, link: Link) -> None:
         """Saves user link to static repository."""
         self.static_repo.save(link)
 
-    def get_by_name(self, name: str) -> LlmLink | None:
+    def get_by_name(self, name: str) -> Link | None:
         """Looks up link in connect dynamic overlay first, falling back to static user links."""
         link = self.connect_repo.get_by_name(name)
         if link is not None:
@@ -42,7 +42,7 @@ class CompositeLinkRepository(LinkRepository):
         static_deleted = self.static_repo.delete(name)
         return connect_deleted or static_deleted
 
-    def list_all(self) -> list[LlmLink]:
+    def list_all(self) -> list[Link]:
         """Lists active links, merging connect overlay with static links."""
         connect_links = self.connect_repo.list_all()
         connect_names = {link.name for link in connect_links}

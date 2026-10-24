@@ -79,6 +79,9 @@ def run_list(repo: LinkRepository, supported_providers: dict[str, Any]) -> None:
     print(f"{'Name':<22} {'Provider':<12} {'Model':<20} {'Source':<15} {'Base URL'}")
     print("─" * 105)
     for link in links:
+        if not isinstance(link, LlmLink):
+            print(f"{link.name:<24} (unsupported link kind '{link.kind}')")
+            continue
         is_def = getattr(link, "is_default", False) or link.name == "serve-ollama"
         display_name = f"{link.name} (Default)" if is_def else link.name
         source_tag = getattr(link, "source", None) or "User Static"
@@ -209,10 +212,7 @@ def run_create(
 def run_show(
     repo: LinkRepository, name: str, supported_providers: dict[str, Any]
 ) -> None:
-    link = repo.get_by_name(name)
-    if not link:
-        print(f"Error: Link '{name}' not found.")
-        sys.exit(1)
+    link = _get_llm_link_or_exit(repo, name)
 
     print("Link Details:")
     print(f"  Name:        {link.name}")
@@ -239,10 +239,7 @@ def run_show(
 
 
 def run_test(repo: LinkRepository, name: str) -> None:
-    link = repo.get_by_name(name)
-    if not link:
-        print(f"Error: Link '{name}' not found.")
-        sys.exit(1)
+    link = _get_llm_link_or_exit(repo, name)
 
     target_endpoint = link.base_url or link.provider
 
@@ -253,6 +250,17 @@ def run_test(repo: LinkRepository, name: str) -> None:
     else:
         print(f"[FAIL] {result.message}")
         sys.exit(1)
+
+
+def _get_llm_link_or_exit(repo: LinkRepository, name: str) -> LlmLink:
+    link = repo.get_by_name(name)
+    if link is None:
+        print(f"Error: Link '{name}' not found.")
+        sys.exit(1)
+    if not isinstance(link, LlmLink):
+        print(f"Error: Link '{name}' has unsupported kind '{link.kind}'.")
+        sys.exit(1)
+    return link
 
 
 def run_delete(repo: LinkRepository, name: str) -> None:
