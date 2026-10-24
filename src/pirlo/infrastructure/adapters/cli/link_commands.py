@@ -261,9 +261,3 @@ def run_delete(repo: LinkRepository, name: str) -> None:
     else:
         print(f"Error: Link '{name}' not found.")
         sys.exit(1)
-
-    if repo.delete(name):
-        print(f"Successfully deleted link '{name}'.")
-    else:
-        print(f"Error: Link '{name}' not found.")
-        sys.exit(1)
