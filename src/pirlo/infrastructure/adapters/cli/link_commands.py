@@ -32,7 +32,8 @@ def link_main(supported_providers: dict[str, Any] | None = None) -> None:
         "--provider", help="Provider type (e.g. dashscope, gemini, openai, anthropic)"
     )
     create_parser.add_argument(
-        "--model", help="LLM model (e.g. gemini-1.5-flash, qwen-turbo)"
+        "--model",
+        help="Default model, used when a play does not pass one (optional)",
     )
     create_parser.add_argument("--api-key", help="Provider API Key")
     create_parser.add_argument("--base-url", help="Override Base URL")
@@ -49,6 +50,9 @@ def link_main(supported_providers: dict[str, Any] | None = None) -> None:
         "test", help="Test connectivity of a specific link"
     )
     test_parser.add_argument("name", help="Link Name")
+    test_parser.add_argument(
+        "--model", help="Model to test with (default: the link's default model)"
+    )
 
     # 5. delete
     delete_parser = subparsers.add_parser("delete", help="Delete a specific link")
@@ -64,7 +68,7 @@ def link_main(supported_providers: dict[str, Any] | None = None) -> None:
     elif args.subcommand == "show":
         run_show(repo, args.name, supported_providers)
     elif args.subcommand == "test":
-        run_test(repo, args.name)
+        run_test(repo, args.name, args.model)
     elif args.subcommand == "delete":
         run_delete(repo, args.name)
 
@@ -76,7 +80,9 @@ def run_list(repo: LinkRepository, supported_providers: dict[str, Any]) -> None:
         return
 
     print("Active LLM Links:\n")
-    print(f"{'Name':<22} {'Provider':<12} {'Model':<20} {'Source':<15} {'Base URL'}")
+    print(
+        f"{'Name':<22} {'Provider':<12} {'Default Model':<20} {'Source':<15} {'Base URL'}"
+    )
     print("─" * 105)
     for link in links:
         if not isinstance(link, LlmLink):
@@ -97,7 +103,7 @@ def run_list(repo: LinkRepository, supported_providers: dict[str, Any]) -> None:
         if len(base_url_str) > 36:
             base_url_str = base_url_str[:33] + "..."
         print(
-            f"{display_name:<24} {link.provider:<12} {link.model:<20} {source_tag:<15} {base_url_str}"
+            f"{display_name:<24} {link.provider:<12} {link.default_model or '—':<20} {source_tag:<15} {base_url_str}"
         )
 
     print("\n💡 Base URL Guide:")
@@ -116,12 +122,12 @@ def run_create(
 ) -> None:
     name = getattr(args, "name", None) or getattr(args, "_name", None)
     provider = args.provider
-    model = args.model
+    model = args.model or None
     api_key = args.api_key
     base_url = args.base_url
     test = args.test
 
-    is_interactive = not (name and provider and model and api_key)
+    is_interactive = not (name and provider and api_key)
 
     if is_interactive:
         if not name:
@@ -144,12 +150,12 @@ def run_create(
                     print("Invalid selection. Try again.")
 
         if not model:
-            model = input(
-                "? Input Model Name (required, e.g. gemini-1.5-flash, qwen-turbo): "
-            ).strip()
-            if not model:
-                print("Error: Model Name is required.")
-                sys.exit(1)
+            model = (
+                input(
+                    "? Default model (optional - press ENTER to skip, e.g. gemini-2.5-flash): "
+                ).strip()
+                or None
+            )
 
         if not api_key:
             api_key = getpass.getpass("? Input API Key: ").strip()
@@ -181,16 +187,22 @@ def run_create(
                 f"Error: Invalid provider '{provider}'. Supported: {', '.join(supported_providers.keys())}"
             )
             sys.exit(1)
-        if not model:
-            print("Error: Model Name is required via --model flag.")
-            sys.exit(1)
 
     assert name is not None
     link = LlmLink(
-        name=name, provider=provider, model=model, api_key=api_key, base_url=base_url
+        name=name,
+        provider=provider,
+        api_key=api_key,
+        base_url=base_url,
+        default_model=model,
     )
 
-    if test:
+    if test and not model:
+        print(
+            f"Skipping connection test: no default model. "
+            f"Run 'pirlo link test {name} --model <model>' to test."
+        )
+    elif test:
         print(
             f"Checking connection to {provider.capitalize()} using model '{model}'..."
         )
@@ -215,9 +227,9 @@ def run_show(
     link = _get_llm_link_or_exit(repo, name)
 
     print("Link Details:")
-    print(f"  Name:        {link.name}")
-    print(f"  Provider:    {link.provider}")
-    print(f"  Model:       {link.model}")
+    print(f"  Name:          {link.name}")
+    print(f"  Provider:      {link.provider}")
+    print(f"  Default Model: {link.default_model or '— (pass --model per call)'}")
 
     masked_key = link.api_key
     if len(masked_key) > 8:
@@ -234,17 +246,19 @@ def run_show(
         else:
             base_url_display = "Default (Official API)"
 
-    print(f"  Base URL:    {base_url_display}")
-    print(f"  API Key:     {masked_key}")
+    print(f"  Base URL:      {base_url_display}")
+    print(f"  API Key:       {masked_key}")
 
 
-def run_test(repo: LinkRepository, name: str) -> None:
+def run_test(repo: LinkRepository, name: str, model: str | None = None) -> None:
     link = _get_llm_link_or_exit(repo, name)
 
     target_endpoint = link.base_url or link.provider
+    model_name = model or link.default_model
+    model_info = f" using model '{model_name}'" if model_name else ""
 
-    print(f"Testing link '{name}' to {target_endpoint} using model '{link.model}'...")
-    result = LinkTester.test_link(link)
+    print(f"Testing link '{name}' to {target_endpoint}{model_info}...")
+    result = LinkTester.test_link(link, model=model)
     if result.success:
         print(f"[PASS] {result.message}")
     else:

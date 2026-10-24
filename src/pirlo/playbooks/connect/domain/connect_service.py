@@ -206,7 +206,7 @@ class ConnectService:
             link = LlmLink(
                 name=link_name,
                 provider="ollama",
-                model=model,
+                default_model=model,
                 api_key="ollama",
                 base_url=session.ollama_base_url,
                 source="pirlo-connect",

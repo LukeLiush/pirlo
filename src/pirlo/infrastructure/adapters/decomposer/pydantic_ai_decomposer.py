@@ -31,12 +31,13 @@ You are Pirlo's Task Decomposer Engine, an expert at breaking down multi-source 
 
 def get_decomposer_agent(
     link: LlmLink,
+    model: str | None = None,
 ) -> Agent[None, DecomposerPlan]:
     """Create and return a PydanticAI Agent with tools and system prompt."""
-    model = PydanticAiAdapterRegistry.to_model(link)
+    pydantic_model = PydanticAiAdapterRegistry.to_model(link, model)
 
     agent: Agent[None, DecomposerPlan] = Agent[None, DecomposerPlan](
-        model=model,
+        model=pydantic_model,
         output_type=DecomposerPlan,
         system_prompt=DECOMPOSER_SYSTEM_PROMPT,
     )
@@ -60,17 +61,19 @@ def get_decomposer_agent(
 async def run_decomposer_pydantic_ai_task(
     user_prompt: str,
     link: LlmLink,
+    model: str | None = None,
 ) -> DecomposerPlan:
     """Prefect Task wrapper executing PydanticAI Agent with full Prefect tracking & logging."""
     plan_id = hashlib.sha256(user_prompt.encode()).hexdigest()[:16]
+    model_name = link.resolve_model(model)
     logger.info(
         "🧩 Decomposing task using Link '%s' (Provider: %s, Model: %s, Base URL: %s)...",
         link.name,
         link.provider,
-        link.model,
+        model_name,
         link.base_url or "Default API",
     )
-    agent = get_decomposer_agent(link=link)
+    agent = get_decomposer_agent(link=link, model=model_name)
 
     result = await agent.run(f"Decompose this multi-source request: {user_prompt}")
 
@@ -97,8 +100,11 @@ async def run_decomposer_pydantic_ai_task(
 class PydanticAiDecomposer(DecomposerPort):
     """Decomposer Adapter delegating to Prefect-wrapped PydanticAI Agent."""
 
-    def __init__(self, link: LlmLink) -> None:
+    def __init__(self, link: LlmLink, model: str | None = None) -> None:
         self.link = link
+        self.model = model
 
     async def decompose(self, user_prompt: str) -> DecomposerPlan:
-        return await run_decomposer_pydantic_ai_task(user_prompt, link=self.link)
+        return await run_decomposer_pydantic_ai_task(
+            user_prompt, link=self.link, model=self.model
+        )

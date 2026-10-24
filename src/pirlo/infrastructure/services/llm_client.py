@@ -19,9 +19,10 @@ class LlmClient:
         temperature: float = 0.0,
         max_tokens: int | None = None,
         timeout: float = 30.0,
+        model: str | None = None,
         **kwargs: Any,
     ) -> str:
-        """Synchronously invokes LiteLLM completion for text transformation/summarization."""
+        """Synchronously invokes LiteLLM completion; model falls back to the link's default."""
         messages = (
             [{"role": "user", "content": prompt}] if isinstance(prompt, str) else prompt
         )
@@ -32,7 +33,7 @@ class LlmClient:
             base_url = SUPPORTED_PROVIDERS[provider].get("default_base_url")
 
         response = litellm.completion(
-            model=link.model,
+            model=link.resolve_model(model),
             custom_llm_provider=provider,
             messages=messages,
             api_key=link.api_key or None,
@@ -51,9 +52,10 @@ class LlmClient:
         temperature: float = 0.0,
         max_tokens: int | None = None,
         timeout: float = 30.0,
+        model: str | None = None,
         **kwargs: Any,
     ) -> str:
-        """Asynchronously invokes LiteLLM completion for text transformation/summarization."""
+        """Asynchronously invokes LiteLLM completion; model falls back to the link's default."""
         messages = (
             [{"role": "user", "content": prompt}] if isinstance(prompt, str) else prompt
         )
@@ -64,7 +66,7 @@ class LlmClient:
             base_url = SUPPORTED_PROVIDERS[provider].get("default_base_url")
 
         response = await litellm.acompletion(
-            model=link.model,
+            model=link.resolve_model(model),
             custom_llm_provider=provider,
             messages=messages,
             api_key=link.api_key or None,

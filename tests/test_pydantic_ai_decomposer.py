@@ -53,7 +53,7 @@ async def test_pydantic_ai_decomposer_mocked():
         link = LlmLink(
             name="test-link",
             provider="gemini",
-            model="gemini-2.5-flash",
+            default_model="gemini-2.5-flash",
             api_key="test",
         )
         decomposer = PydanticAiDecomposer(link=link)
@@ -74,7 +74,10 @@ def test_pydantic_ai_adapter_registry_to_model():
     )
 
     gemini_link = LlmLink(
-        name="g-link", provider="gemini", model="gemini-2.5-flash", api_key="key"
+        name="g-link",
+        provider="gemini",
+        default_model="gemini-2.5-flash",
+        api_key="key",
     )
     gemini_model = PydanticAiAdapterRegistry.to_model(gemini_link)
     assert type(gemini_model).__name__ == "GoogleModel"
@@ -82,7 +85,7 @@ def test_pydantic_ai_adapter_registry_to_model():
     anthropic_link = LlmLink(
         name="a-link",
         provider="anthropic",
-        model="claude-3-5-sonnet-latest",
+        default_model="claude-3-5-sonnet-latest",
         api_key="key",
     )
     anthropic_model = PydanticAiAdapterRegistry.to_model(anthropic_link)

@@ -30,7 +30,7 @@ class TestLlmLinks(unittest.TestCase):
         link = LlmLink(
             name="test-gemini",
             provider="gemini",
-            model="gemini-1.5-flash",
+            default_model="gemini-1.5-flash",
             api_key="key123",
             base_url="https://gemini.url",
         )
@@ -43,7 +43,7 @@ class TestLlmLinks(unittest.TestCase):
         self.assertIsNotNone(fetched)
         self.assertEqual(fetched.name, "test-gemini")
         self.assertEqual(fetched.provider, "gemini")
-        self.assertEqual(fetched.model, "gemini-1.5-flash")
+        self.assertEqual(fetched.default_model, "gemini-1.5-flash")
         self.assertEqual(fetched.api_key, "key123")
         self.assertEqual(fetched.base_url, "https://gemini.url")
 
@@ -68,7 +68,7 @@ class TestLlmLinks(unittest.TestCase):
         link = LlmLink(
             name="dashscope-test",
             provider="dashscope",
-            model="qwen-max",
+            default_model="qwen-max",
             api_key="sk-dashscope-key",
         )
 
@@ -96,7 +96,7 @@ class TestLlmLinks(unittest.TestCase):
         link = LlmLink(
             name="openai-test",
             provider="openai",
-            model="gpt-4o-mini",
+            default_model="gpt-4o-mini",
             api_key="sk-test",
         )
 
@@ -112,7 +112,7 @@ class TestLlmLinks(unittest.TestCase):
         link = LlmLink(
             name="invalid-test",
             provider="invalid",
-            model="some-model",
+            default_model="some-model",
             api_key="key",
         )
 

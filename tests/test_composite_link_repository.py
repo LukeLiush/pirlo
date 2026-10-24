@@ -16,7 +16,7 @@ def test_composite_link_repository_overlay_precedence(tmp_path: Path):
     static_link = LlmLink(
         name="serve-ollama",
         provider="ollama",
-        model="qwen2.5",
+        default_model="qwen2.5",
         api_key="static-key",
         base_url="http://localhost:11434/v1",
         source="static",
@@ -26,7 +26,7 @@ def test_composite_link_repository_overlay_precedence(tmp_path: Path):
     # 2. Get static link
     fetched = repo.get_by_name("serve-ollama")
     assert fetched is not None
-    assert fetched.model == "qwen2.5"
+    assert fetched.default_model == "qwen2.5"
     assert fetched.source == "static"
 
     # 3. Add dynamic connect link overlay with same name
@@ -34,7 +34,7 @@ def test_composite_link_repository_overlay_precedence(tmp_path: Path):
     connect_link = LlmLink(
         name="serve-ollama",
         provider="ollama",
-        model="qwen2.5",
+        default_model="qwen2.5",
         api_key="ollama",
         base_url="http://127.0.0.1:11435/v1",
         source="pirlo-connect",
@@ -44,7 +44,7 @@ def test_composite_link_repository_overlay_precedence(tmp_path: Path):
     # 4. Get link should return dynamic connect overlay
     fetched_overlay = repo.get_by_name("serve-ollama")
     assert fetched_overlay is not None
-    assert fetched_overlay.model == "qwen2.5"
+    assert fetched_overlay.default_model == "qwen2.5"
     assert fetched_overlay.source == "pirlo-connect"
     assert fetched_overlay.base_url == "http://127.0.0.1:11435/v1"
 
@@ -58,4 +58,4 @@ def test_composite_link_repository_overlay_precedence(tmp_path: Path):
     reverted = repo.get_by_name("serve-ollama")
     assert reverted is not None
     assert reverted.source == "static"
-    assert reverted.model == "qwen2.5"
+    assert reverted.default_model == "qwen2.5"

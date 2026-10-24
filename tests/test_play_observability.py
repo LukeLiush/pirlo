@@ -59,7 +59,7 @@ def test_mask_sensitive_data_with_dataclass():
     link = LlmLink(
         name="test",
         provider="gemini",
-        model="gemini-2.5-flash",
+        default_model="gemini-2.5-flash",
         api_key="AIzaFAKE_test_key_not_real_1234567890",
     )
     raw = {"playmaker": link, "use_vision": False}
@@ -76,8 +76,12 @@ def test_mask_sensitive_data_with_nested_list():
     from pirlo.core.models.link import LlmLink
 
     links = [
-        LlmLink(name="a", provider="gemini", model="m1", api_key="secret_key_1"),
-        LlmLink(name="b", provider="openai", model="m2", api_key="secret_key_2"),
+        LlmLink(
+            name="a", provider="gemini", default_model="m1", api_key="secret_key_1"
+        ),
+        LlmLink(
+            name="b", provider="openai", default_model="m2", api_key="secret_key_2"
+        ),
     ]
     raw = {"models": links, "count": 2}
     masked = mask_sensitive_data(raw)
@@ -97,7 +101,7 @@ def test_llmlink_repr_masks_api_key():
     link = LlmLink(
         name="test",
         provider="gemini",
-        model="gemini-2.5-flash",
+        default_model="gemini-2.5-flash",
         api_key="AIzaFAKE_test_key_not_real_1234567890",
     )
     r = repr(link)
@@ -112,7 +116,7 @@ def test_llmlink_to_safe_dict_masks_api_key():
     link = LlmLink(
         name="test",
         provider="gemini",
-        model="gemini-2.5-flash",
+        default_model="gemini-2.5-flash",
         api_key="AIzaFAKE_test_key_not_real_1234567890",
     )
     safe = link.to_safe_dict()
