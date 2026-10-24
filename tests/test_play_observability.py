@@ -156,6 +156,12 @@ def test_play_logger_property():
     assert instance.logger.name == "pirlo.play.obs_sample_play"
 
 
+def test_play_uses_injected_logger():
+    injected = logging.getLogger("test.injected_play_logger")
+    instance = SampleObservabilityPlay(logger=injected)
+    assert instance.logger is injected
+
+
 @pytest.mark.anyio
 async def test_prefect_compiler_lifecycle_logging():
     blueprint: PlayBlueprint = BlueprintExtractor.extract_from_play(

@@ -69,6 +69,7 @@ class Play[OutputT](ABC):
         ui: PlayUI | None = None,
         play_id: str | None = None,
         routine: str | None = None,
+        logger: logging.Logger | None = None,
     ) -> None:
         if ui is None:
             from pirlo.infrastructure.adapters.cli.terminal_play_ui import (
@@ -80,6 +81,7 @@ class Play[OutputT](ABC):
             self._ui = ui
         self._play_id: str | None = play_id
         self._routine: str | None = routine
+        self._logger: logging.Logger | None = logger
 
     @property
     def ui(self) -> PlayUI:
@@ -99,6 +101,8 @@ class Play[OutputT](ABC):
     @property
     def logger(self) -> logging.Logger:
         """Structured logger pre-bound to this play's identity hierarchy."""
+        if self._logger is not None:
+            return self._logger
         play_name = getattr(self, "play_name", None) or self.__class__.__name__
         return logging.getLogger(f"pirlo.play.{play_name}")
 

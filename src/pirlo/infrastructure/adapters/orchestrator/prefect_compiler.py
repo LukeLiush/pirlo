@@ -62,6 +62,23 @@ class _PrefectTaskLogForwardHandler(logging.Handler):
         self.target_logger.log(record.levelno, payload)
 
 
+def _build_task_play_logger(
+    play_name: str,
+    task_logger: logging.Logger | logging.LoggerAdapter[Any],
+) -> logging.Logger:
+    """Builds a task-private logger that forwards a play's self.logger into its Prefect task log.
+
+    Instantiated directly rather than via getLogger so each task gets its own
+    instance and the global logger registry does not grow per task.
+    """
+    play_logger: logging.Logger = logging.Logger(  # noqa: LOG001
+        f"pirlo.play.{play_name}", logging.DEBUG
+    )
+    play_logger.propagate = False
+    play_logger.addHandler(_PrefectTaskLogForwardHandler(task_logger))
+    return play_logger
+
+
 class PrefectCompiler(BlueprintCompiler[PrefectWorkflow]):
     """Compiles a PlayBlueprint into an executable PrefectWorkflow model."""
 
@@ -179,31 +196,21 @@ class PrefectCompiler(BlueprintCompiler[PrefectWorkflow]):
                         identity = compute_play_identity(
                             active_play_name, kwargs, version=play_version
                         )
+                        try:
+                            from prefect.logging import get_run_logger
+
+                            task_logger: logging.Logger | logging.LoggerAdapter[Any] = (
+                                get_run_logger()
+                            )
+                        except Exception:  # noqa: BLE001
+                            task_logger = logger
+
                         with play_logging_context(
                             identity.short_id, run_id=active_run_id
                         ):
-                            try:
-                                from prefect.logging import get_run_logger
-
-                                task_logger: (
-                                    logging.Logger | logging.LoggerAdapter[Any]
-                                ) = get_run_logger()
-                            except Exception:  # noqa: BLE001
-                                task_logger = logger
-
-                            # Forward custom self.logger calls directly into task_logger
-                            play_custom_logger: logging.Logger = logging.getLogger(
-                                f"pirlo.play.{active_play_name}"
+                            play_custom_logger: logging.Logger = (
+                                _build_task_play_logger(active_play_name, task_logger)
                             )
-                            orig_play_level: int = play_custom_logger.level
-                            orig_propagate: bool = play_custom_logger.propagate
-                            play_custom_logger.setLevel(logging.DEBUG)
-                            play_custom_logger.propagate = False
-                            forward_handler: logging.Handler = (
-                                _PrefectTaskLogForwardHandler(task_logger)
-                            )
-                            play_custom_logger.addHandler(forward_handler)
-
                             masked_inputs: dict[str, Any] = mask_sensitive_data(
                                 dict(kwargs)
                             )
@@ -266,6 +273,7 @@ class PrefectCompiler(BlueprintCompiler[PrefectWorkflow]):
                                         ),
                                         play_id=identity.full_id,
                                         routine=blueprint_routine,
+                                        logger=play_custom_logger,
                                     )
                                 except TypeError:
                                     try:
@@ -363,10 +371,6 @@ class PrefectCompiler(BlueprintCompiler[PrefectWorkflow]):
                                     type(exc).__name__,
                                 )
                                 raise
-                            finally:
-                                play_custom_logger.removeHandler(forward_handler)
-                                play_custom_logger.setLevel(orig_play_level)
-                                play_custom_logger.propagate = orig_propagate
 
                     def _compute_task_run_name() -> str:
                         from prefect.context import TaskRunContext
