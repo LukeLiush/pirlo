@@ -389,3 +389,28 @@ async def test_run_id_consistency_across_disk_and_logs():
     run_record = await repo.get_by_id(run_id)
     assert run_record is not None
     assert run_record.run_id == run_id
+
+
+@play(name="obs_narrow_init_play")
+class NarrowInitPlay(Play[SampleOutput]):
+    def __init__(self) -> None:
+        super().__init__()
+
+    async def execute(self) -> SampleOutput:
+        return SampleOutput(message="unreachable")
+
+
+@pytest.mark.anyio
+async def test_prefect_compiler_rejects_play_with_incompatible_init():
+    from pirlo.infrastructure.adapters.orchestrator.prefect_runner import (
+        PrefectRunner,
+    )
+
+    blueprint: PlayBlueprint = BlueprintExtractor.extract_from_play(NarrowInitPlay)
+    runner = PrefectRunner(compiler=PrefectCompiler())
+
+    with (
+        pytest.raises(TypeError, match="unexpected keyword argument"),
+        workflow_logging_context(generate_short_run_id()),
+    ):
+        await runner.run(blueprint)
