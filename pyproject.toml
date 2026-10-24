@@ -16,6 +16,7 @@ dependencies = [
     "ollama>=0.4.0",
     "paramiko>=3.4.0",
     "prefect>=3.0.0",
+    "psutil>=7.0.0",
     "pydantic>=2.12.5",
     "pydantic-ai>=0.0.35",
     "python-on-whales>=0.70.0",
