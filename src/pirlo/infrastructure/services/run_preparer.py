@@ -7,8 +7,6 @@ from typing import Any
 
 from pirlo.core.models.play_invocation import PlayInvocation
 from pirlo.core.models.run import PreparedRun
-from pirlo.core.ports.play import Play
-from pirlo.infrastructure.services.parameter_provider import discover_parameters
 from pirlo.infrastructure.services.parameter_resolution import ParameterResolver
 from pirlo.infrastructure.services.run_id_generator import IdentityFactory
 
@@ -18,11 +16,13 @@ class RunPreparer:
 
     def __init__(
         self,
-        playbook_cls: type[Play[Any]],
+        parameters: list[dict[str, Any]],
         pirlo_workspace: Path,
         parameter_resolver: ParameterResolver,
     ) -> None:
-        self._playbook_cls = playbook_cls
+        """``parameters`` must be the list the CLI parser was built from
+        (``ArgumentParserBuilder.parameters``), so every flag in --help is resolved."""
+        self._parameters = parameters
         self._pirlo_workspace = pirlo_workspace
         self._parameter_resolver = parameter_resolver
 
@@ -32,9 +32,8 @@ class RunPreparer:
         playbook_invocation: PlayInvocation | None = None,
         toml_config: dict[str, Any] | None = None,
     ) -> PreparedRun:
-        parameters: list[dict[str, Any]] = discover_parameters(self._playbook_cls)
         resolved_params: dict[str, Any] = self._parameter_resolver.resolve_all(
-            parameters
+            self._parameters
         )
         run_name, run_id = self._establish_identity(playbook_name, resolved_params)
 

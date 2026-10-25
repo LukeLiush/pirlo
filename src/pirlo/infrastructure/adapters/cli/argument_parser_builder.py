@@ -15,10 +15,8 @@ from pirlo.infrastructure.adapters.cli.compact_help_formatter import (
 
 logger = logging.getLogger(__name__)
 
-TargetSignatureSource = type[Play] | Callable[..., Any]
 
-
-def extract_signature_parameters(
+def _extract_signature_parameters(
     target_fn: Callable[..., Any],
 ) -> list[dict[str, Any]]:
     """Extract type annotations, defaults, and Annotated metadata from a function signature."""
@@ -92,36 +90,23 @@ def extract_signature_parameters(
 
 
 class ArgumentParserBuilder:
-    """Builds an ``argparse.ArgumentParser`` by inspecting function signatures and bubbling upstream parameters."""
+    """Builds an ``argparse.ArgumentParser`` for a play, bubbling up its upstream plays' parameters.
 
-    def __init__(self, target_fn_or_cls: TargetSignatureSource) -> None:
-        self._target_cls: type[Any] | None = None
-        self._target_fn: Callable[..., Any]
-        self._description: str | None = None
-        self._upstream_params_by_cls: dict[type[Any], list[dict[str, Any]]] = {}
+    ``parameters`` is the single list behind both ``--help`` and run resolution.
+    """
 
-        if inspect.isclass(target_fn_or_cls):
-            self._target_cls = target_fn_or_cls
-            self._description = (
-                getattr(target_fn_or_cls, "playbook_description", None)
-                or getattr(target_fn_or_cls, "play_description", None)
-                or target_fn_or_cls.__doc__
-            )
-            if hasattr(target_fn_or_cls, "execute"):
-                self._target_fn = target_fn_or_cls.execute
-            else:
-                self._target_fn = target_fn_or_cls
-        else:
-            self._target_fn = target_fn_or_cls
-            self._description = getattr(target_fn_or_cls, "__doc__", None)
-
-        self._parameters: list[dict[str, Any]] = extract_signature_parameters(
-            self._target_fn
+    def __init__(self, play_cls: type[Play[Any]]) -> None:
+        self._play_cls: type[Play[Any]] = play_cls
+        self._description: str | None = (
+            getattr(play_cls, "playbook_description", None)
+            or getattr(play_cls, "play_description", None)
+            or play_cls.__doc__
         )
-
-        # Bubble upstream parameters if target_cls has get_upstream_requirements
-        if self._target_cls and hasattr(self._target_cls, "get_upstream_requirements"):
-            self._discover_upstream_parameters(self._target_cls)
+        self._upstream_params_by_cls: dict[type[Any], list[dict[str, Any]]] = {}
+        self._parameters: list[dict[str, Any]] = _extract_signature_parameters(
+            play_cls.execute
+        )
+        self._discover_upstream_parameters(play_cls)
 
     def _discover_upstream_parameters(self, target_cls: type[Any]) -> None:
         visited: set[type[Any]] = {target_cls}
@@ -136,7 +121,7 @@ class ArgumentParserBuilder:
 
             fn = getattr(upstream_cls, "execute", None)
             if fn:
-                upstream_params = extract_signature_parameters(fn)
+                upstream_params = _extract_signature_parameters(fn)
                 self._upstream_params_by_cls[upstream_cls] = upstream_params
                 for p in upstream_params:
                     # Bubble parameter to self._parameters if not already present
@@ -162,35 +147,25 @@ class ArgumentParserBuilder:
         epilog_text: str | None = None,
     ) -> argparse.ArgumentParser:
         description = self._description or ""
-        if self._target_cls is not None:
-            from pirlo.core.ports.play import Play
+        from pirlo.core.services.blueprint_extractor import BlueprintExtractor
+        from pirlo.infrastructure.adapters.visualization.renderer_factory import (
+            BlueprintRendererFactory,
+        )
 
-            if isinstance(self._target_cls, type) and issubclass(
-                self._target_cls, Play
-            ):
-                from pirlo.core.services.blueprint_extractor import (
-                    BlueprintExtractor,
+        try:
+            blueprint = BlueprintExtractor.extract_from_play(self._play_cls)
+            renderer = BlueprintRendererFactory.get_renderer()
+            dag_text = renderer.render(blueprint)
+            if dag_text:
+                description = (
+                    f"{description}\n{dag_text}" if description else dag_text.strip()
                 )
-                from pirlo.infrastructure.adapters.visualization.renderer_factory import (
-                    BlueprintRendererFactory,
-                )
-
-                try:
-                    blueprint = BlueprintExtractor.extract_from_play(self._target_cls)
-                    renderer = BlueprintRendererFactory.get_renderer()
-                    dag_text = renderer.render(blueprint)
-                    if dag_text:
-                        description = (
-                            f"{description}\n{dag_text}"
-                            if description
-                            else dag_text.strip()
-                        )
-                except Exception as err:  # noqa: BLE001
-                    logger.warning(
-                        "Could not render workflow DAG in help for %s: %s",
-                        prog_name,
-                        err,
-                    )
+        except Exception as err:  # noqa: BLE001
+            logger.warning(
+                "Could not render workflow DAG in help for %s: %s",
+                prog_name,
+                err,
+            )
 
         parser = argparse.ArgumentParser(
             prog=prog_name,
@@ -201,13 +176,13 @@ class ArgumentParserBuilder:
         added_flags: set[str] = set()
 
         if self._upstream_params_by_cls:
-            target_name = getattr(self._target_cls, "play_name", None) or (
-                self._target_cls.__name__ if self._target_cls else prog_name
+            target_name = (
+                getattr(self._play_cls, "play_name", None) or self._play_cls.__name__
             )
             target_group = parser.add_argument_group(
                 f"Target Play Options ({target_name})"
             )
-            target_params = extract_signature_parameters(self._target_fn)
+            target_params = _extract_signature_parameters(self._play_cls.execute)
             for param in target_params:
                 self._add_argument(target_group, param, added_flags)
 

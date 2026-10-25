@@ -18,14 +18,15 @@ from pirlo.playbooks.demo.report_dag import SendAlertPlay
 
 def _prepare(play_cls: Any, argv: list[str], workspace: Path) -> PreparedRun:
     invocation = PlayInvocation.from_raw(argv)
-    parser = ArgumentParserBuilder(play_cls).build_parser(play_cls.play_name)
+    builder = ArgumentParserBuilder(play_cls)
+    parser = builder.build_parser(play_cls.play_name)
     resolver = ParameterResolver.create(
         playbook_parser=parser,
         playbook_invocation=invocation,
         pirlo_workspace=workspace,
         toml_config={},
     )
-    return RunPreparer(play_cls, workspace, resolver).prepare(
+    return RunPreparer(builder.parameters, workspace, resolver).prepare(
         play_cls.play_name, invocation
     )
 

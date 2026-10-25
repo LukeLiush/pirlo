@@ -84,7 +84,7 @@ class CliPlayRunner:
         )
 
         preparer: RunPreparer = RunPreparer(
-            playbook_cls=play_cls,
+            parameters=argument_parser_builder.parameters,
             pirlo_workspace=pirlo_workspace,
             parameter_resolver=parameter_resolver,
         )
