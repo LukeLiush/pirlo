@@ -72,11 +72,7 @@ class and test it against a stub.
 
 ## Legacy — do not build on
 
-The browser-automation layer is vestigial since `autopass` was removed and is
-slated for deletion: `core/ports/browser_agent_factory.py` (which wrongly imports
-`browser_use` into the core layer), plus `infrastructure/services/llm_workflow.py`,
-`workflow_service.py`, `playwright_workflow.py`, `self_healing_workflow.py`.
-No playbook uses it. Don't extend it; don't add plays that depend on it.
-
-`README.md` still documents `pirlo autopass` and describes pirlo as a browser
-runner — it is stale.
+The browser-automation layer was removed with `autopass`. Two leftovers remain
+and are slated for deletion: the `pirlo profile` command (browser profiles) and
+the `browser_use` logger handling in `infrastructure/services/log_streamer.py`.
+Don't extend them; don't add plays that need a browser.
