@@ -15,6 +15,7 @@ class PrefectWorkflow:
     name: str
     flow: Callable[..., Awaitable[PlayOutput | None]]
     blueprint: PlayBlueprint
+    sensitive_parameters: frozenset[str] = frozenset()
 
     async def __call__(self, **kwargs: Any) -> PlayOutput | None:
         """Enables direct invocation of the underlying Prefect flow."""

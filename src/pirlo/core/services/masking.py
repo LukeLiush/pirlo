@@ -2,7 +2,12 @@
 from __future__ import annotations
 
 import dataclasses
-from typing import Any
+import logging
+from typing import Annotated, Any, get_args, get_origin, get_type_hints
+
+from pirlo.core.models.parameters import Parameter
+
+logger = logging.getLogger(__name__)
 
 SENSITIVE_KEY_PATTERNS: tuple[str, ...] = (
     "password",
@@ -13,6 +18,32 @@ SENSITIVE_KEY_PATTERNS: tuple[str, ...] = (
     "auth",
     "private_key",
 )
+
+
+def sensitive_parameter_names(play_cls: type[Any]) -> frozenset[str]:
+    """Names of a play's execute() parameters declared with Parameter(sensitive=True)."""
+    execute = getattr(play_cls, "execute", None)
+    if execute is None:
+        return frozenset()
+    try:
+        hints = get_type_hints(execute, include_extras=True)
+    except (NameError, TypeError) as exc:
+        logger.warning(
+            "Cannot read %s.execute annotations; its sensitive=True parameters "
+            "will not be masked: %s",
+            play_cls.__name__,
+            exc,
+        )
+        return frozenset()
+    return frozenset(
+        name
+        for name, hint in hints.items()
+        if get_origin(hint) is Annotated
+        and any(
+            isinstance(meta, Parameter) and meta.sensitive
+            for meta in get_args(hint)[1:]
+        )
+    )
 
 
 def is_sensitive_key(key: str) -> bool:

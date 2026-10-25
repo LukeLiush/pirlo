@@ -26,7 +26,10 @@ from pirlo.core.models.run_result import RunResult
 from pirlo.core.ports.compiler import BlueprintCompiler
 from pirlo.core.ports.play import Play
 from pirlo.core.services.idempotency import compute_play_identity
-from pirlo.core.services.masking import mask_sensitive_data
+from pirlo.core.services.masking import (
+    mask_sensitive_data,
+    sensitive_parameter_names,
+)
 from pirlo.infrastructure.adapters.cli.terminal_play_ui import TerminalPlayUI
 from pirlo.infrastructure.adapters.orchestrator.prefect_model import (
     PrefectWorkflow,
@@ -100,6 +103,12 @@ class PrefectCompiler(BlueprintCompiler[PrefectWorkflow]):
             raise BlueprintError(f"Cannot compile empty blueprint '{blueprint.name}'.")
 
         active_run_id = run_id or get_current_run_id() or generate_short_run_id()
+        sensitive_keys: frozenset[str] = frozenset().union(
+            *(
+                sensitive_parameter_names(self._resolve_play_class(node.playbook_name))
+                for node in blueprint.nodes
+            )
+        )
 
         flow_kwargs: dict[str, Any] = {
             "name": blueprint.name,
@@ -212,7 +221,7 @@ class PrefectCompiler(BlueprintCompiler[PrefectWorkflow]):
                                 _build_task_play_logger(active_play_name, task_logger)
                             )
                             masked_inputs: dict[str, Any] = mask_sensitive_data(
-                                dict(kwargs)
+                                dict(kwargs), sensitive_keys=set(sensitive_keys)
                             )
                             from prefect.context import TaskRunContext
 
@@ -489,6 +498,7 @@ class PrefectCompiler(BlueprintCompiler[PrefectWorkflow]):
             name=blueprint.name,
             flow=prefect_master_flow,
             blueprint=blueprint,
+            sensitive_parameters=sensitive_keys,
         )
 
     def _resolve_play_class(self, play_name: str) -> type[Any]:

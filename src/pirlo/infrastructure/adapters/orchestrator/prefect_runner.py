@@ -18,6 +18,7 @@ from pirlo.core.config import DEFAULT_WORK_POOL
 from pirlo.core.models.blueprint import PlayBlueprint, PlayOutput
 from pirlo.core.models.orchestrator import ROUTINE_PRESETS, RoutineRegistration
 from pirlo.core.ports.runner import PlayRunner
+from pirlo.core.services.masking import mask_sensitive_data
 from pirlo.infrastructure.adapters.orchestrator.prefect.models import (
     PrefectLink,
     PrefectRoutineRegistration,
@@ -312,8 +313,14 @@ class PrefectRunner(PlayRunner):
                 self._sync_environ(override_settings),
             ):
                 try:
+                    # Flow arguments only feed run history; plays read their inputs
+                    # from the blueprint, so secrets never need to be stored here
                     res: PlayOutput | None = await workflow(
-                        force=force, show_logs=show_logs, **kwargs
+                        force=force,
+                        show_logs=show_logs,
+                        **mask_sensitive_data(
+                            kwargs, sensitive_keys=set(workflow.sensitive_parameters)
+                        ),
                     )
                     return res
                 finally:
