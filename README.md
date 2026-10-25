@@ -187,7 +187,7 @@ an implementation detail behind the compiler.
 ```python
 from pirlo.core.services.shell import CommandFailed
 
-result = await self.shell.run("brazil-build", "release", cwd=pkg_dir, timeout_s=3600)
+result = await self.shell.run("ls", "-la", cwd=project_dir, timeout_s=30)
 result.exit_code, result.output_tail, result.log_path, result.duration_s
 ```
 
