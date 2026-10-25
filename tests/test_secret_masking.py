@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from typing import Annotated
 
 import pytest
@@ -42,6 +43,28 @@ class MaskSamplePlay(Play[MaskedOutput]):
 
 def test_sensitive_parameter_names_reads_the_sensitive_flag():
     assert sensitive_parameter_names(MaskSamplePlay) == frozenset({"region_pin"})
+
+
+@play(name="mask_broken_annotations_play")
+class BrokenAnnotationsPlay(Play[MaskedOutput]):
+    async def execute(
+        self,
+        token_ref: MissingType,  # noqa: F821  (unresolvable on purpose)
+        region: str = "eu",
+        *args: str,
+        **kwargs: str,
+    ) -> MaskedOutput:
+        return MaskedOutput(provider="none")
+
+
+def test_unreadable_annotations_mask_every_parameter(
+    caplog: pytest.LogCaptureFixture,
+):
+    with caplog.at_level(logging.WARNING, logger="pirlo.core.services.masking"):
+        names = sensitive_parameter_names(BrokenAnnotationsPlay)
+
+    assert names == frozenset({"token_ref", "region"})
+    assert "masking all of its parameters: region, token_ref" in caplog.text
 
 
 @pytest.mark.anyio

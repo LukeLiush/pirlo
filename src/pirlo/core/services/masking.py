@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import dataclasses
+import inspect
 import logging
 from typing import Annotated, Any, get_args, get_origin, get_type_hints
 
@@ -21,20 +22,30 @@ SENSITIVE_KEY_PATTERNS: tuple[str, ...] = (
 
 
 def sensitive_parameter_names(play_cls: type[Any]) -> frozenset[str]:
-    """Names of a play's execute() parameters declared with Parameter(sensitive=True)."""
+    """Names of a play's execute() parameters declared with Parameter(sensitive=True).
+
+    If the annotations cannot be resolved, every parameter is treated as
+    sensitive: over-masking is safe, leaking a secret is not.
+    """
     execute = getattr(play_cls, "execute", None)
     if execute is None:
         return frozenset()
     try:
         hints = get_type_hints(execute, include_extras=True)
     except (NameError, TypeError) as exc:
+        names = frozenset(
+            name
+            for name, param in inspect.signature(execute).parameters.items()
+            if name != "self"
+            and param.kind not in (param.VAR_POSITIONAL, param.VAR_KEYWORD)
+        )
         logger.warning(
-            "Cannot read %s.execute annotations; its sensitive=True parameters "
-            "will not be masked: %s",
+            "Cannot read %s.execute annotations (%s); masking all of its parameters: %s",
             play_cls.__name__,
             exc,
+            ", ".join(sorted(names)),
         )
-        return frozenset()
+        return names
     return frozenset(
         name
         for name, hint in hints.items()
