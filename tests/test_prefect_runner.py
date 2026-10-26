@@ -218,3 +218,56 @@ async def test_run_play_remote_execution():
         )
     assert isinstance(result, StepTwoOutput)
     assert result.message == "Received tok_123"
+
+
+# --- routing: where a run's state goes and where its code executes ---------
+
+
+def test_default_runner_is_ephemeral():
+    from prefect.settings import PREFECT_API_URL, PREFECT_SERVER_ALLOW_EPHEMERAL_MODE
+
+    overrides = PrefectRunner()._get_override_settings()
+
+    assert overrides[PREFECT_API_URL] is None
+    assert overrides[PREFECT_SERVER_ALLOW_EPHEMERAL_MODE] is True
+
+
+def test_explicit_ephemeral_link_is_ephemeral():
+    from prefect.settings import PREFECT_API_URL
+
+    runner = PrefectRunner(link=PrefectLink(server_url="ephemeral", work_pool="p"))
+
+    assert runner._get_override_settings()[PREFECT_API_URL] is None
+    assert runner.get_dashboard_url("r1") is None
+
+
+@pytest.mark.anyio
+async def test_server_link_without_pool_runs_in_process():
+    from unittest.mock import AsyncMock, patch
+
+    from prefect.settings import PREFECT_API_URL
+
+    runner = PrefectRunner(link=PrefectLink(server_url="http://h:4200", work_pool=""))
+
+    with (
+        patch.object(runner, "_run_immediate_once", new_callable=AsyncMock) as local,
+        patch.object(runner, "_submit_remote_run", new_callable=AsyncMock) as remote,
+    ):
+        await runner.run(StepTwoPlay().extract_blueprint())
+
+    local.assert_awaited_once()
+    remote.assert_not_awaited()
+    assert runner._get_override_settings()[PREFECT_API_URL] == "http://h:4200/api"
+
+
+@pytest.mark.parametrize(
+    "raw",
+    ["http://h:4200", "http://h:4200/", "http://h:4200/api", "http://h:4200/api/"],
+)
+def test_server_url_is_normalized_to_api(raw):
+    from prefect.settings import PREFECT_API_URL
+
+    runner = PrefectRunner(link=PrefectLink(server_url=raw))
+
+    assert runner._get_override_settings()[PREFECT_API_URL] == "http://h:4200/api"
+    assert runner.get_dashboard_url("r1") == "http://h:4200/flow-runs?name=r1"
