@@ -28,6 +28,7 @@ implements them, plays live in `playbooks/`.
 
     uv sync                       # install (Python >=3.12, managed by uv)
     uv run pirlo <play_name>      # run a play; --help shows its DAG and params
+    uv run pirlo serve            # local Prefect server on 127.0.0.1 (--status, --stop)
     uv run pytest                 # tests
     make all                      # ruff format + ruff check + mypy
 
@@ -42,8 +43,28 @@ If either path is read-only, point them somewhere writable:
     PREFECT_HOME=/tmp/prefect-home PIRLO_WORKSPACE=/tmp/pirlo-pitch uv run pytest
 
 Defaults are `~/.prefect` and `~/.pirlo-pitch` (`PIRLO_WORKSPACE`, see
-`core/config.py`). `tests/conftest.py` sets `PIRLO_SERVER=off` and a temporary
-Prefect profiles file, so tests never report to your own Prefect server.
+`core/config.py`). `tests/conftest.py` gives every test `PIRLO_SERVER=off`, its
+own `PIRLO_WORKSPACE` and a temporary Prefect profiles file, so tests never
+report to a Prefect server you configured or started with `pirlo serve`.
+
+## Prefect runtime
+
+- **Where a run goes** is decided once, as a `PrefectTarget` (`prefect_target.py`):
+  `EPHEMERAL` (no server), `IN_PROCESS` (run here, report to a server) or
+  `WORK_POOL` (submit; a worker runs it). `PlayRunnerFactory.get_runner()` builds
+  it with `resolve_default_target()`; `PrefectRunner` only reads it.
+- **Which server** comes from `discover_prefect_server_url()`: a configured
+  `PREFECT_API_URL` (read fresh with `prefect.settings.Settings()`, never
+  `PREFECT_API_URL.value()`, which is fixed at import), else the server
+  `pirlo serve` recorded in `$PIRLO_WORKSPACE/serve/prefect-server.json`.
+  Discovery never starts a server.
+- **`pirlo serve`** (`cli/serve_commands.py`) is a built-in command on purpose,
+  not a play: it manages the server that plays run on. It drives the
+  `LocalServer` port; `PrefectLocalServer` is the adapter.
+- **Dashboard links** use the Prefect UI's real routes: `/runs/flow-run/<id>`
+  and `/deployments/deployment/<id>`. The UI is a single-page app, so a plain
+  HTTP GET can't tell you whether a route exists; check the router in the
+  bundle under `prefect/server/ui`.
 
 ## Extend, don't edit
 
@@ -70,6 +91,22 @@ class and test it against a stub.
 - Don't widen `except Exception`. Catch the specific error and log at `warning`
   or above — CLI logging is unconfigured during argument parsing, so `debug` and
   `info` are invisible.
+- Anything pirlo starts listens on `127.0.0.1` only. Reach it from another
+  machine with `ssh -L`, never by binding wider.
+
+## Removed — don't reintroduce
+
+pirlo targets one host: a Prefect server on that host and, later, worker
+containers. These were removed for that reason; ask before bringing any back.
+
+- `pirlo connect` (SSH tunnels to a remote `pirlo serve`): no remote
+  orchestrator to reach; use `ssh -L` for the UI.
+- Orchestrator links (`pirlo orchestrator`, `--orchestrator`, `PrefectLink`) and
+  runtime engine selection (`OrchestratorRegistry`, the `-- <engine>` argument
+  delimiter): there is one engine. Keep the engine-agnostic `PlayBlueprint`;
+  add a second runner behind `PlayRunner` only when a second engine is real.
+- The Docker/Ollama `pirlo serve`: Prefect now runs on the host, and its stock
+  worker image could not run pirlo plays.
 
 ## Legacy — do not build on
 

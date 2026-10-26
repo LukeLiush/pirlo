@@ -254,37 +254,49 @@ pirlo <play> -l                                   # stream logs to the terminal 
 ## Prefect server and scheduling
 
 A play runs once, immediately. While a Prefect server is running, the run,
-its logs and a dashboard link show up in that server's UI; otherwise the play
-uses a temporary server that stops when the run ends.
+its logs and a dashboard link show up in that server's UI. Without one, the
+play runs in Prefect's **ephemeral mode**: a temporary server is started for
+that run and stopped when it ends, so there is no UI to link to.
 
 ```bash
 pirlo serve                      # start a Prefect server on 127.0.0.1 (4200 if free)
 pirlo <play>                     # reports to it; the summary links to the run
 pirlo serve --status             # URL, pid, log file
 pirlo serve --stop
-PIRLO_SERVER=off pirlo <play>    # temporary server for this run
+PIRLO_SERVER=off pirlo <play>    # ephemeral mode for this run
 pirlo <play> --routine daily     # or hourly, weekly, monthly, or a cron string
 ```
 
 `pirlo serve` runs the server as a background process on the host, records it
-in `$PIRLO_WORKSPACE/serve/`, and creates the `pirlo-pool` work pool. To use a
-Prefect server you run yourself instead, set `PREFECT_API_URL` (in the
-environment or with `prefect config set`); it takes precedence. From another
-machine, forward the port over SSH: `ssh -L 4200:127.0.0.1:4200 <user>@<host>`.
+in `$PIRLO_WORKSPACE/serve/prefect-server.json` (its output goes to
+`prefect-server.log` next to it), and creates the `pirlo-pool` work pool. It
+listens on `127.0.0.1` only; from another machine, forward the port over SSH:
+`ssh -L 4200:127.0.0.1:4200 <user>@<host>`.
+
+Each run picks its server once, in this order:
+
+1. `PIRLO_SERVER=off`, or a set `CI` variable: ephemeral mode.
+2. `PREFECT_API_URL` is configured (environment or `prefect config set`): that
+   server if it answers, otherwise a warning and ephemeral mode.
+3. The server `pirlo serve` started, if its process is alive and answering.
+4. Otherwise: ephemeral mode.
+
+A run never starts a server; only `pirlo serve` does. `pirlo run` reads history
+from the same server.
 
 `--routine` registers a Prefect deployment on `pirlo-pool`. It only fires while
-the server is running and a worker serves the pool; against the temporary
-server it registers but never runs.
+the server is running and a worker serves the pool; in ephemeral mode it
+registers but never runs.
 
 ## Configuration
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `PIRLO_WORKSPACE` | `~/.pirlo-pitch` | Links, run directories, shell logs, extra plays. |
+| `PIRLO_WORKSPACE` | `~/.pirlo-pitch` | Links, run directories, shell logs, extra plays, `pirlo serve` state (`serve/`). |
 | `PIRLO_LOG_LEVEL` | `INFO` | Pirlo log level. |
-| `PREFECT_HOME` | `~/.prefect` | Prefect's own state, including the temporary server's database. |
-| `PREFECT_API_URL` | unset | A Prefect server of your own for runs and `pirlo run`, overriding the one `pirlo serve` starts. Set it in the environment or with `prefect config set`; if it doesn't answer, pirlo warns and uses a temporary server. |
-| `PIRLO_SERVER` | `auto` | `off` makes every run use a temporary Prefect server, even when `PREFECT_API_URL` is set. A set `CI` variable has the same effect. |
+| `PREFECT_HOME` | `~/.prefect` | Prefect's own state, including the database shared by ephemeral runs and the `pirlo serve` server. |
+| `PREFECT_API_URL` | unset | A Prefect server of your own for runs and `pirlo run`, overriding the one `pirlo serve` starts. Set it in the environment or with `prefect config set`; if it doesn't answer, pirlo warns and uses ephemeral mode. |
+| `PIRLO_SERVER` | `auto` | `off` makes every run use ephemeral mode, even when a server is configured or running. A set `CI` variable has the same effect. |
 
 ## Known issues
 
@@ -292,6 +304,10 @@ server it registers but never runs.
   resolved parameter values, including link API keys, are part of the
   deployment payload stored by that server, because the worker needs them to
   run the play. Local runs (the default) do not store them.
+- **Scheduled runs package the whole current directory.** `--routine` uploads
+  the working directory as the play's code snapshot (minus a fixed list of
+  excludes such as `.git` and `.venv`). Run it from your project directory: a
+  large directory fails with a `503` from the Prefect server.
 
 ## Architecture
 
@@ -301,14 +317,16 @@ implements them, `playbooks/` holds plays.
 ```
 Play classes ──BlueprintExtractor──▶ PlayBlueprint (engine-agnostic DAG)
              ──PrefectCompiler─────▶ Prefect flow ──PrefectRunner──▶ result + run history
+                                                     ▲
+                       PrefectTarget: ephemeral, in-process on a server, or a work pool
 ```
 
 | Path | Contents |
 |---|---|
 | `src/pirlo/core/models/` | Blueprint, links, commands, parameters. |
-| `src/pirlo/core/ports/` | `Play`, `CommandRunner`, `LinkRepository`, `BlueprintCompiler`, ... |
+| `src/pirlo/core/ports/` | `Play`, `PlayRunner`, `CommandRunner`, `LinkRepository`, `LocalServer`, ... |
 | `src/pirlo/core/services/` | Blueprint extraction, idempotency ids, `Shell`, masking. |
-| `src/pirlo/infrastructure/adapters/` | CLI, Prefect orchestrator, local command runner, JSON link storage, DAG rendering. |
+| `src/pirlo/infrastructure/adapters/` | CLI (including `pirlo serve`), Prefect compiler, runner, run target and managed local server, local command runner, JSON link storage, DAG rendering. |
 | `src/pirlo/playbooks/` | Built-in demo plays. |
 
 New behaviour goes in a new class implementing an existing port; see
@@ -343,3 +361,4 @@ Pirlo is named after the Italian midfielder Andrea Pirlo.
 | Pitch | The workspace directory, `~/.pirlo-pitch` by default. |
 | Link | A named connection to an LLM provider account. |
 | Routine | A recurring schedule for a play (`--routine`). |
+| Ephemeral mode | A run with no Prefect server: Prefect starts a temporary one for that run only. |
