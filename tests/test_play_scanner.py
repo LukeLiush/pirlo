@@ -13,7 +13,6 @@ def test_scan_existing_playbooks_dir():
 
     assert "dummy" in specs or "demo_dummy" in specs
     assert "demo_report_dag" in specs
-    assert "serve" in specs
 
     dummy_key = "demo_dummy" if "demo_dummy" in specs else "dummy"
     dummy_spec = specs[dummy_key]

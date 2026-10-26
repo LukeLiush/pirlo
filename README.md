@@ -253,22 +253,28 @@ pirlo <play> -l                                   # stream logs to the terminal 
 
 ## Prefect server and scheduling
 
-A play runs once, immediately. It reports to a Prefect server when
-`PREFECT_API_URL` is set and that server answers, so the run, its logs and a
-dashboard link show up in the Prefect UI; otherwise it uses a temporary server
-that stops when the run ends.
+A play runs once, immediately. While a Prefect server is running, the run,
+its logs and a dashboard link show up in that server's UI; otherwise the play
+uses a temporary server that stops when the run ends.
 
 ```bash
-uv run prefect server start                                       # one terminal
-uv run prefect config set PREFECT_API_URL=http://127.0.0.1:4200/api   # once
-pirlo <play>                                                      # shows in the UI
-PIRLO_SERVER=off pirlo <play>                                     # temporary server for this run
-pirlo <play> --routine daily   # or hourly, weekly, monthly, or a cron string
+pirlo serve                      # start a Prefect server on 127.0.0.1 (4200 if free)
+pirlo <play>                     # reports to it; the summary links to the run
+pirlo serve --status             # URL, pid, log file
+pirlo serve --stop
+PIRLO_SERVER=off pirlo <play>    # temporary server for this run
+pirlo <play> --routine daily     # or hourly, weekly, monthly, or a cron string
 ```
 
-`--routine` registers a Prefect deployment on the `pirlo-pool` work pool of
-that same server. It only fires while the server is running and a worker serves
-the pool; against the temporary server it registers but never runs.
+`pirlo serve` runs the server as a background process on the host, records it
+in `$PIRLO_WORKSPACE/serve/`, and creates the `pirlo-pool` work pool. To use a
+Prefect server you run yourself instead, set `PREFECT_API_URL` (in the
+environment or with `prefect config set`); it takes precedence. From another
+machine, forward the port over SSH: `ssh -L 4200:127.0.0.1:4200 <user>@<host>`.
+
+`--routine` registers a Prefect deployment on `pirlo-pool`. It only fires while
+the server is running and a worker serves the pool; against the temporary
+server it registers but never runs.
 
 ## Configuration
 
@@ -277,14 +283,8 @@ the pool; against the temporary server it registers but never runs.
 | `PIRLO_WORKSPACE` | `~/.pirlo-pitch` | Links, run directories, shell logs, extra plays. |
 | `PIRLO_LOG_LEVEL` | `INFO` | Pirlo log level. |
 | `PREFECT_HOME` | `~/.prefect` | Prefect's own state, including the temporary server's database. |
-| `PREFECT_API_URL` | unset | The Prefect server runs report to and `pirlo run` reads. Set it in the environment or with `prefect config set`; if it doesn't answer, pirlo warns and uses a temporary server. |
+| `PREFECT_API_URL` | unset | A Prefect server of your own for runs and `pirlo run`, overriding the one `pirlo serve` starts. Set it in the environment or with `prefect config set`; if it doesn't answer, pirlo warns and uses a temporary server. |
 | `PIRLO_SERVER` | `auto` | `off` makes every run use a temporary Prefect server, even when `PREFECT_API_URL` is set. A set `CI` variable has the same effect. |
-
-## Other commands
-
-- `pirlo serve` starts a local Prefect server and Ollama models in Docker. To
-  open its UI from another machine, forward the port over SSH:
-  `ssh -L 4200:127.0.0.1:4200 <user>@<host>`.
 
 ## Known issues
 
@@ -309,7 +309,7 @@ Play classes ──BlueprintExtractor──▶ PlayBlueprint (engine-agnostic DA
 | `src/pirlo/core/ports/` | `Play`, `CommandRunner`, `LinkRepository`, `BlueprintCompiler`, ... |
 | `src/pirlo/core/services/` | Blueprint extraction, idempotency ids, `Shell`, masking. |
 | `src/pirlo/infrastructure/adapters/` | CLI, Prefect orchestrator, local command runner, JSON link storage, DAG rendering. |
-| `src/pirlo/playbooks/` | Built-in plays (`demo`, `serve`). |
+| `src/pirlo/playbooks/` | Built-in demo plays. |
 
 New behaviour goes in a new class implementing an existing port; see
 [`AGENTS.md`](AGENTS.md) for contributor rules.

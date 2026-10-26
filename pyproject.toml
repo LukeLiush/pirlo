@@ -18,7 +18,6 @@ dependencies = [
     "psutil>=7.0.0",
     "pydantic>=2.12.5",
     "pydantic-ai>=0.0.35",
-    "python-on-whales>=0.70.0",
     "typing-extensions>=4.15.0",
 ]
 

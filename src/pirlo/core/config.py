@@ -21,13 +21,7 @@ def is_server_disabled() -> bool:
 
 
 DEFAULT_PREFECT_PORT: int = 4200
-DEFAULT_OLLAMA_PORT: int = 11434
-DEFAULT_OLLAMA_MODEL: str = "qwen2.5:3b"
 DEFAULT_WORK_POOL: str = "pirlo-pool"
-
-
-SERVE_MANIFEST_FILENAME: str = "serve.json"
-ACTIVE_SESSION_FILENAME: str = "session.json"
 
 DEFAULT_LOG_LEVEL: str = "INFO"
 

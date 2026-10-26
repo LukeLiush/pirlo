@@ -122,6 +122,7 @@ def main() -> None:
         print("  link          - Manage LLM links (API keys, base URLs)")
         print("  profile       - Manage browser profiles (list, delete)")
         print("  run           - Manage execution run history (list, show)")
+        print("  serve         - Run a local Prefect server for pirlo (status, stop)")
         if specs:
             command_name: str
             spec: PlaySpec
@@ -138,7 +139,14 @@ def main() -> None:
     command: str = sys.argv[1]
 
     # Quick dispatch for built-in non-playbook subcommands
-    if command in ("link", "profile", "run"):
+    if command in ("link", "profile", "run", "serve"):
+        if command == "serve":
+            from pirlo.infrastructure.adapters.cli.serve_commands import (
+                serve_main,
+            )
+
+            sys.exit(serve_main())
+
         if command == "link":
             from pirlo.infrastructure.adapters.cli.link_commands import (
                 link_main,
