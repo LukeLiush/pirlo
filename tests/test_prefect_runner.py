@@ -274,3 +274,106 @@ def test_server_url_is_normalized_to_api(raw):
 
     assert runner._get_override_settings()[PREFECT_API_URL] == "http://h:4200/api"
     assert runner.get_dashboard_url("r1") == "http://h:4200/flow-runs?name=r1"
+
+
+# --- deployments: what routines and work-pool runs send to Prefect ---------
+
+
+def _stub_deployment(deployment_id: str = "dep-123"):
+    from unittest.mock import AsyncMock, MagicMock
+
+    deployment = MagicMock()
+    deployment.apply = AsyncMock(return_value=deployment_id)
+    return deployment
+
+
+def _work_pool_runner(work_pool: str) -> PrefectRunner:
+    return PrefectRunner(
+        target=_server_target(
+            "http://h:4200",
+            Execution.WORK_POOL,
+            work_pool=work_pool,
+            code_storage="in_memory",
+        )
+    )
+
+
+@pytest.mark.anyio
+async def test_deploy_routine_registers_a_cron_deployment():
+    from unittest.mock import AsyncMock, patch
+
+    runner = _work_pool_runner("nightly-pool")
+    workflow = runner.compiler.compile(StepTwoPlay().extract_blueprint())
+
+    with (
+        patch(
+            "pirlo.infrastructure.services.code_bundler.create_tarball_bytes",
+            return_value=b"code",
+        ),
+        patch(
+            "pirlo.infrastructure.adapters.orchestrator.prefect_entrypoint.run_play_remote.to_deployment",
+            new_callable=AsyncMock,
+            return_value=_stub_deployment("dep-123"),
+        ) as to_deployment,
+    ):
+        reg = await runner._deploy_routine(workflow, "daily", x=1)
+
+    kwargs = to_deployment.call_args.kwargs
+    assert kwargs["name"] == "pirlo-runner_test_step_two-daily"
+    assert kwargs["cron"] == "0 9 * * *"
+    assert kwargs["work_pool_name"] == "nightly-pool"
+    assert kwargs["enforce_parameter_schema"] is False
+    assert "command" in kwargs["job_variables"]
+    assert kwargs["parameters"] == {
+        "play_name": "runner_test_step_two",
+        "parameters": {"x": 1},
+        "code_ref": "Y29kZQ==",
+        "storage_type": "in_memory",
+        "force": False,
+        "show_logs": False,
+    }
+    assert reg.registration_id == "dep-123"
+    assert reg.routine == "0 9 * * *"
+    assert reg.work_pool == "nightly-pool"
+
+
+@pytest.mark.anyio
+async def test_submit_remote_run_builds_a_one_off_deployment():
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    runner = _work_pool_runner("pirlo-pool")
+    workflow = runner.compiler.compile(StepTwoPlay().extract_blueprint())
+    flow_run = MagicMock()
+    flow_run.id = "run-1"
+    flow_run.name = "brisk-heron"
+
+    with (
+        patch(
+            "pirlo.infrastructure.services.code_bundler.create_tarball_bytes",
+            return_value=b"code",
+        ),
+        patch(
+            "pirlo.infrastructure.adapters.orchestrator.prefect_entrypoint.run_play_remote.to_deployment",
+            new_callable=AsyncMock,
+            return_value=_stub_deployment(),
+        ) as to_deployment,
+        patch(
+            "prefect.deployments.run_deployment",
+            new_callable=AsyncMock,
+            return_value=flow_run,
+        ) as run_deployment,
+    ):
+        await runner._submit_remote_run(workflow, force=True, x=1)
+
+    kwargs = to_deployment.call_args.kwargs
+    assert kwargs["name"] == "pirlo-runner_test_step_two"
+    assert "cron" not in kwargs
+    assert kwargs["work_pool_name"] == "pirlo-pool"
+    payload = kwargs["parameters"]
+    assert payload["parameters"] == {"x": 1}
+    assert (payload["force"], payload["show_logs"]) == (True, False)
+    run_deployment.assert_called_once_with(
+        name="pirlo_remote_runner/pirlo-runner_test_step_two",
+        parameters=payload,
+        timeout=0,
+    )
