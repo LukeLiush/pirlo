@@ -5,9 +5,7 @@ from prefect.settings import Settings
 from pirlo.infrastructure.adapters.orchestrator.prefect_health import (
     is_prefect_healthy,
 )
-from pirlo.infrastructure.adapters.orchestrator.prefect_local_server import (
-    PrefectLocalServer,
-)
+from pirlo.infrastructure.adapters.orchestrator.serve_beacon import ServeBeacon
 
 logger = logging.getLogger(__name__)
 
@@ -28,5 +26,5 @@ def discover_prefect_server_url() -> str | None:
             configured,
         )
         return None
-    managed = PrefectLocalServer().status()
-    return managed.api_url if managed else None
+    served = ServeBeacon().running()
+    return served.api_url if served else None

@@ -1,205 +1,192 @@
 from __future__ import annotations
 
+import os
+import subprocess
 import sys
+import threading
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
-from pirlo.core.ports.local_server import (
-    LocalServer,
-    LocalServerError,
-    LocalServerStatus,
-)
-from pirlo.core.ports.worker_fleet import WorkerFleet, WorkerFleetError, WorkerInfo
+from pirlo.core.ports.process_supervisor import ProcessSpec, ProcessSupervisor
 from pirlo.infrastructure.adapters.cli.serve_commands import serve_main
+from pirlo.infrastructure.adapters.orchestrator import prefect_worker_gate
+from pirlo.infrastructure.adapters.orchestrator.serve_beacon import (
+    ServeBeacon,
+    ServeRecord,
+)
 
-_ENSURE_POOL = "pirlo.infrastructure.adapters.cli.serve_commands.ensure_work_pool"
-_LATE_RUNS = "pirlo.infrastructure.adapters.cli.serve_commands.count_late_runs"
+_HEALTH = "pirlo.infrastructure.adapters.cli.serve_commands.is_prefect_healthy"
+_ONLINE = "pirlo.infrastructure.adapters.cli.serve_commands.is_worker_online"
 
 
-def _status(port: int = 4200) -> LocalServerStatus:
-    return LocalServerStatus(
-        pid=4321,
+class StubSupervisor(ProcessSupervisor):
+    def __init__(self, beacon: ServeBeacon, code: int = 0) -> None:
+        self.beacon = beacon
+        self.code = code
+        self.processes: list[ProcessSpec] | None = None
+        self.record_while_running: ServeRecord | None = None
+
+    def run(self, processes: list[ProcessSpec]) -> int:
+        self.processes = processes
+        self.record_while_running = self.beacon.read()
+        return self.code
+
+
+@pytest.fixture
+def beacon(tmp_path: Path) -> ServeBeacon:
+    return ServeBeacon(tmp_path / "serve.json")
+
+
+def _record(pid: int, port: int = 4200) -> ServeRecord:
+    return ServeRecord(
+        pid=pid,
         port=port,
         api_url=f"http://127.0.0.1:{port}/api",
-        started_at="2026-10-25T21:00:00+00:00",
-        log_path=Path("/tmp/prefect-server.log"),
+        worker="desk",
+        started_at="2026-10-26T09:00:00+00:00",
     )
 
 
-class StubServer(LocalServer):
-    def __init__(
-        self,
-        running: LocalServerStatus | None = None,
-        fail: str = "",
-        calls: list[str] | None = None,
-    ) -> None:
-        self.running = running
-        self.fail = fail
-        self.started_with: int | None = None
-        self.calls = calls if calls is not None else []
-
-    def start(self, preferred_port: int) -> LocalServerStatus:
-        if self.fail:
-            raise LocalServerError(self.fail)
-        self.started_with = preferred_port
-        self.running = self.running or _status(preferred_port)
-        return self.running
-
-    def status(self) -> LocalServerStatus | None:
-        return self.running
-
-    def stop(self) -> bool:
-        self.calls.append("server.stop")
-        was_running, self.running = self.running is not None, None
-        return was_running
+def _dead_pid() -> int:
+    process = subprocess.Popen([sys.executable, "-c", "pass"])
+    process.wait()
+    return process.pid
 
 
-def _worker() -> WorkerInfo:
-    return WorkerInfo(
-        name="desk",
-        pid=5123,
-        pool="pirlo-pool",
-        limit=10,
-        started_at="2026-10-25T21:00:00+00:00",
-        log_path=Path("/tmp/prefect-worker.log"),
-    )
+def test_serve_runs_the_server_and_worker_gate_while_recording_itself(beacon, capsys):
+    supervisor = StubSupervisor(beacon)
 
+    assert serve_main([], supervisor=supervisor, beacon=beacon) == 0
 
-class StubFleet(WorkerFleet):
-    def __init__(
-        self,
-        running: bool = False,
-        fail: str = "",
-        calls: list[str] | None = None,
-    ) -> None:
-        self.running = [_worker()] if running else []
-        self.fail = fail
-        self.started_against: str | None = None
-        self.calls = calls if calls is not None else []
-
-    def start(self, api_url: str) -> list[WorkerInfo]:
-        if self.fail:
-            raise WorkerFleetError(self.fail)
-        self.started_against = api_url
-        self.running = self.running or [_worker()]
-        return self.running
-
-    def status(self) -> list[WorkerInfo]:
-        return self.running
-
-    def stop(self) -> int:
-        self.calls.append("fleet.stop")
-        count, self.running = len(self.running), []
-        return count
-
-
-def test_serve_starts_the_server_its_work_pool_and_a_worker(capsys):
-    server, fleet = StubServer(), StubFleet()
-
-    with (
-        patch(_ENSURE_POOL, return_value=True) as ensure_pool,
-        patch(_LATE_RUNS, return_value=0),
-    ):
-        assert serve_main([], server=server, fleet=fleet) == 0
-
-    assert server.started_with == 4200
-    ensure_pool.assert_called_once_with("http://127.0.0.1:4200/api")
-    assert fleet.started_against == "http://127.0.0.1:4200/api"
+    record = supervisor.record_while_running
+    assert record is not None
+    assert record.pid == os.getpid()
+    server, worker = supervisor.processes
+    assert server.name == "server"
+    assert server.command[-5:] == [
+        "start",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        str(record.port),
+    ]
+    assert worker.name == "worker"
+    assert worker.command[1:3] == ["-m", prefect_worker_gate.__name__]
+    assert worker.command[-4:] == ["--api-url", record.api_url, "--name", record.worker]
+    assert beacon.read() is None
     out = capsys.readouterr().out
-    assert "Prefect server started." in out
+    assert f"Prefect UI:  http://127.0.0.1:{record.port}" in out
+    assert f"ssh -L {record.port}:127.0.0.1:{record.port} " in out
+    assert "pirlo serve --stop" in out
+
+
+def test_serve_returns_the_supervisors_exit_code(beacon):
+    assert (
+        serve_main([], supervisor=StubSupervisor(beacon, code=130), beacon=beacon)
+        == 130
+    )
+
+
+def test_serve_forgets_itself_when_the_supervisor_is_interrupted(beacon):
+    class Interrupted(StubSupervisor):
+        def run(self, processes: list[ProcessSpec]) -> int:
+            assert self.beacon.read() is not None
+            raise KeyboardInterrupt
+
+    with pytest.raises(KeyboardInterrupt):
+        serve_main([], supervisor=Interrupted(beacon), beacon=beacon)
+
+    assert beacon.read() is None
+
+
+def test_serve_does_not_start_a_second_one(beacon, capsys):
+    beacon.write(_record(os.getpid()))
+    supervisor = StubSupervisor(beacon)
+
+    assert serve_main([], supervisor=supervisor, beacon=beacon) == 0
+
+    assert supervisor.processes is None
+    assert "already running" in capsys.readouterr().out
+
+
+def test_serve_replaces_a_record_left_by_a_dead_serve(beacon):
+    beacon.write(_record(_dead_pid()))
+    supervisor = StubSupervisor(beacon)
+
+    assert serve_main([], supervisor=supervisor, beacon=beacon) == 0
+
+    assert supervisor.record_while_running.pid == os.getpid()
+
+
+def test_status_of_a_running_serve(beacon, capsys):
+    beacon.write(_record(os.getpid()))
+
+    with patch(_HEALTH, return_value=True), patch(_ONLINE, return_value=True) as online:
+        assert serve_main(["--status"], beacon=beacon) == 0
+
+    online.assert_called_once_with("http://127.0.0.1:4200/api", "pirlo-pool", "desk")
+    out = capsys.readouterr().out
     assert "Prefect UI:  http://127.0.0.1:4200" in out
-    assert "pirlo-pool (created)" in out
-    assert "Worker:      desk on pirlo-pool, up to 10 runs at once (pid 5123)" in out
-    assert "Note:" not in out
-    assert "ssh -L 4200:127.0.0.1:4200 " in out
+    assert f"pirlo serve: pid {os.getpid()}" in out
+    assert "Server:      answering" in out
+    assert "Worker:      desk on pirlo-pool, online" in out
 
 
-def test_serve_reuses_a_running_server_and_worker(capsys):
-    server, fleet = StubServer(running=_status(4201)), StubFleet(running=True)
+def test_status_while_the_server_is_still_starting(beacon, capsys):
+    beacon.write(_record(os.getpid()))
 
-    with patch(_ENSURE_POOL) as ensure_pool, patch(_LATE_RUNS) as late_runs:
-        assert serve_main([], server=server, fleet=fleet) == 0
+    with patch(_HEALTH, return_value=False), patch(_ONLINE) as online:
+        assert serve_main(["--status"], beacon=beacon) == 0
 
-    assert server.started_with is None
-    ensure_pool.assert_not_called()
-    late_runs.assert_not_called()
+    online.assert_not_called()
     out = capsys.readouterr().out
-    assert "Prefect server is running." in out
-    assert "http://127.0.0.1:4201" in out
-    assert "Worker:      desk" in out
+    assert "Server:      not answering yet" in out
+    assert "not online yet" in out
 
 
-def test_serve_starts_a_missing_worker_next_to_a_running_server():
-    server, fleet = StubServer(running=_status()), StubFleet()
+@pytest.mark.parametrize("recorded", [False, True])
+def test_status_when_not_running_forgets_a_stale_record(beacon, capsys, recorded):
+    if recorded:
+        beacon.write(_record(_dead_pid()))
 
-    with patch(_ENSURE_POOL, return_value=False), patch(_LATE_RUNS, return_value=0):
-        assert serve_main([], server=server, fleet=fleet) == 0
+    assert serve_main(["--status"], beacon=beacon) == 1
 
-    assert server.started_with is None
-    assert fleet.started_against == "http://127.0.0.1:4200/api"
-
-
-def test_serve_warns_about_late_runs_before_starting_the_worker(capsys):
-    with patch(_ENSURE_POOL, return_value=False), patch(_LATE_RUNS, return_value=3):
-        assert serve_main([], server=StubServer(), fleet=StubFleet()) == 0
-
-    assert "3 late runs are waiting on pirlo-pool" in capsys.readouterr().out
+    assert not beacon.path.exists()
+    assert "pirlo serve isn't running." in capsys.readouterr().out
 
 
-def test_serve_reports_a_failed_start(capsys):
-    server, fleet = StubServer(fail="Prefect server exited with code 3"), StubFleet()
+def test_stop_sends_sigterm_to_pirlo_serve_and_waits_for_it(beacon, capsys):
+    serve = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+    # Reap it as soon as it exits, as its own parent shell would.
+    threading.Thread(target=serve.wait, daemon=True).start()
+    beacon.write(_record(serve.pid))
 
-    with patch(_ENSURE_POOL) as ensure_pool:
-        assert serve_main([], server=server, fleet=fleet) == 1
+    try:
+        with patch(_HEALTH, return_value=True):
+            assert serve_main(["--stop"], beacon=beacon, stop_timeout=10) == 0
+    finally:
+        if serve.poll() is None:
+            serve.kill()
 
-    ensure_pool.assert_not_called()
-    assert fleet.started_against is None
-    assert "exited with code 3" in capsys.readouterr().err
-
-
-def test_failed_worker_leaves_the_server_running(capsys):
-    server = StubServer()
-    fleet = StubFleet(fail="Prefect worker exited with code 2")
-
-    with patch(_ENSURE_POOL, return_value=True), patch(_LATE_RUNS, return_value=0):
-        assert serve_main([], server=server, fleet=fleet) == 1
-
-    assert server.running is not None
-    captured = capsys.readouterr()
-    assert "exited with code 2" in captured.err
-    assert "The server is still running" in captured.out
+    assert serve.wait(timeout=5) == -15
+    assert "Stopped pirlo serve" in capsys.readouterr().out
 
 
-@pytest.mark.parametrize(("running", "code"), [(_status(), 0), (None, 1)])
-def test_serve_status(capsys, running, code):
-    server = StubServer(running=running)
-    fleet = StubFleet(running=running is not None)
+def test_stop_leaves_a_pid_alone_when_no_server_answers(beacon, capsys):
+    beacon.write(_record(os.getpid()))
 
-    assert serve_main(["--status"], server=server, fleet=fleet) == code
+    with patch(_HEALTH, return_value=False):
+        assert serve_main(["--stop"], beacon=beacon) == 1
 
-    out = capsys.readouterr().out
-    if running:
-        assert "PID:         4321" in out
-        assert "Worker:      desk on pirlo-pool" in out
-    else:
-        assert "No Prefect server" in out
+    assert beacon.read() is not None
+    assert "not stopping it" in capsys.readouterr().err
 
 
-def test_serve_stop_stops_the_worker_before_the_server(capsys):
-    calls: list[str] = []
-    server = StubServer(running=_status(), calls=calls)
-    fleet = StubFleet(running=True, calls=calls)
-
-    assert serve_main(["--stop"], server=server, fleet=fleet) == 0
-    assert serve_main(["--stop"], server=server, fleet=fleet) == 0
-
-    assert calls[:2] == ["fleet.stop", "server.stop"]
-    out = capsys.readouterr().out
-    assert "Stopped the Prefect worker." in out
-    assert "Stopped the Prefect server." in out
-    assert "No Prefect server started by pirlo serve is running." in out
+def test_stop_when_nothing_runs(beacon, capsys):
+    assert serve_main(["--stop"], beacon=beacon) == 0
+    assert "pirlo serve isn't running." in capsys.readouterr().out
 
 
 def test_entrypoint_routes_serve_to_the_built_in(monkeypatch):
