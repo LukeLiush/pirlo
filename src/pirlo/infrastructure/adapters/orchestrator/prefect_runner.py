@@ -15,7 +15,6 @@ from pirlo.core.models.orchestrator import ROUTINE_PRESETS, RoutineRegistration
 from pirlo.core.ports.runner import PlayRunner
 from pirlo.core.services.masking import mask_sensitive_data
 from pirlo.infrastructure.adapters.orchestrator.prefect.models import (
-    PrefectLink,
     PrefectRoutineRegistration,
 )
 from pirlo.infrastructure.adapters.orchestrator.prefect_compiler import (
@@ -38,12 +37,10 @@ class PrefectRunner(PlayRunner):
     def __init__(
         self,
         compiler: PrefectCompiler | None = None,
-        link: PrefectLink | None = None,
         target: PrefectTarget | None = None,
     ) -> None:
         self.compiler: PrefectCompiler = compiler or PrefectCompiler()
-        self.link: PrefectLink = link or PrefectLink()
-        self.target: PrefectTarget = target or PrefectTarget.from_link(self.link)
+        self.target: PrefectTarget = target or PrefectTarget.ephemeral()
 
     def _get_override_settings(self) -> dict[Any, Any]:
         from prefect.settings import (

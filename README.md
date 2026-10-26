@@ -251,22 +251,17 @@ pirlo run log RUN_ID[/PLAY_ID] [-n TAIL] [-f]     # -f follows live logs (alias:
 pirlo <play> -l                                   # stream logs to the terminal while running
 ```
 
-## Scheduling and orchestrators
+## Scheduling
 
-By default a play runs once, immediately, on a local temporary Prefect server.
-To use a long-lived Prefect server, create an orchestrator link and target it:
+A play runs once, immediately, on a local temporary Prefect server.
 
 ```bash
-pirlo orchestrator create             # wizard: server URL, work pool, code storage
-pirlo orchestrator list
-pirlo orchestrator verify NAME        # also: show NAME, delete NAME
-pirlo <play> --orchestrator NAME
-pirlo <play> --orchestrator NAME --routine daily   # or hourly, weekly, monthly, or a cron string
+pirlo <play> --routine daily   # or hourly, weekly, monthly, or a cron string
 ```
 
-`--routine` registers a Prefect deployment on the link's work pool (default
-`pirlo-pool`). It only fires if that Prefect server is running and a worker
-serves the pool, so do not use it with the default temporary server.
+`--routine` registers a Prefect deployment on the `pirlo-pool` work pool. It
+only fires while a Prefect server is running and a worker serves that pool;
+against the default temporary server it registers but never runs.
 
 ## Configuration
 
@@ -284,11 +279,10 @@ serves the pool, so do not use it with the default temporary server.
 
 ## Known issues
 
-- **Remote and scheduled runs send secrets to the Prefect server.** With
-  `--orchestrator` pointing at a server that has a work pool, or with
-  `--routine`, resolved parameter values, including link API keys, are part of
-  the deployment payload stored by that server, because the worker needs them
-  to run the play. Local runs (the default) do not store them.
+- **Scheduled runs send secrets to the Prefect server.** With `--routine`,
+  resolved parameter values, including link API keys, are part of the
+  deployment payload stored by that server, because the worker needs them to
+  run the play. Local runs (the default) do not store them.
 
 ## Architecture
 
@@ -338,5 +332,5 @@ Pirlo is named after the Italian midfielder Andrea Pirlo.
 | Play | One step: a `Play` subclass registered with `@play`. |
 | Playbook | A module of plays, e.g. `playbooks/hello.py`. |
 | Pitch | The workspace directory, `~/.pirlo-pitch` by default. |
-| Link | A named connection: an LLM provider account or an orchestrator. |
+| Link | A named connection to an LLM provider account. |
 | Routine | A recurring schedule for a play (`--routine`). |

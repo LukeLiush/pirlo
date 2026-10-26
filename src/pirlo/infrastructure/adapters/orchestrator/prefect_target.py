@@ -5,7 +5,6 @@ from enum import StrEnum
 from typing import Literal
 
 from pirlo.core.config import DEFAULT_WORK_POOL
-from pirlo.infrastructure.adapters.orchestrator.prefect.models import PrefectLink
 from pirlo.infrastructure.adapters.orchestrator.prefect_settings import (
     PrefectServerSettings,
 )
@@ -27,16 +26,5 @@ class PrefectTarget:
     code_storage: Literal["in_memory", "prefect_artifact"] = "prefect_artifact"
 
     @classmethod
-    def from_link(cls, link: PrefectLink) -> PrefectTarget:
-        if link.is_ephemeral:
-            server = PrefectServerSettings(api_url=None)
-            execution = Execution.EPHEMERAL
-        else:
-            server = PrefectServerSettings.resolve(link.server_url)
-            execution = Execution.WORK_POOL if link.work_pool else Execution.IN_PROCESS
-        return cls(
-            server=server,
-            execution=execution,
-            work_pool=link.work_pool or DEFAULT_WORK_POOL,
-            code_storage=link.code_storage,
-        )
+    def ephemeral(cls) -> PrefectTarget:
+        return cls(PrefectServerSettings(api_url=None), Execution.EPHEMERAL)

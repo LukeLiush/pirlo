@@ -6,16 +6,26 @@ import pytest
 from pirlo.core.decorators import play
 from pirlo.core.models.blueprint import PlayBlueprint, PlayOutput
 from pirlo.core.ports.play import Play, requires
-from pirlo.infrastructure.adapters.orchestrator.prefect.models import (
-    PrefectLink,
-)
 from pirlo.infrastructure.adapters.orchestrator.prefect_compiler import (
     PrefectCompiler,
 )
 from pirlo.infrastructure.adapters.orchestrator.prefect_runner import (
     PrefectRunner,
 )
+from pirlo.infrastructure.adapters.orchestrator.prefect_settings import (
+    PrefectServerSettings,
+)
+from pirlo.infrastructure.adapters.orchestrator.prefect_target import (
+    Execution,
+    PrefectTarget,
+)
 from pirlo.infrastructure.adapters.runner_factory import PlayRunnerFactory
+
+
+def _server_target(
+    url: str, execution: Execution = Execution.IN_PROCESS, **kwargs
+) -> PrefectTarget:
+    return PrefectTarget(PrefectServerSettings.resolve(url), execution, **kwargs)
 
 
 class StepOneOutput(PlayOutput):
@@ -58,7 +68,7 @@ async def test_prefect_runner_via_factory():
     play_instance = StepTwoPlay()
     blueprint: PlayBlueprint = play_instance.extract_blueprint()
 
-    runner = PlayRunnerFactory.get_runner("prefect")
+    runner = PlayRunnerFactory.get_runner()
     result = await runner.run(blueprint)
 
     assert isinstance(result, StepTwoOutput)
@@ -75,7 +85,7 @@ def test_prefect_runner_get_dashboard_url_server():
     compiler = PrefectCompiler()
     runner = PrefectRunner(
         compiler=compiler,
-        link=PrefectLink(server_url="http://prefect.internal:4200/api"),
+        target=_server_target("http://prefect.internal:4200/api"),
     )
     assert (
         runner.get_dashboard_url("test_run_123")
@@ -91,7 +101,7 @@ def test_prefect_runner_sync_environ():
     compiler = PrefectCompiler()
     runner = PrefectRunner(
         compiler=compiler,
-        link=PrefectLink(server_url="http://test.url:4200/api"),
+        target=_server_target("http://test.url:4200/api"),
     )
 
     assert "PREFECT_API_URL" not in os.environ
@@ -115,8 +125,9 @@ async def test_prefect_runner_server_mode_dispatches_to_submit_remote_run():
     compiler = PrefectCompiler()
     runner = PrefectRunner(
         compiler=compiler,
-        link=PrefectLink(
-            server_url="http://prefect.internal:4200/api",
+        target=_server_target(
+            "http://prefect.internal:4200/api",
+            Execution.WORK_POOL,
             work_pool="custom-pool",
         ),
     )
@@ -154,8 +165,9 @@ async def test_prefect_runner_submit_remote_run():
     compiler = PrefectCompiler()
     runner = PrefectRunner(
         compiler=compiler,
-        link=PrefectLink(
-            server_url="http://prefect.internal:4200/api",
+        target=_server_target(
+            "http://prefect.internal:4200/api",
+            Execution.WORK_POOL,
             work_pool="pirlo-pool",
             code_storage="in_memory",
         ),
@@ -232,22 +244,13 @@ def test_default_runner_is_ephemeral():
     assert overrides[PREFECT_SERVER_ALLOW_EPHEMERAL_MODE] is True
 
 
-def test_explicit_ephemeral_link_is_ephemeral():
-    from prefect.settings import PREFECT_API_URL
-
-    runner = PrefectRunner(link=PrefectLink(server_url="ephemeral", work_pool="p"))
-
-    assert runner._get_override_settings()[PREFECT_API_URL] is None
-    assert runner.get_dashboard_url("r1") is None
-
-
 @pytest.mark.anyio
-async def test_server_link_without_pool_runs_in_process():
+async def test_in_process_target_runs_in_process():
     from unittest.mock import AsyncMock, patch
 
     from prefect.settings import PREFECT_API_URL
 
-    runner = PrefectRunner(link=PrefectLink(server_url="http://h:4200", work_pool=""))
+    runner = PrefectRunner(target=_server_target("http://h:4200"))
 
     with (
         patch.object(runner, "_run_immediate_once", new_callable=AsyncMock) as local,
@@ -267,7 +270,7 @@ async def test_server_link_without_pool_runs_in_process():
 def test_server_url_is_normalized_to_api(raw):
     from prefect.settings import PREFECT_API_URL
 
-    runner = PrefectRunner(link=PrefectLink(server_url=raw))
+    runner = PrefectRunner(target=_server_target(raw))
 
     assert runner._get_override_settings()[PREFECT_API_URL] == "http://h:4200/api"
     assert runner.get_dashboard_url("r1") == "http://h:4200/flow-runs?name=r1"

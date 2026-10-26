@@ -74,7 +74,6 @@ class CliPlayRunner:
 
         parsed_args, _ = play_parser.parse_known_args(play_invocation.play_args)
         routine: str | None = getattr(parsed_args, "routine", None)
-        orchestrator: str | None = getattr(parsed_args, "orchestrator", None)
 
         parameter_resolver: ParameterResolver = ParameterResolver.create(
             playbook_parser=play_parser,
@@ -99,14 +98,7 @@ class CliPlayRunner:
             routine=routine,
         )
 
-        runner_name: str = orchestrator or (
-            play_invocation.orchestrator_args[0]
-            if play_invocation.orchestrator_args
-            else "prefect"
-        )
-        runner_instance: PlayRunner = PlayRunnerFactory.get_runner(
-            runner_name, orchestrator_name=orchestrator
-        )
+        runner_instance: PlayRunner = PlayRunnerFactory.get_runner()
 
         show_logs: bool = any(arg in sys.argv for arg in ("-l", "--log"))
         setup_pirlo_logging(show_logs=show_logs)

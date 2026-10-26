@@ -22,7 +22,6 @@ def test_short_and_long_options_share_one_metavar():
 
     assert "-r, --routine CRON" in help_text
     assert "-r CRON, --routine CRON" not in help_text
-    assert "--orchestrator LINK" in help_text
 
 
 def test_store_true_flags_render_without_a_metavar():

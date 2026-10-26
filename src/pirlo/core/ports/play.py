@@ -144,13 +144,11 @@ class Play[OutputT](ABC):
     @classmethod
     async def run_play(
         cls,
-        runner: str = "prefect",
         force: bool = False,
         routine: str | None = None,
-        orchestrator: str | None = None,
         **kwargs: ParameterValue,
     ) -> OutputT:
-        """Executes the Play and all upstream dependencies via the specified runner."""
+        """Executes the Play and all upstream dependencies."""
 
         from pirlo.core.ports.runner import PlayRunner
         from pirlo.core.services.blueprint_extractor import BlueprintExtractor
@@ -161,9 +159,7 @@ class Play[OutputT](ABC):
         blueprint: PlayBlueprint = BlueprintExtractor.extract_from_play(
             cls, user_kwargs=kwargs
         )
-        play_runner: PlayRunner = PlayRunnerFactory.get_runner(
-            runner, orchestrator_name=orchestrator
-        )
+        play_runner: PlayRunner = PlayRunnerFactory.get_runner()
         raw_result: Any = await play_runner.run(blueprint, force=force, routine=routine)
         return cast(OutputT, raw_result)
 

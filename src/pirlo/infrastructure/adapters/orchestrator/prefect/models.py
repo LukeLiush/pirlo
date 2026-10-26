@@ -1,42 +1,7 @@
 from __future__ import annotations
 
-from typing import Annotated, Literal
-
 from pirlo.core.config import DEFAULT_WORK_POOL
-from pirlo.core.models.orchestrator import OrchestratorLink, RoutineRegistration
-from pirlo.core.models.parameters import Parameter
-
-
-class PrefectLink(OrchestratorLink):
-    """Prefect 3.x specific orchestrator connection."""
-
-    name: str = "ephemeral"
-    engine: str = "prefect"
-    server_url: Annotated[
-        str,
-        Parameter(
-            help="Prefect API server URL or 'ephemeral' for local runs",
-            short="-s",
-        ),
-    ] = "ephemeral"
-    work_pool: Annotated[
-        str,
-        Parameter(
-            help="Target work pool for scheduled routine deployments",
-            short="-w",
-        ),
-    ] = DEFAULT_WORK_POOL
-    code_storage: Annotated[
-        Literal["in_memory", "prefect_artifact"],
-        Parameter(
-            help="Code packaging backend: in_memory or prefect_artifact",
-            short="-c",
-        ),
-    ] = "prefect_artifact"
-
-    @property
-    def is_ephemeral(self) -> bool:
-        return self.server_url == "ephemeral" or not self.server_url
+from pirlo.core.models.orchestrator import RoutineRegistration
 
 
 class PrefectRoutineRegistration(RoutineRegistration):

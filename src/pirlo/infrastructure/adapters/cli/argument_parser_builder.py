@@ -226,13 +226,6 @@ class ArgumentParserBuilder:
                 "Omit to run once immediately."
             ),
         )
-        parser.add_argument(
-            "--orchestrator",
-            type=str,
-            default=None,
-            metavar="LINK",
-            help="Target orchestrator link name. If omitted, defaults to local ephemeral Prefect.",
-        )
         return parser
 
     @staticmethod
