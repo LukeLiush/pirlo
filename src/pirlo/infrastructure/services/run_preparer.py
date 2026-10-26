@@ -1,4 +1,4 @@
-"""Prepare a playbook run: select orchestrator, resolve params, establish identity."""
+"""Prepare a playbook run: resolve params, establish identity."""
 
 from __future__ import annotations
 

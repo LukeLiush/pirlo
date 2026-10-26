@@ -48,7 +48,7 @@ class CliPlayRunner:
         play_cls: type[Play[Any]],
         play_name: str | None = None,
     ) -> RunResult[Any]:
-        """Parse CLI parameters using the POSIX '--' delimiter and execute the play."""
+        """Parse CLI parameters and execute the play."""
         resolved_play_name: str | None = play_name or getattr(
             play_cls, "play_name", None
         )
@@ -60,9 +60,7 @@ class CliPlayRunner:
         raw_arguments: list[str] = extract_raw_arguments_excluding_command(
             sys.argv, resolved_play_name
         )
-        play_invocation: PlayInvocation = PlayInvocation.from_raw(
-            raw_arguments, default_orchestrator_name="prefect"
-        )
+        play_invocation: PlayInvocation = PlayInvocation.from_raw(raw_arguments)
 
         pirlo_workspace: Path = get_workspace_path()
 

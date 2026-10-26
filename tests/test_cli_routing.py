@@ -4,14 +4,12 @@ from unittest.mock import patch
 from pirlo.infrastructure.adapters.cli.entrypoint import main
 
 
-def test_cli_orchestrator_playbook_routing():
+def test_cli_playbook_routing():
     test_args = [
         "pirlo",
         "demo_report_dag",
         "--channel",
         "#testing",
-        "--",
-        "prefect",
         "--help",
     ]
 
