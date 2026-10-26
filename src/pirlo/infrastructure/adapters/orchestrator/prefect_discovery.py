@@ -2,7 +2,9 @@ import contextlib
 import os
 
 from pirlo.core.config import get_workspace_path
-from pirlo.core.ports.health_checker import PrefectHealthChecker
+from pirlo.infrastructure.adapters.orchestrator.prefect_health import (
+    is_prefect_healthy,
+)
 
 
 def discover_prefect_server_url() -> str | None:
@@ -15,7 +17,7 @@ def discover_prefect_server_url() -> str | None:
     """
     # 1. Check explicit environment variable
     env_url = os.environ.get("PREFECT_API_URL")
-    if env_url and PrefectHealthChecker.check_url(env_url):
+    if env_url and is_prefect_healthy(env_url):
         return env_url
 
     # 2. Check active pirlo connect session (connect/session.json)
@@ -25,9 +27,7 @@ def discover_prefect_server_url() -> str | None:
         connect_session = ActiveSession.load_active(
             get_workspace_path() / "connect" / "session.json"
         )
-        if connect_session and PrefectHealthChecker.check_url(
-            connect_session.prefect_api_url
-        ):
+        if connect_session and is_prefect_healthy(connect_session.prefect_api_url):
             return connect_session.prefect_api_url
 
     # 3. No server running -> Return None to trigger Ephemeral mode
