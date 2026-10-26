@@ -1,11 +1,8 @@
 from __future__ import annotations
 
-import json
 import logging
 import os
-import signal
 import socket
-import subprocess
 import sys
 import time
 from collections.abc import Callable
@@ -21,6 +18,11 @@ from pirlo.core.ports.local_server import (
 )
 from pirlo.infrastructure.adapters.orchestrator.prefect_health import (
     is_prefect_healthy,
+)
+from pirlo.infrastructure.services.detached_process import (
+    DetachedProcess,
+    is_alive,
+    terminate_group,
 )
 
 logger = logging.getLogger(__name__)
@@ -55,25 +57,28 @@ class PrefectLocalServer(LocalServer):
         startup_timeout: float = 20.0,
         stop_timeout: float = 10.0,
     ) -> None:
-        self._state_dir = state_dir or get_workspace_path() / "serve"
+        state_dir = state_dir or get_workspace_path() / "serve"
+        self._process = DetachedProcess(
+            state_dir / "prefect-server.json", state_dir / "prefect-server.log"
+        )
         self._command = command
         self._startup_timeout = startup_timeout
         self._stop_timeout = stop_timeout
 
     @property
     def state_path(self) -> Path:
-        return self._state_dir / "prefect-server.json"
+        return self._process.state_path
 
     @property
     def log_path(self) -> Path:
-        return self._state_dir / "prefect-server.log"
+        return self._process.log_path
 
     def start(self, preferred_port: int) -> LocalServerStatus:
         running = self.status()
         if running:
             return running
         recorded = self._read_state()
-        if recorded and _is_alive(recorded.pid):
+        if recorded and is_alive(recorded.pid):
             raise LocalServerError(
                 f"A Prefect server (pid {recorded.pid}) is running but not answering "
                 f"at {recorded.api_url}; stop it with 'pirlo serve --stop'."
@@ -81,31 +86,22 @@ class PrefectLocalServer(LocalServer):
 
         port = _free_loopback_port(preferred_port)
         api_url = f"http://{LOOPBACK}:{port}/api"
-        self._state_dir.mkdir(parents=True, exist_ok=True)
         # The server reads its own settings; a client URL in our env is irrelevant.
         env = {k: v for k, v in os.environ.items() if k != "PREFECT_API_URL"}
-        with open(self.log_path, "ab") as log:
-            process = subprocess.Popen(
-                self._command(port),
-                stdin=subprocess.DEVNULL,
-                stdout=log,
-                stderr=subprocess.STDOUT,
-                env=env,
-                start_new_session=True,
-            )
+        process = self._process.spawn(self._command(port), env)
 
         deadline = time.monotonic() + self._startup_timeout
         while not is_prefect_healthy(api_url):
             if process.poll() is not None:
                 raise LocalServerError(
                     f"Prefect server exited with code {process.returncode} before "
-                    f"answering.\n{self._log_tail()}"
+                    f"answering.\n{self._process.log_tail()}"
                 )
             if time.monotonic() > deadline:
-                _terminate_group(process.pid, self._stop_timeout)
+                terminate_group(process.pid, self._stop_timeout)
                 raise LocalServerError(
                     f"Prefect server did not answer at {api_url} within "
-                    f"{self._startup_timeout:.0f}s.\n{self._log_tail()}"
+                    f"{self._startup_timeout:.0f}s.\n{self._process.log_tail()}"
                 )
             time.sleep(0.25)
 
@@ -123,8 +119,8 @@ class PrefectLocalServer(LocalServer):
         recorded = self._read_state()
         if recorded is None:
             return None
-        if not _is_alive(recorded.pid):
-            self.state_path.unlink(missing_ok=True)
+        if not is_alive(recorded.pid):
+            self._process.forget()
             return None
         return recorded if is_prefect_healthy(recorded.api_url) else None
 
@@ -132,14 +128,16 @@ class PrefectLocalServer(LocalServer):
         recorded = self._read_state()
         if recorded is None:
             return False
-        if _is_alive(recorded.pid):
-            _terminate_group(recorded.pid, self._stop_timeout)
-        self.state_path.unlink(missing_ok=True)
+        if is_alive(recorded.pid):
+            terminate_group(recorded.pid, self._stop_timeout)
+        self._process.forget()
         return True
 
     def _read_state(self) -> LocalServerStatus | None:
+        data = self._process.read()
+        if data is None:
+            return None
         try:
-            data = json.loads(self.state_path.read_text())
             return LocalServerStatus(
                 pid=int(data["pid"]),
                 port=int(data["port"]),
@@ -147,8 +145,6 @@ class PrefectLocalServer(LocalServer):
                 started_at=str(data["started_at"]),
                 log_path=Path(data["log_path"]),
             )
-        except FileNotFoundError:
-            return None
         except (ValueError, KeyError, TypeError) as exc:
             logger.warning("Ignoring unreadable %s: %s", self.state_path, exc)
             return None
@@ -156,14 +152,7 @@ class PrefectLocalServer(LocalServer):
     def _write_state(self, status: LocalServerStatus) -> None:
         data = asdict(status)
         data["log_path"] = str(status.log_path)
-        self.state_path.write_text(json.dumps(data, indent=2))
-
-    def _log_tail(self, lines: int = 15) -> str:
-        try:
-            tail = self.log_path.read_text(errors="replace").splitlines()[-lines:]
-        except FileNotFoundError:
-            return f"(no log at {self.log_path})"
-        return f"Last lines of {self.log_path}:\n" + "\n".join(tail)
+        self._process.write(data)
 
 
 def _free_loopback_port(preferred_port: int) -> int:
@@ -175,34 +164,3 @@ def _free_loopback_port(preferred_port: int) -> int:
                 continue
             return int(sock.getsockname()[1])
     raise LocalServerError("No free port on 127.0.0.1.")
-
-
-def _is_alive(pid: int) -> bool:
-    try:
-        # Reap it first if it is our own exited child, so it doesn't linger as a zombie.
-        reaped_pid, _ = os.waitpid(pid, os.WNOHANG)
-        if reaped_pid == pid:
-            return False
-    except ChildProcessError:
-        pass
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True
-    return True
-
-
-def _terminate_group(pid: int, timeout: float) -> None:
-    for sig in (signal.SIGTERM, signal.SIGKILL):
-        try:
-            os.killpg(pid, sig)
-        except ProcessLookupError:
-            return
-        deadline = time.monotonic() + timeout
-        while time.monotonic() < deadline:
-            if not _is_alive(pid):
-                return
-            time.sleep(0.1)
-        logger.warning("Prefect server pid %s ignored %s.", pid, sig.name)
