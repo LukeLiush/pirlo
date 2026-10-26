@@ -270,6 +270,7 @@ against the default temporary server it registers but never runs.
 | `PIRLO_WORKSPACE` | `~/.pirlo-pitch` | Links, run directories, shell logs, extra plays. |
 | `PIRLO_LOG_LEVEL` | `INFO` | Pirlo log level. |
 | `PREFECT_HOME` | `~/.prefect` | Prefect's own state, including the temporary server's database. |
+| `PREFECT_API_URL` | unset | A Prefect server for `pirlo run` history. Set it in the environment or with `prefect config set`; if it doesn't answer, pirlo warns and uses the temporary server. |
 
 ## Other commands
 
