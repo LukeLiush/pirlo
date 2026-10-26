@@ -259,37 +259,42 @@ play runs in Prefect's **ephemeral mode**: a temporary server is started for
 that run and stopped when it ends, so there is no UI to link to.
 
 ```bash
-pirlo serve                      # Prefect server on 127.0.0.1 (4200 if free) + a worker
-pirlo <play>                     # reports to it; the summary links to the run
-pirlo serve --status             # server URL, pid, log file; the worker
-pirlo serve --stop               # stops the worker, then the server
+pirlo serve                      # Prefect server on 127.0.0.1 (4200 if free) + a worker, in this terminal
+pirlo <play>                     # in another terminal: reports to it; the summary links to the run
+pirlo serve --status             # from any terminal: UI URL, pid, server and worker health
+pirlo serve --stop               # from any terminal: stops pirlo serve (or Ctrl-C in its own)
 PIRLO_SERVER=off pirlo <play>    # ephemeral mode for this run
 pirlo <play> --routine daily     # or hourly, weekly, monthly, or a cron string
 ```
 
-`pirlo serve` runs the server as a background process on the host, records it
-in `$PIRLO_WORKSPACE/serve/prefect-server.json` (its output goes to
-`prefect-server.log` next to it), and creates the `pirlo-pool` work pool. It
-then starts one Prefect worker on the same host for that pool, named after the
-machine, running up to 10 flow runs at once; its state and log are
-`serve/prefect-worker.json` and `prefect-worker.log`. If late runs are already
-waiting on the pool, `pirlo serve` says so before the worker picks them up.
-Everything it starts listens on `127.0.0.1` only; from another machine, forward
-the port over SSH: `ssh -L 4200:127.0.0.1:4200 <user>@<host>`.
+`pirlo serve` stays in the foreground and runs two processes under
+[honcho](https://honcho.readthedocs.io), with their output interleaved and
+prefixed `server |` and `worker |`: the Prefect server, and one Prefect worker
+for the `pirlo-pool` work pool, named after the machine, running up to 10 flow
+runs at once. The worker waits until the server answers, creates the pool if it
+is missing, and says so if late runs are already waiting on it. Ctrl-C, closing
+the terminal, or `pirlo serve --stop` stops both; if either one exits, honcho
+stops the other.
+
+While it runs, `pirlo serve` records its pid and the server's URL in
+`$PIRLO_WORKSPACE/serve/serve.json`, which is how runs, `--status` and `--stop`
+find it; the file is removed when it stops. Everything it starts listens on
+`127.0.0.1` only; from another machine, forward the port over SSH:
+`ssh -L 4200:127.0.0.1:4200 <user>@<host>`.
 
 Each run picks its server once, in this order:
 
 1. `PIRLO_SERVER=off`, or a set `CI` variable: ephemeral mode.
 2. `PREFECT_API_URL` is configured (environment or `prefect config set`): that
    server if it answers, otherwise a warning and ephemeral mode.
-3. The server `pirlo serve` started, if its process is alive and answering.
+3. The server of a running `pirlo serve`, if it answers.
 4. Otherwise: ephemeral mode.
 
 A run never starts a server; only `pirlo serve` does. `pirlo run` reads history
 from the same server.
 
-`--routine` registers a Prefect deployment on `pirlo-pool`, and the worker that
-`pirlo serve` started runs it on schedule. Plain `pirlo <play>` runs still
+`--routine` registers a Prefect deployment on `pirlo-pool`, and the worker of a
+running `pirlo serve` runs it on schedule. Plain `pirlo <play>` runs still
 execute in your terminal's process and only report to the server. In ephemeral
 mode a routine registers but never runs.
 
@@ -329,9 +334,9 @@ Play classes ──BlueprintExtractor──▶ PlayBlueprint (engine-agnostic DA
 | Path | Contents |
 |---|---|
 | `src/pirlo/core/models/` | Blueprint, links, commands, parameters. |
-| `src/pirlo/core/ports/` | `Play`, `PlayRunner`, `CommandRunner`, `LinkRepository`, `LocalServer`, ... |
+| `src/pirlo/core/ports/` | `Play`, `PlayRunner`, `CommandRunner`, `LinkRepository`, `ProcessSupervisor`, ... |
 | `src/pirlo/core/services/` | Blueprint extraction, idempotency ids, `Shell`, masking. |
-| `src/pirlo/infrastructure/adapters/` | CLI (including `pirlo serve`), Prefect compiler, runner, run target and managed local server, local command runner, JSON link storage, DAG rendering. |
+| `src/pirlo/infrastructure/adapters/` | CLI (including `pirlo serve`), Prefect compiler, runner, run target, `pirlo serve`'s processes and honcho supervisor, local command runner, JSON link storage, DAG rendering. |
 | `src/pirlo/playbooks/` | Built-in demo plays. |
 
 New behaviour goes in a new class implementing an existing port; see

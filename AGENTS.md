@@ -28,7 +28,7 @@ implements them, plays live in `playbooks/`.
 
     uv sync                       # install (Python >=3.12, managed by uv)
     uv run pirlo <play_name>      # run a play; --help shows its DAG and params
-    uv run pirlo serve            # local Prefect server on 127.0.0.1 (--status, --stop)
+    uv run pirlo serve            # Prefect server + worker on 127.0.0.1, foreground (--status, --stop)
     uv run pytest                 # tests
     make all                      # ruff format + ruff check + mypy
 
@@ -56,17 +56,21 @@ report to a Prefect server you configured or started with `pirlo serve`.
 - **Which server** comes from `discover_prefect_server_url()`: a configured
   `PREFECT_API_URL` (read fresh with `prefect.settings.Settings()`, never
   `PREFECT_API_URL.value()`, which is fixed at import), else the server
-  `pirlo serve` recorded in `$PIRLO_WORKSPACE/serve/prefect-server.json`.
-  Discovery never starts a server.
+  of a running `pirlo serve`, recorded in `$PIRLO_WORKSPACE/serve/serve.json`
+  (`ServeBeacon`). Discovery never starts a server.
 - **`pirlo serve`** (`cli/serve_commands.py`) is a built-in command on purpose,
-  not a play: it manages the server that plays run on. It drives two ports:
-  `LocalServer` (`PrefectLocalServer`) and `WorkerFleet` (`PrefectHostWorker`,
-  one `prefect worker` on this host). Both use `services/detached_process.py`
-  for the background process, its state file and its shutdown.
-- **The host worker** gets pirlo's virtualenv `bin` first on `PATH` (the
+  not a play: it manages the server that plays run on. It runs in the
+  foreground through the `ProcessSupervisor` port (`HonchoSupervisor`): the
+  server and a worker gate (`prefect_worker_gate.py`), which waits for the
+  server, ensures the work pool, then execs `prefect worker`. The process
+  specs live in `prefect_serve.py`. honcho doesn't stop its children on
+  SIGHUP, so `HonchoSupervisor` does; keep that. `--stop` sends SIGTERM to the
+  recorded `pirlo serve` pid, and only while its server answers.
+- **The worker** gets pirlo's virtualenv `bin` first on `PATH` (the
   flow-run bootstrap calls `python3`) and does not inherit pirlo's quiet
-  Prefect console setting, so its log shows each submitted run. Plain runs stay
-  in-process; only routines go through the pool until worker containers exist.
+  Prefect console setting, so its output shows each submitted run. Plain runs
+  stay in-process; only routines go through the pool until worker containers
+  exist.
 - **Dashboard links** use the Prefect UI's real routes: `/runs/flow-run/<id>`
   and `/deployments/deployment/<id>`. The UI is a single-page app, so a plain
   HTTP GET can't tell you whether a route exists; check the router in the
@@ -113,6 +117,9 @@ containers. These were removed for that reason; ask before bringing any back.
   add a second runner behind `PlayRunner` only when a second engine is real.
 - The Docker/Ollama `pirlo serve`: Prefect now runs on the host, and its stock
   worker image could not run pirlo plays.
+- The background `pirlo serve` (`DetachedProcess`, the `LocalServer` and
+  `WorkerFleet` ports, per-process state and log files): `pirlo serve` now runs
+  in the foreground under honcho; use `--status`/`--stop` from another terminal.
 
 ## Legacy — do not build on
 
