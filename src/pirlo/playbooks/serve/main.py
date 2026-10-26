@@ -55,12 +55,12 @@ class ServePlay(Play[RunResult[Any]]):
     """Serve play that launches Prefect dev server and Ollama via Docker Compose."""
 
     def _find_free_port(self, preferred_port: int) -> int:
-        """Checks if preferred_port is occupied on server host; returns free port if busy."""
+        """Checks if preferred_port is free on loopback; returns another free loopback port if busy."""
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            if s.connect_ex(("0.0.0.0", preferred_port)) != 0:
+            if s.connect_ex(("127.0.0.1", preferred_port)) != 0:
                 return preferred_port
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.bind(("0.0.0.0", 0))
+            s.bind(("127.0.0.1", 0))
             return s.getsockname()[1]
 
     async def execute(
@@ -251,8 +251,8 @@ class ServePlay(Play[RunResult[Any]]):
         self.ui.goal(
             "pirlo serve started successfully!",
             detail=(
-                f"Prefect API: http://0.0.0.0:{resolved_prefect_port}/api\n"
-                f"Ollama Base: http://0.0.0.0:{resolved_ollama_port}\n"
+                f"Prefect API: http://127.0.0.1:{resolved_prefect_port}/api\n"
+                f"Ollama Base: http://127.0.0.1:{resolved_ollama_port}\n"
                 f"Served Models: {', '.join(verified_models)}\n"
                 f"Manifest written to {serve_dir / 'serve.json'}\n\n"
                 f"💡 To open the Prefect UI from another machine, tunnel over SSH:\n"

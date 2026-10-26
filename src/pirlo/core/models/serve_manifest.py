@@ -17,7 +17,7 @@ class ServeManifest:
     default_ollama_port: int = DEFAULT_OLLAMA_PORT
     default_model: str = DEFAULT_OLLAMA_MODEL
     models: list[str] = field(default_factory=lambda: [DEFAULT_OLLAMA_MODEL])
-    host: str = "0.0.0.0"
+    host: str = "127.0.0.1"
     started_at: str = ""
     status: str = "running"
 

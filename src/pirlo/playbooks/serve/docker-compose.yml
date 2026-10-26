@@ -7,7 +7,7 @@ services:
     environment:
       - PREFECT_UI_API_URL=/api
     ports:
-      - "${PREFECT_PORT:-4200}:4200"
+      - "127.0.0.1:${PREFECT_PORT:-4200}:4200"
     volumes:
       - prefect_data:/root/.prefect
 
@@ -29,7 +29,7 @@ services:
     container_name: pirlo-ollama-server
     restart: unless-stopped
     ports:
-      - "${OLLAMA_PORT:-11434}:11434"
+      - "127.0.0.1:${OLLAMA_PORT:-11434}:11434"
     volumes:
       - ollama_data:/root/.ollama
     healthcheck:
