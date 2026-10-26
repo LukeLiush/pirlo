@@ -64,8 +64,12 @@ report to a Prefect server you configured or started with `pirlo serve`.
   server and a worker gate (`prefect_worker_gate.py`), which waits for the
   server, ensures the work pool, then execs `prefect worker`. The process
   specs live in `prefect_serve.py`. honcho doesn't stop its children on
-  SIGHUP, so `HonchoSupervisor` does; keep that. `--stop` sends SIGTERM to the
+  SIGHUP, so `HonchoSupervisor` does; keep that (`test_honcho_supervisor.py`
+  sends a real SIGHUP and fails without it). `--stop` sends SIGTERM to the
   recorded `pirlo serve` pid, and only while its server answers.
+- **Testing `pirlo serve` for real:** start, check and stop it inside one shell
+  command (a process started by one sandboxed command can't be signalled from
+  another), and read the port from `serve/serve.json`; 4200 may be taken.
 - **The worker** gets pirlo's virtualenv `bin` first on `PATH` (the
   flow-run bootstrap calls `python3`) and does not inherit pirlo's quiet
   Prefect console setting, so its output shows each submitted run. Plain runs

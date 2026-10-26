@@ -278,7 +278,14 @@ stops the other.
 
 While it runs, `pirlo serve` records its pid and the server's URL in
 `$PIRLO_WORKSPACE/serve/serve.json`, which is how runs, `--status` and `--stop`
-find it; the file is removed when it stops. Everything it starts listens on
+find it; the file is removed when it stops. A second `pirlo serve` reports the
+one already running and exits. `--stop` signals the recorded pid only while its
+server still answers, so a pid since reused by another process is left alone.
+
+`pirlo serve` exits with 130 after Ctrl-C and 143 after `--stop` (honcho's
+convention), otherwise with the exit code of whichever process stopped first.
+Its output goes only to the terminal; to keep a log, run
+`pirlo serve 2>&1 | tee serve.log`. Everything it starts listens on
 `127.0.0.1` only; from another machine, forward the port over SSH:
 `ssh -L 4200:127.0.0.1:4200 <user>@<host>`.
 
