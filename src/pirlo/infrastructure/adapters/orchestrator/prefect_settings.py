@@ -27,8 +27,10 @@ class PrefectServerSettings:
     @classmethod
     def resolve(cls, configured_url: str | None) -> PrefectServerSettings:
         api_url = configured_url or discover_prefect_server_url()
-        if api_url and not api_url.rstrip("/").endswith("/api"):
-            api_url = api_url.rstrip("/") + "/api"
+        if api_url:
+            api_url = api_url.rstrip("/")
+            if not api_url.endswith("/api"):
+                api_url = f"{api_url}/api"
         return cls(api_url=api_url)
 
     @property
@@ -39,7 +41,7 @@ class PrefectServerSettings:
     def web_ui_base(self) -> str | None:
         if not self.api_url:
             return None
-        return self.api_url.rstrip("/").replace("/api", "")
+        return self.api_url.rstrip("/").removesuffix("/api")
 
     @property
     def overrides(self) -> dict[Any, Any]:
