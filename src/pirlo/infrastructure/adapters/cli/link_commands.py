@@ -3,16 +3,17 @@ import getpass
 import sys
 from typing import Any
 
+from pirlo.core.config import get_workspace_path
 from pirlo.core.models.link import SUPPORTED_PROVIDERS, LlmLink
 from pirlo.core.ports.link_repository import LinkRepository
-from pirlo.infrastructure.adapters.storage.composite_link_repository import (
-    CompositeLinkRepository,
+from pirlo.infrastructure.adapters.storage.json_link_repository import (
+    JsonLinkRepository,
 )
 from pirlo.infrastructure.services.link_tester import LinkTester
 
 
 def get_repo() -> LinkRepository:
-    return CompositeLinkRepository()
+    return JsonLinkRepository(get_workspace_path() / "links.json")
 
 
 def link_main(supported_providers: dict[str, Any] | None = None) -> None:

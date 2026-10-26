@@ -51,7 +51,7 @@ it in. Don't teach a working class a second job.
 
 - New behaviour → new class implementing the relevant `core/ports` interface,
   wired through its factory. See `FallbackBlueprintRenderer` (try one renderer,
-  degrade to another) and `CompositeLinkRepository` (overlay, then static).
+  degrade to another).
 - Fixing a defect in existing behaviour → edit that code directly. A bug fix is
   not an extension; don't build a wrapper to avoid touching it.
 - No port exists yet? Extracting one is the right move — say so in the plan first.

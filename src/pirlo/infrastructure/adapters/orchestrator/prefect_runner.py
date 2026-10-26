@@ -359,7 +359,7 @@ class PrefectRunner(PlayRunner):
         return await _run_flow_isolated()
 
     def get_dashboard_url(self, run_id: str) -> str | None:
-        """Constructs Prefect dashboard URL if pirlo connect or a remote Prefect server is active."""
+        """Constructs the Prefect dashboard URL when the run targets a Prefect server."""
         if self.link.is_ephemeral:
             return None
         active_api_url: str | None = self._resolve_active_api_url()

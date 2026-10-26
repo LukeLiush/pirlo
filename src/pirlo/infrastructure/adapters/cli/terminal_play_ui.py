@@ -224,7 +224,7 @@ class TerminalPlayUI(PlayUI):
                 ]
             )
 
-        # If a live server dashboard is active (pirlo connect or remote server)
+        # If the run reported to a Prefect server, link to its dashboard
         if dashboard_url:
             lines.extend(
                 [

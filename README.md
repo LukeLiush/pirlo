@@ -240,9 +240,7 @@ async def execute(
 pirlo my_play --llm my-gemini
 ```
 
-Links are stored in `$PIRLO_WORKSPACE/links.json`. Links written by
-`pirlo connect` live in `$PIRLO_WORKSPACE/connect/links.json` and take
-precedence over same-named user links.
+Links are stored in `$PIRLO_WORKSPACE/links.json`.
 
 ## Run history
 
@@ -280,9 +278,9 @@ serves the pool, so do not use it with the default temporary server.
 
 ## Other commands
 
-- `pirlo serve` starts a local Prefect server and Ollama models in Docker.
-- `pirlo connect` opens SSH tunnels to a remote `pirlo serve` and registers its
-  Ollama models as links.
+- `pirlo serve` starts a local Prefect server and Ollama models in Docker. To
+  open its UI from another machine, forward the port over SSH:
+  `ssh -L 4200:127.0.0.1:4200 <user>@<host>`.
 
 ## Known issues
 
@@ -308,7 +306,7 @@ Play classes ──BlueprintExtractor──▶ PlayBlueprint (engine-agnostic DA
 | `src/pirlo/core/ports/` | `Play`, `CommandRunner`, `LinkRepository`, `BlueprintCompiler`, ... |
 | `src/pirlo/core/services/` | Blueprint extraction, idempotency ids, `Shell`, masking. |
 | `src/pirlo/infrastructure/adapters/` | CLI, Prefect orchestrator, local command runner, JSON link storage, DAG rendering. |
-| `src/pirlo/playbooks/` | Built-in plays (`demo`, `serve`, `connect`). |
+| `src/pirlo/playbooks/` | Built-in plays (`demo`, `serve`). |
 
 New behaviour goes in a new class implementing an existing port; see
 [`AGENTS.md`](AGENTS.md) for contributor rules.
