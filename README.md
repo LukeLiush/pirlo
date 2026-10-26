@@ -259,10 +259,10 @@ play runs in Prefect's **ephemeral mode**: a temporary server is started for
 that run and stopped when it ends, so there is no UI to link to.
 
 ```bash
-pirlo serve                      # start a Prefect server on 127.0.0.1 (4200 if free)
+pirlo serve                      # Prefect server on 127.0.0.1 (4200 if free) + a worker
 pirlo <play>                     # reports to it; the summary links to the run
-pirlo serve --status             # URL, pid, log file
-pirlo serve --stop
+pirlo serve --status             # server URL, pid, log file; the worker
+pirlo serve --stop               # stops the worker, then the server
 PIRLO_SERVER=off pirlo <play>    # ephemeral mode for this run
 pirlo <play> --routine daily     # or hourly, weekly, monthly, or a cron string
 ```
@@ -270,8 +270,12 @@ pirlo <play> --routine daily     # or hourly, weekly, monthly, or a cron string
 `pirlo serve` runs the server as a background process on the host, records it
 in `$PIRLO_WORKSPACE/serve/prefect-server.json` (its output goes to
 `prefect-server.log` next to it), and creates the `pirlo-pool` work pool. It
-listens on `127.0.0.1` only; from another machine, forward the port over SSH:
-`ssh -L 4200:127.0.0.1:4200 <user>@<host>`.
+then starts one Prefect worker on the same host for that pool, named after the
+machine, running up to 10 flow runs at once; its state and log are
+`serve/prefect-worker.json` and `prefect-worker.log`. If late runs are already
+waiting on the pool, `pirlo serve` says so before the worker picks them up.
+Everything it starts listens on `127.0.0.1` only; from another machine, forward
+the port over SSH: `ssh -L 4200:127.0.0.1:4200 <user>@<host>`.
 
 Each run picks its server once, in this order:
 
@@ -284,9 +288,10 @@ Each run picks its server once, in this order:
 A run never starts a server; only `pirlo serve` does. `pirlo run` reads history
 from the same server.
 
-`--routine` registers a Prefect deployment on `pirlo-pool`. It only fires while
-the server is running and a worker serves the pool; in ephemeral mode it
-registers but never runs.
+`--routine` registers a Prefect deployment on `pirlo-pool`, and the worker that
+`pirlo serve` started runs it on schedule. Plain `pirlo <play>` runs still
+execute in your terminal's process and only report to the server. In ephemeral
+mode a routine registers but never runs.
 
 ## Configuration
 

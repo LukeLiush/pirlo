@@ -102,6 +102,8 @@ class PrefectHostWorker(WorkerFleet):
             return running
 
         env = dict(os.environ)
+        # pirlo quiets Prefect's console for its own CLI; the worker log should not be.
+        env.pop("PREFECT_LOGGING_HANDLERS_CONSOLE_LEVEL", None)
         env["PREFECT_API_URL"] = api_url
         env["PATH"] = os.pathsep.join([str(_PIRLO_BIN), env.get("PATH", "")])
         process = self._process.spawn(

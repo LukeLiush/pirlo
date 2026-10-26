@@ -59,8 +59,14 @@ report to a Prefect server you configured or started with `pirlo serve`.
   `pirlo serve` recorded in `$PIRLO_WORKSPACE/serve/prefect-server.json`.
   Discovery never starts a server.
 - **`pirlo serve`** (`cli/serve_commands.py`) is a built-in command on purpose,
-  not a play: it manages the server that plays run on. It drives the
-  `LocalServer` port; `PrefectLocalServer` is the adapter.
+  not a play: it manages the server that plays run on. It drives two ports:
+  `LocalServer` (`PrefectLocalServer`) and `WorkerFleet` (`PrefectHostWorker`,
+  one `prefect worker` on this host). Both use `services/detached_process.py`
+  for the background process, its state file and its shutdown.
+- **The host worker** gets pirlo's virtualenv `bin` first on `PATH` (the
+  flow-run bootstrap calls `python3`) and does not inherit pirlo's quiet
+  Prefect console setting, so its log shows each submitted run. Plain runs stay
+  in-process; only routines go through the pool until worker containers exist.
 - **Dashboard links** use the Prefect UI's real routes: `/runs/flow-run/<id>`
   and `/deployments/deployment/<id>`. The UI is a single-page app, so a plain
   HTTP GET can't tell you whether a route exists; check the router in the

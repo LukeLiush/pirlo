@@ -13,5 +13,9 @@ if __name__ == "__main__":
     print(f"PID={os.getpid()}", flush=True)
     print(f"PREFECT_API_URL={os.environ.get('PREFECT_API_URL')}", flush=True)
     print(f"PATH_FIRST={os.environ['PATH'].split(os.pathsep)[0]}", flush=True)
+    print(
+        f"CONSOLE_LEVEL={os.environ.get('PREFECT_LOGGING_HANDLERS_CONSOLE_LEVEL')}",
+        flush=True,
+    )
     while True:
         time.sleep(1)

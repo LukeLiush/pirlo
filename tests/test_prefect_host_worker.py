@@ -47,7 +47,8 @@ def worker(tmp_path: Path) -> Iterator[PrefectHostWorker]:
     host.stop()
 
 
-def test_start_records_an_online_worker_with_pirlos_python_first(worker):
+def test_start_records_an_online_worker_with_pirlos_python_first(worker, monkeypatch):
+    monkeypatch.setenv("PREFECT_LOGGING_HANDLERS_CONSOLE_LEVEL", "ERROR")
     [info] = worker.start(API_URL)
 
     assert (info.name, info.pool, info.limit) == ("desk", "pirlo-pool", 3)
@@ -56,6 +57,7 @@ def test_start_records_an_online_worker_with_pirlos_python_first(worker):
     log = info.log_path.read_text()
     assert f"PREFECT_API_URL={API_URL}" in log
     assert f"PATH_FIRST={Path(sys.executable).parent}" in log
+    assert "CONSOLE_LEVEL=None" in log
 
 
 def test_second_start_reuses_the_running_worker(worker):
