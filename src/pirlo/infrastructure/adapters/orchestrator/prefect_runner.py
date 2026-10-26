@@ -10,7 +10,6 @@ from typing import Any
 
 from prefect.settings import temporary_settings
 
-from pirlo.core.config import DEFAULT_WORK_POOL
 from pirlo.core.models.blueprint import PlayBlueprint, PlayOutput
 from pirlo.core.models.orchestrator import ROUTINE_PRESETS, RoutineRegistration
 from pirlo.core.ports.runner import PlayRunner
@@ -25,28 +24,26 @@ from pirlo.infrastructure.adapters.orchestrator.prefect_compiler import (
 from pirlo.infrastructure.adapters.orchestrator.prefect_model import (
     PrefectWorkflow,
 )
-from pirlo.infrastructure.adapters.orchestrator.prefect_settings import (
-    PrefectServerSettings,
+from pirlo.infrastructure.adapters.orchestrator.prefect_target import (
+    Execution,
+    PrefectTarget,
 )
 
 logger = logging.getLogger(__name__)
 
 
 class PrefectRunner(PlayRunner):
-    """Executes a PrefectWorkflow in ephemeral or connected server mode."""
+    """Executes a PrefectWorkflow wherever its PrefectTarget says: ephemeral, in-process or a work pool."""
 
     def __init__(
         self,
         compiler: PrefectCompiler | None = None,
         link: PrefectLink | None = None,
+        target: PrefectTarget | None = None,
     ) -> None:
         self.compiler: PrefectCompiler = compiler or PrefectCompiler()
         self.link: PrefectLink = link or PrefectLink()
-
-    def _server_settings(self) -> PrefectServerSettings:
-        if self.link.is_ephemeral:
-            return PrefectServerSettings(api_url=None)
-        return PrefectServerSettings.resolve(self.link.server_url)
+        self.target: PrefectTarget = target or PrefectTarget.from_link(self.link)
 
     def _get_override_settings(self) -> dict[Any, Any]:
         from prefect.settings import (
@@ -55,7 +52,7 @@ class PrefectRunner(PlayRunner):
         )
 
         return {
-            **self._server_settings().overrides,
+            **self.target.server.overrides,
             PREFECT_LOGGING_EXTRA_LOGGERS: ["pirlo"],
             PREFECT_LOGGING_LOG_PRINTS: True,
         }
@@ -88,13 +85,15 @@ class PrefectRunner(PlayRunner):
 
         if routine:
             return await self._deploy_routine(workflow, routine, **kwargs)
-        if not self.link.is_ephemeral and self.link.work_pool:
-            return await self._submit_remote_run(
-                workflow, force=force, show_logs=show_logs, **kwargs
-            )
-        return await self._run_immediate_once(
-            workflow, force=force, show_logs=show_logs, **kwargs
-        )
+        match self.target.execution:
+            case Execution.WORK_POOL:
+                return await self._submit_remote_run(
+                    workflow, force=force, show_logs=show_logs, **kwargs
+                )
+            case Execution.IN_PROCESS | Execution.EPHEMERAL:
+                return await self._run_immediate_once(
+                    workflow, force=force, show_logs=show_logs, **kwargs
+                )
 
     async def _deploy_routine(
         self,
@@ -121,7 +120,7 @@ class PrefectRunner(PlayRunner):
             temporary_settings(override_settings),
             self._sync_environ(override_settings),
         ):
-            storage = get_code_storage_backend(self.link.code_storage)
+            storage = get_code_storage_backend(self.target.code_storage)
             tar_bytes = create_tarball_bytes()
             snapshot_hash = hashlib.sha256(tar_bytes).hexdigest()[:12]
             code_ref = await storage.upload(
@@ -133,7 +132,7 @@ class PrefectRunner(PlayRunner):
                 "play_name": workflow.name,
                 "parameters": kwargs,
                 "code_ref": code_ref,
-                "storage_type": self.link.code_storage,
+                "storage_type": self.target.code_storage,
                 "force": False,
                 "show_logs": False,
             }
@@ -143,7 +142,7 @@ class PrefectRunner(PlayRunner):
             raw_deployment: Any = run_play_remote.to_deployment(
                 name=deployment_name,
                 cron=cron_expr,
-                work_pool_name=self.link.work_pool or DEFAULT_WORK_POOL,
+                work_pool_name=self.target.work_pool,
                 parameters=payload,
                 job_variables={"command": bootstrap_cmd},
                 enforce_parameter_schema=False,
@@ -160,7 +159,7 @@ class PrefectRunner(PlayRunner):
                 play_name=workflow.name,
                 routine=cron_expr,
                 dashboard_url=dashboard_url,
-                work_pool=self.link.work_pool or DEFAULT_WORK_POOL,
+                work_pool=self.target.work_pool,
             )
 
     async def _submit_remote_run(
@@ -192,7 +191,7 @@ class PrefectRunner(PlayRunner):
             temporary_settings(override_settings),
             self._sync_environ(override_settings),
         ):
-            storage = get_code_storage_backend(self.link.code_storage)
+            storage = get_code_storage_backend(self.target.code_storage)
             tar_bytes = create_tarball_bytes()
             snapshot_hash = hashlib.sha256(tar_bytes).hexdigest()[:12]
             code_ref = await storage.upload(
@@ -204,7 +203,7 @@ class PrefectRunner(PlayRunner):
                 "play_name": workflow.name,
                 "parameters": kwargs,
                 "code_ref": code_ref,
-                "storage_type": self.link.code_storage,
+                "storage_type": self.target.code_storage,
                 "force": force,
                 "show_logs": show_logs,
             }
@@ -214,7 +213,7 @@ class PrefectRunner(PlayRunner):
             bootstrap_cmd = build_worker_bootstrap_command()
             raw_deployment: Any = run_play_remote.to_deployment(
                 name=deployment_name,
-                work_pool_name=self.link.work_pool or DEFAULT_WORK_POOL,
+                work_pool_name=self.target.work_pool,
                 parameters=payload,
                 job_variables={"command": bootstrap_cmd},
                 enforce_parameter_schema=False,
@@ -269,7 +268,7 @@ class PrefectRunner(PlayRunner):
                 play_name=workflow.name,
                 routine=None,
                 dashboard_url=dashboard_url,
-                work_pool=self.link.work_pool or DEFAULT_WORK_POOL,
+                work_pool=self.target.work_pool,
             )
 
     async def _run_immediate_once(
@@ -342,5 +341,5 @@ class PrefectRunner(PlayRunner):
 
     def get_dashboard_url(self, run_id: str) -> str | None:
         """Constructs the Prefect dashboard URL when the run targets a Prefect server."""
-        web_ui_base = self._server_settings().web_ui_base
+        web_ui_base = self.target.server.web_ui_base
         return f"{web_ui_base}/flow-runs?name={run_id}" if web_ui_base else None
