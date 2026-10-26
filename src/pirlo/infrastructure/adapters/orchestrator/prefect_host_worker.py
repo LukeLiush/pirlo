@@ -9,14 +9,15 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
-import httpx
-
 from pirlo.core.config import (
     DEFAULT_WORK_POOL,
     DEFAULT_WORKER_LIMIT,
     get_workspace_path,
 )
 from pirlo.core.ports.worker_fleet import WorkerFleet, WorkerFleetError, WorkerInfo
+from pirlo.infrastructure.adapters.orchestrator.prefect_work_pool import (
+    is_worker_online,
+)
 from pirlo.infrastructure.services.detached_process import (
     DetachedProcess,
     is_alive,
@@ -45,27 +46,6 @@ def _prefect_worker_command(pool: str, name: str, limit: int) -> list[str]:
     ]
 
 
-def _worker_is_online(api_url: str, pool: str, name: str) -> bool:
-    from prefect.client.orchestration import get_client
-    from prefect.client.schemas.objects import WorkerStatus
-    from prefect.exceptions import ObjectNotFound
-    from prefect.settings import (
-        PREFECT_API_URL,
-        PREFECT_CLIENT_MAX_RETRIES,
-        temporary_settings,
-    )
-
-    with temporary_settings({PREFECT_API_URL: api_url, PREFECT_CLIENT_MAX_RETRIES: 0}):
-        try:
-            with get_client(
-                sync_client=True, httpx_settings={"timeout": 2.0}
-            ) as client:
-                workers = client.read_workers_for_work_pool(pool)
-        except (httpx.HTTPError, ObjectNotFound):
-            return False
-    return any(w.name == name and w.status == WorkerStatus.ONLINE for w in workers)
-
-
 class PrefectHostWorker(WorkerFleet):
     """One `prefect worker` process on this host, polling the pirlo work pool."""
 
@@ -76,7 +56,7 @@ class PrefectHostWorker(WorkerFleet):
         name: str | None = None,
         limit: int = DEFAULT_WORKER_LIMIT,
         command: Callable[[str, str, int], list[str]] = _prefect_worker_command,
-        is_online: Callable[[str, str, str], bool] = _worker_is_online,
+        is_online: Callable[[str, str, str], bool] = is_worker_online,
         startup_timeout: float = 30.0,
         stop_timeout: float = 10.0,
     ) -> None:

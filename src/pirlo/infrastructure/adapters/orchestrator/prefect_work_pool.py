@@ -1,4 +1,9 @@
-from prefect.settings import PREFECT_API_URL, temporary_settings
+import httpx
+from prefect.settings import (
+    PREFECT_API_URL,
+    PREFECT_CLIENT_MAX_RETRIES,
+    temporary_settings,
+)
 
 from pirlo.core.config import DEFAULT_WORK_POOL
 
@@ -44,3 +49,20 @@ def count_late_runs(api_url: str, name: str = DEFAULT_WORK_POOL) -> int:
         get_client(sync_client=True) as client,
     ):
         return client.count_flow_runs(flow_run_filter=late, work_pool_filter=in_pool)
+
+
+def is_worker_online(api_url: str, pool: str, name: str) -> bool:
+    """True when the named worker is polling the pool and Prefect marks it online."""
+    from prefect.client.orchestration import get_client
+    from prefect.client.schemas.objects import WorkerStatus
+    from prefect.exceptions import ObjectNotFound
+
+    with temporary_settings({PREFECT_API_URL: api_url, PREFECT_CLIENT_MAX_RETRIES: 0}):
+        try:
+            with get_client(
+                sync_client=True, httpx_settings={"timeout": 2.0}
+            ) as client:
+                workers = client.read_workers_for_work_pool(pool)
+        except (httpx.HTTPError, ObjectNotFound):
+            return False
+    return any(w.name == name and w.status == WorkerStatus.ONLINE for w in workers)
