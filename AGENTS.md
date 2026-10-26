@@ -42,7 +42,8 @@ If either path is read-only, point them somewhere writable:
     PREFECT_HOME=/tmp/prefect-home PIRLO_WORKSPACE=/tmp/pirlo-pitch uv run pytest
 
 Defaults are `~/.prefect` and `~/.pirlo-pitch` (`PIRLO_WORKSPACE`, see
-`core/config.py`).
+`core/config.py`). `tests/conftest.py` sets `PIRLO_SERVER=off` and a temporary
+Prefect profiles file, so tests never report to your own Prefect server.
 
 ## Extend, don't edit
 

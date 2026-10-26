@@ -12,5 +12,8 @@ class PlayRunnerFactory:
         from pirlo.infrastructure.adapters.orchestrator.prefect_runner import (
             PrefectRunner,
         )
+        from pirlo.infrastructure.adapters.orchestrator.prefect_target import (
+            resolve_default_target,
+        )
 
-        return PrefectRunner()
+        return PrefectRunner(target=resolve_default_target())

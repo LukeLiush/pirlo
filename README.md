@@ -251,17 +251,24 @@ pirlo run log RUN_ID[/PLAY_ID] [-n TAIL] [-f]     # -f follows live logs (alias:
 pirlo <play> -l                                   # stream logs to the terminal while running
 ```
 
-## Scheduling
+## Prefect server and scheduling
 
-A play runs once, immediately, on a local temporary Prefect server.
+A play runs once, immediately. It reports to a Prefect server when
+`PREFECT_API_URL` is set and that server answers, so the run, its logs and a
+dashboard link show up in the Prefect UI; otherwise it uses a temporary server
+that stops when the run ends.
 
 ```bash
+uv run prefect server start                                       # one terminal
+uv run prefect config set PREFECT_API_URL=http://127.0.0.1:4200/api   # once
+pirlo <play>                                                      # shows in the UI
+PIRLO_SERVER=off pirlo <play>                                     # temporary server for this run
 pirlo <play> --routine daily   # or hourly, weekly, monthly, or a cron string
 ```
 
-`--routine` registers a Prefect deployment on the `pirlo-pool` work pool. It
-only fires while a Prefect server is running and a worker serves that pool;
-against the default temporary server it registers but never runs.
+`--routine` registers a Prefect deployment on the `pirlo-pool` work pool of
+that same server. It only fires while the server is running and a worker serves
+the pool; against the temporary server it registers but never runs.
 
 ## Configuration
 
@@ -270,7 +277,8 @@ against the default temporary server it registers but never runs.
 | `PIRLO_WORKSPACE` | `~/.pirlo-pitch` | Links, run directories, shell logs, extra plays. |
 | `PIRLO_LOG_LEVEL` | `INFO` | Pirlo log level. |
 | `PREFECT_HOME` | `~/.prefect` | Prefect's own state, including the temporary server's database. |
-| `PREFECT_API_URL` | unset | A Prefect server for `pirlo run` history. Set it in the environment or with `prefect config set`; if it doesn't answer, pirlo warns and uses the temporary server. |
+| `PREFECT_API_URL` | unset | The Prefect server runs report to and `pirlo run` reads. Set it in the environment or with `prefect config set`; if it doesn't answer, pirlo warns and uses a temporary server. |
+| `PIRLO_SERVER` | `auto` | `off` makes every run use a temporary Prefect server, even when `PREFECT_API_URL` is set. A set `CI` variable has the same effect. |
 
 ## Other commands
 

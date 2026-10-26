@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Literal
 
-from pirlo.core.config import DEFAULT_WORK_POOL
+from pirlo.core.config import DEFAULT_WORK_POOL, is_server_disabled
 from pirlo.infrastructure.adapters.orchestrator.prefect_settings import (
     PrefectServerSettings,
 )
@@ -28,3 +28,13 @@ class PrefectTarget:
     @classmethod
     def ephemeral(cls) -> PrefectTarget:
         return cls(PrefectServerSettings(api_url=None), Execution.EPHEMERAL)
+
+
+def resolve_default_target() -> PrefectTarget:
+    """Runs report to a configured Prefect server when one answers, else stay ephemeral."""
+    if is_server_disabled():
+        return PrefectTarget.ephemeral()
+    server = PrefectServerSettings.resolve(None)
+    if server.api_url is None:
+        return PrefectTarget.ephemeral()
+    return PrefectTarget(server, Execution.IN_PROCESS)

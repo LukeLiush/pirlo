@@ -14,3 +14,5 @@ def isolate_test_storage(
     # Keep a developer's `prefect config set` from steering server discovery.
     profiles_path = tmp_path_factory.mktemp("prefect_profiles") / "profiles.toml"
     monkeypatch.setenv("PREFECT_PROFILES_PATH", str(profiles_path))
+    # Never report test runs to a developer's Prefect server.
+    monkeypatch.setenv("PIRLO_SERVER", "off")
