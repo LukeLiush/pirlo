@@ -92,14 +92,23 @@ class PrefectRunner(PlayRunner):
                     workflow, force=force, show_logs=show_logs, **kwargs
                 )
 
-    async def _deploy_routine(
+    async def _register_deployment(
         self,
         workflow: PrefectWorkflow,
-        routine: str,
-        **kwargs: Any,
-    ) -> PrefectRoutineRegistration:
-        """Registers a Prefect deployment for a scheduled routine."""
+        name: str,
+        *,
+        parameters: dict[str, Any],
+        cron: str | None = None,
+        force: bool = False,
+        show_logs: bool = False,
+    ) -> tuple[Any, dict[str, Any]]:
+        """Uploads a code snapshot, then creates and applies its deployment.
+
+        Returns (deployment_id, payload). Call inside the runner's
+        temporary_settings / _sync_environ context.
+        """
         import hashlib
+        import inspect
 
         from pirlo.infrastructure.adapters.orchestrator.prefect_entrypoint import (
             run_play_remote,
@@ -110,6 +119,45 @@ class PrefectRunner(PlayRunner):
             get_code_storage_backend,
         )
 
+        storage = get_code_storage_backend(self.target.code_storage)
+        tar_bytes = create_tarball_bytes()
+        snapshot_hash = hashlib.sha256(tar_bytes).hexdigest()[:12]
+        code_ref = await storage.upload(
+            tar_bytes, snapshot_name=f"{workflow.name}-{snapshot_hash}"
+        )
+
+        payload: dict[str, Any] = {
+            "play_name": workflow.name,
+            "parameters": parameters,
+            "code_ref": code_ref,
+            "storage_type": self.target.code_storage,
+            "force": force,
+            "show_logs": show_logs,
+        }
+        # One-off runs must not carry a schedule, or every submission would recur.
+        schedule: dict[str, Any] = {"cron": cron} if cron else {}
+        raw_deployment: Any = run_play_remote.to_deployment(
+            name=name,
+            work_pool_name=self.target.work_pool,
+            parameters=payload,
+            job_variables={"command": build_worker_bootstrap_command()},
+            enforce_parameter_schema=False,
+            **schedule,
+        )
+        deployment: Any = (
+            await raw_deployment
+            if inspect.isawaitable(raw_deployment)
+            else raw_deployment
+        )
+        return await deployment.apply(), payload
+
+    async def _deploy_routine(
+        self,
+        workflow: PrefectWorkflow,
+        routine: str,
+        **kwargs: Any,
+    ) -> PrefectRoutineRegistration:
+        """Registers a Prefect deployment for a scheduled routine."""
         cron_expr = ROUTINE_PRESETS.get(routine.lower(), routine)
         override_settings = self._get_override_settings()
 
@@ -117,39 +165,12 @@ class PrefectRunner(PlayRunner):
             temporary_settings(override_settings),
             self._sync_environ(override_settings),
         ):
-            storage = get_code_storage_backend(self.target.code_storage)
-            tar_bytes = create_tarball_bytes()
-            snapshot_hash = hashlib.sha256(tar_bytes).hexdigest()[:12]
-            code_ref = await storage.upload(
-                tar_bytes, snapshot_name=f"{workflow.name}-{snapshot_hash}"
-            )
-
-            deployment_name = f"pirlo-{workflow.name}-{routine}"
-            payload: dict[str, Any] = {
-                "play_name": workflow.name,
-                "parameters": kwargs,
-                "code_ref": code_ref,
-                "storage_type": self.target.code_storage,
-                "force": False,
-                "show_logs": False,
-            }
-            import inspect
-
-            bootstrap_cmd = build_worker_bootstrap_command()
-            raw_deployment: Any = run_play_remote.to_deployment(
-                name=deployment_name,
+            deployment_id, _ = await self._register_deployment(
+                workflow,
+                f"pirlo-{workflow.name}-{routine}",
+                parameters=kwargs,
                 cron=cron_expr,
-                work_pool_name=self.target.work_pool,
-                parameters=payload,
-                job_variables={"command": bootstrap_cmd},
-                enforce_parameter_schema=False,
             )
-            deployment: Any = (
-                await raw_deployment
-                if inspect.isawaitable(raw_deployment)
-                else raw_deployment
-            )
-            deployment_id = await deployment.apply()
             dashboard_url = self.get_dashboard_url(str(deployment_id))
             return PrefectRoutineRegistration(
                 registration_id=str(deployment_id),
@@ -168,19 +189,10 @@ class PrefectRunner(PlayRunner):
         **kwargs: Any,
     ) -> PrefectRoutineRegistration:
         """Submits a flow run to the remote Prefect work pool without running locally."""
-        import hashlib
+        import inspect
 
         from prefect.client.orchestration import get_client
         from prefect.deployments import run_deployment
-
-        from pirlo.infrastructure.adapters.orchestrator.prefect_entrypoint import (
-            run_play_remote,
-        )
-        from pirlo.infrastructure.services.code_bundler import (
-            build_worker_bootstrap_command,
-            create_tarball_bytes,
-            get_code_storage_backend,
-        )
 
         override_settings = self._get_override_settings()
 
@@ -188,39 +200,14 @@ class PrefectRunner(PlayRunner):
             temporary_settings(override_settings),
             self._sync_environ(override_settings),
         ):
-            storage = get_code_storage_backend(self.target.code_storage)
-            tar_bytes = create_tarball_bytes()
-            snapshot_hash = hashlib.sha256(tar_bytes).hexdigest()[:12]
-            code_ref = await storage.upload(
-                tar_bytes, snapshot_name=f"{workflow.name}-{snapshot_hash}"
-            )
-
             deployment_name = f"pirlo-{workflow.name}"
-            payload: dict[str, Any] = {
-                "play_name": workflow.name,
-                "parameters": kwargs,
-                "code_ref": code_ref,
-                "storage_type": self.target.code_storage,
-                "force": force,
-                "show_logs": show_logs,
-            }
-
-            import inspect
-
-            bootstrap_cmd = build_worker_bootstrap_command()
-            raw_deployment: Any = run_play_remote.to_deployment(
-                name=deployment_name,
-                work_pool_name=self.target.work_pool,
-                parameters=payload,
-                job_variables={"command": bootstrap_cmd},
-                enforce_parameter_schema=False,
+            _, payload = await self._register_deployment(
+                workflow,
+                deployment_name,
+                parameters=kwargs,
+                force=force,
+                show_logs=show_logs,
             )
-            deployment: Any = (
-                await raw_deployment
-                if inspect.isawaitable(raw_deployment)
-                else raw_deployment
-            )
-            await deployment.apply()
 
             raw_flow_run: Any = run_deployment(
                 name=f"pirlo_remote_runner/{deployment_name}",
