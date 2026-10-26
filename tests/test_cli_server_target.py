@@ -43,6 +43,11 @@ async def test_cli_run_links_to_the_configured_prefect_server(monkeypatch, tmp_p
             return_value=GreetingOutput(message="hi"),
         ) as run_here,
         patch(
+            "pirlo.infrastructure.adapters.orchestrator.prefect_runner."
+            "PrefectRunner._find_flow_run_id",
+            return_value="uuid-1",
+        ) as lookup,
+        patch(
             "pirlo.infrastructure.adapters.cli.terminal_play_ui."
             "TerminalPlayUI.summary_card"
         ) as summary_card,
@@ -54,4 +59,5 @@ async def test_cli_run_links_to_the_configured_prefect_server(monkeypatch, tmp_p
     run_here.assert_awaited_once()
     card = summary_card.call_args.kwargs
     assert card["status"] == "SUCCESS"
-    assert card["dashboard_url"] == (f"http://h:4200/flow-runs?name={card['run_id']}")
+    lookup.assert_called_once_with(card["run_id"])
+    assert card["dashboard_url"] == "http://h:4200/runs/flow-run/uuid-1"

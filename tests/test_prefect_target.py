@@ -82,4 +82,4 @@ def test_factory_runner_uses_the_resolved_target(monkeypatch):
 
     runner = PlayRunnerFactory.get_runner()
 
-    assert runner.get_dashboard_url("r1") == "http://h:4200/flow-runs?name=r1"
+    assert runner.get_deployment_url("d1") == "http://h:4200/deployments/deployment/d1"

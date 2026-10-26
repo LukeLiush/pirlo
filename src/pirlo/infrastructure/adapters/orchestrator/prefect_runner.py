@@ -7,7 +7,9 @@ import logging
 import os
 from collections.abc import Generator
 from typing import Any
+from urllib.parse import quote
 
+import httpx
 from prefect.settings import temporary_settings
 
 from pirlo.core.models.blueprint import PlayBlueprint, PlayOutput
@@ -171,7 +173,7 @@ class PrefectRunner(PlayRunner):
                 parameters=kwargs,
                 cron=cron_expr,
             )
-            dashboard_url = self.get_dashboard_url(str(deployment_id))
+            dashboard_url = self.get_deployment_url(str(deployment_id))
             return PrefectRoutineRegistration(
                 registration_id=str(deployment_id),
                 play_name=workflow.name,
@@ -220,8 +222,7 @@ class PrefectRunner(PlayRunner):
                 else raw_flow_run
             )
 
-            run_identifier = getattr(flow_run, "name", None) or str(flow_run.id)
-            dashboard_url = self.get_dashboard_url(run_identifier)
+            dashboard_url = self._flow_run_url(str(flow_run.id))
 
             if show_logs:
                 from prefect.client.schemas.filters import (
@@ -324,6 +325,50 @@ class PrefectRunner(PlayRunner):
         return await _run_flow_isolated()
 
     def get_dashboard_url(self, run_id: str) -> str | None:
-        """Constructs the Prefect dashboard URL when the run targets a Prefect server."""
+        """Links to the flow run named run_id on the target server, or None when ephemeral.
+
+        Falls back to a Runs search for run_id when the run can't be looked up.
+        """
         web_ui_base = self.target.server.web_ui_base
-        return f"{web_ui_base}/flow-runs?name={run_id}" if web_ui_base else None
+        if not web_ui_base:
+            return None
+        flow_run_id = self._find_flow_run_id(run_id)
+        if flow_run_id:
+            return self._flow_run_url(flow_run_id)
+        return f"{web_ui_base}/runs?flow-run-search={quote(run_id)}"
+
+    def get_deployment_url(self, deployment_id: str) -> str | None:
+        """Links to a deployment's page on the target server, or None when ephemeral."""
+        web_ui_base = self.target.server.web_ui_base
+        if not web_ui_base:
+            return None
+        return f"{web_ui_base}/deployments/deployment/{deployment_id}"
+
+    def _flow_run_url(self, flow_run_id: str) -> str | None:
+        web_ui_base = self.target.server.web_ui_base
+        return f"{web_ui_base}/runs/flow-run/{flow_run_id}" if web_ui_base else None
+
+    def _find_flow_run_id(self, run_name: str) -> str | None:
+        """Looks up a flow run's id by its name; one quick call, no retries."""
+        from prefect.client.orchestration import get_client
+        from prefect.client.schemas.filters import FlowRunFilter, FlowRunFilterName
+        from prefect.settings import PREFECT_CLIENT_MAX_RETRIES
+
+        name_filter = FlowRunFilter(name=FlowRunFilterName(any_=[run_name]))
+        with temporary_settings(
+            {**self.target.server.overrides, PREFECT_CLIENT_MAX_RETRIES: 0}
+        ):
+            try:
+                with get_client(
+                    sync_client=True, httpx_settings={"timeout": 2.0}
+                ) as client:
+                    runs = client.read_flow_runs(flow_run_filter=name_filter, limit=1)
+            except httpx.HTTPError as exc:
+                logger.warning(
+                    "Couldn't look up flow run %s on %s (%s); linking to a search instead.",
+                    run_name,
+                    self.target.server.api_url,
+                    exc,
+                )
+                return None
+        return str(runs[0].id) if runs else None

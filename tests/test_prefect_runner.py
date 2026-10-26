@@ -81,15 +81,16 @@ def test_prefect_runner_get_dashboard_url_ephemeral():
     assert runner.get_dashboard_url("test_run_123") is None
 
 
-def test_prefect_runner_get_dashboard_url_server():
+def test_prefect_runner_get_dashboard_url_server(monkeypatch):
     compiler = PrefectCompiler()
     runner = PrefectRunner(
         compiler=compiler,
         target=_server_target("http://prefect.internal:4200/api"),
     )
+    monkeypatch.setattr(runner, "_find_flow_run_id", lambda name: "uuid-1")
     assert (
         runner.get_dashboard_url("test_run_123")
-        == "http://prefect.internal:4200/flow-runs?name=test_run_123"
+        == "http://prefect.internal:4200/runs/flow-run/uuid-1"
     )
 
 
@@ -201,7 +202,7 @@ async def test_prefect_runner_submit_remote_run():
         assert result.work_pool == "pirlo-pool"
         assert (
             result.dashboard_url
-            == "http://prefect.internal:4200/flow-runs?name=dashing-otter"
+            == "http://prefect.internal:4200/runs/flow-run/run-uuid-789"
         )
 
 
@@ -273,7 +274,7 @@ def test_server_url_is_normalized_to_api(raw):
     runner = PrefectRunner(target=_server_target(raw))
 
     assert runner._get_override_settings()[PREFECT_API_URL] == "http://h:4200/api"
-    assert runner.get_dashboard_url("r1") == "http://h:4200/flow-runs?name=r1"
+    assert runner.get_deployment_url("d1") == "http://h:4200/deployments/deployment/d1"
 
 
 # --- deployments: what routines and work-pool runs send to Prefect ---------
@@ -335,6 +336,7 @@ async def test_deploy_routine_registers_a_cron_deployment():
     assert reg.registration_id == "dep-123"
     assert reg.routine == "0 9 * * *"
     assert reg.work_pool == "nightly-pool"
+    assert reg.dashboard_url == "http://h:4200/deployments/deployment/dep-123"
 
 
 @pytest.mark.anyio
@@ -377,3 +379,37 @@ async def test_submit_remote_run_builds_a_one_off_deployment():
         parameters=payload,
         timeout=0,
     )
+
+
+# --- dashboard links ----------------------------------------------------------
+
+
+def test_deployment_and_run_links_are_none_when_ephemeral():
+    runner = PrefectRunner()
+
+    assert runner.get_dashboard_url("r1") is None
+    assert runner.get_deployment_url("d1") is None
+
+
+def test_dashboard_url_falls_back_to_a_runs_search(monkeypatch):
+    runner = PrefectRunner(target=_server_target("http://h:4200"))
+    monkeypatch.setattr(runner, "_find_flow_run_id", lambda name: None)
+
+    assert runner.get_dashboard_url("8efd 6618") == (
+        "http://h:4200/runs?flow-run-search=8efd%206618"
+    )
+
+
+def test_unreachable_server_lookup_warns_and_falls_back(caplog):
+    import logging
+    import time
+
+    runner = PrefectRunner(target=_server_target("http://127.0.0.1:59999"))
+
+    started = time.monotonic()
+    with caplog.at_level(logging.WARNING):
+        url = runner.get_dashboard_url("r1")
+
+    assert url == "http://127.0.0.1:59999/runs?flow-run-search=r1"
+    assert "Couldn't look up flow run r1" in caplog.text
+    assert time.monotonic() - started < 5

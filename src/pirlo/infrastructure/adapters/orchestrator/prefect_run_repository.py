@@ -129,7 +129,7 @@ class PrefectRunRepository(RunRepository):
                     )
                     pb_name: str = flow_map.get(fr.flow_id, "unknown")
                     dash_url: str | None = (
-                        f"{self._settings.web_ui_base}/flow-runs/flow-run/{fr.id}"
+                        f"{self._settings.web_ui_base}/runs/flow-run/{fr.id}"
                         if self._settings.web_ui_base
                         else None
                     )
@@ -182,7 +182,7 @@ class PrefectRunRepository(RunRepository):
                     )
                 )
                 dash_url: str | None = (
-                    f"{self._settings.web_ui_base}/flow-runs/flow-run/{fr.id}"
+                    f"{self._settings.web_ui_base}/runs/flow-run/{fr.id}"
                     if self._settings.web_ui_base
                     else None
                 )
