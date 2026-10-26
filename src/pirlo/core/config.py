@@ -22,6 +22,7 @@ def is_server_disabled() -> bool:
 
 DEFAULT_PREFECT_PORT: int = 4200
 DEFAULT_WORK_POOL: str = "pirlo-pool"
+DEFAULT_WORKER_LIMIT: int = 10
 
 DEFAULT_LOG_LEVEL: str = "INFO"
 
